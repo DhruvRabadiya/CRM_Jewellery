@@ -103,11 +103,21 @@ const addFinishedGoods = (metalType, productName, quantity, totalWeight) => {
   });
 };
 
+const getActiveJobs = () => {
+    return new Promise((resolve, reject) => {
+        const query = `SELECT * FROM production_jobs WHERE status = 'IN_PROGRESS' ORDER BY id DESC`;
+        db.all(query, [], (err, rows) => {
+            if (err) reject(err);
+            resolve(rows);
+        });
+    });
+};
 module.exports = {
   createJob,
   logJobStep,
   updateJobStep,
   getJobById,
-  getLastStep,
+  getLastStep, 
   addFinishedGoods,
+  getActiveJobs,
 };

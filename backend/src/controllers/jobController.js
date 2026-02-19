@@ -152,5 +152,12 @@ const getJobDetails = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
-
-module.exports = { createJob, completeStep, getJobDetails };
+const getActiveJobs = async (req, res) => {
+  try {
+    const jobs = await jobService.getActiveJobs();
+    return formatResponse(res, 200, true, "Active jobs fetched", jobs);
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+module.exports = { createJob, completeStep, getJobDetails,getActiveJobs };
