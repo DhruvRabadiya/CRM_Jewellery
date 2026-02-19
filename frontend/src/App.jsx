@@ -4,6 +4,7 @@ import MainLayout from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import StockManagement from "./pages/StockManagement";
 import MeltingProcess from "./pages/MeltingProcess";
+import ProductionJobs from "./pages/ProductionJobs";
 
 // Placeholder pages for now (We will build these next)
 const Placeholder = ({ title }) => (
@@ -24,10 +25,7 @@ function App() {
           {/* Routes for the pages we will build later */}
           <Route path="/stock" element={<StockManagement />} />
           <Route path="/melting" element={<MeltingProcess />} />
-          <Route
-            path="/production"
-            element={<Placeholder title="Production Jobs" />}
-          />
+          <Route path="/production" element={<ProductionJobs />} />
           <Route
             path="/finished"
             element={<Placeholder title="Finished Goods Inventory" />}

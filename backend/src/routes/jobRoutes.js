@@ -6,7 +6,9 @@ router.post("/create", jobController.createJob);
 
 router.post("/step", jobController.completeStep);
 
-router.get("/:id", jobController.getJobDetails);
-
 router.get("/active", jobController.getActiveJobs);
+
+router.get("/next-id", jobController.getNextJobId);
+
+router.get("/:id", jobController.getJobDetails);
 module.exports = router;

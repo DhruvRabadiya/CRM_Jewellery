@@ -34,6 +34,7 @@ const createJob = async (req, res) => {
       metal_type,
       target_product,
       JOB_STEPS.ROLLING,
+      weight,
     );
     await stockService.logTransaction(
       metal_type,
@@ -49,7 +50,6 @@ const createJob = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
-
 
 const completeStep = async (req, res) => {
   try {
@@ -74,9 +74,7 @@ const completeStep = async (req, res) => {
     const job = await jobService.getJobById(job_id);
     if (!job) return formatResponse(res, 404, false, MESSAGES.JOB_NOT_FOUND);
 
-
     const lossWeight = calculateLoss(issW, retW, scrW);
-
 
     if (lossWeight < 0) {
       return formatResponse(
@@ -128,7 +126,7 @@ const completeStep = async (req, res) => {
       );
     }
 
-    await jobService.updateJobStep(job_id, nextStep, status);
+    await jobService.updateJobStep(job_id, nextStep, status, retW);
     return formatResponse(res, 200, true, "Step completed successfully", {
       nextStep,
       loss: lossWeight,
@@ -137,7 +135,6 @@ const completeStep = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
-
 
 const getJobDetails = async (req, res) => {
   try {
@@ -160,4 +157,21 @@ const getActiveJobs = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
-module.exports = { createJob, completeStep, getJobDetails,getActiveJobs };
+// Get Next Serial Job ID
+const getNextJobId = async (req, res) => {
+  try {
+    const nextJobNumber = await jobService.getNextJobNumber();
+    return formatResponse(res, 200, true, "Next job ID generated", {
+      next_job_number: nextJobNumber,
+    });
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+module.exports = {
+  createJob,
+  completeStep,
+  getJobDetails,
+  getActiveJobs,
+  getNextJobId,
+};

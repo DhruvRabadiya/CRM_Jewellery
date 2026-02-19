@@ -54,15 +54,17 @@ db.serialize(() => {
 
   // 4. PRODUCTION JOBS (Parent Container)
   db.run(`CREATE TABLE IF NOT EXISTS production_jobs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        job_number TEXT UNIQUE,
-        metal_type TEXT,
-        target_product TEXT, -- e.g., '10g Bar'
-        current_step TEXT,   -- 'Rolling', 'Press', 'TPP', 'Packing', 'COMPLETED'
-        status TEXT DEFAULT 'IN_PROGRESS',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        completed_at TEXT
-    )`);
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_number TEXT UNIQUE,
+    metal_type TEXT,
+    target_product TEXT,
+    current_step TEXT,
+    status TEXT,
+    issue_weight REAL,     -- ADDED: Initial weight issued
+    current_weight REAL,   -- ADDED: Weight currently available for the next step
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+)`);
 
   // 5. JOB STEPS (Child Processes: Rolling, Press, TPP, Packing)
   db.run(`CREATE TABLE IF NOT EXISTS job_steps (

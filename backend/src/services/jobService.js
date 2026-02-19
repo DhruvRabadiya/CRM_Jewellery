@@ -1,19 +1,27 @@
 const db = require("../../config/dbConfig");
 const { STATUS, JOB_STEPS } = require("../utils/constants");
 
-const createJob = (jobNumber, metalType, targetProduct, currentStep) => {
-  return new Promise((resolve, reject) => {
-    const query = `INSERT INTO production_jobs (job_number, metal_type, target_product, current_step, status) 
-                       VALUES (?, ?, ?, ?, ?)`;
-    db.run(
-      query,
-      [jobNumber, metalType, targetProduct, currentStep, STATUS.IN_PROGRESS],
-      function (err) {
-        if (err) reject(err);
-        resolve(this.lastID);
-      },
-    );
-  });
+// Update createJob to accept and save weights
+const createJob = (job_number, metal_type, target_product, current_step, issue_weight) => {
+    return new Promise((resolve, reject) => {
+        // We set both issue_weight and current_weight to the starting weight
+        const query = `INSERT INTO production_jobs (job_number, metal_type, target_product, current_step, status, issue_weight, current_weight) VALUES (?, ?, ?, ?, 'IN_PROGRESS', ?, ?)`;
+        db.run(query, [job_number, metal_type, target_product, current_step, issue_weight, issue_weight], function(err) {
+            if (err) reject(err);
+            resolve(this.lastID);
+        });
+    });
+};
+
+// Update updateJobStep to also update the current_weight
+const updateJobStep = (job_id, next_step, status, new_current_weight) => {
+    return new Promise((resolve, reject) => {
+        const query = `UPDATE production_jobs SET current_step = ?, status = ?, current_weight = ? WHERE id = ?`;
+        db.run(query, [next_step, status, new_current_weight, job_id], function(err) {
+            if (err) reject(err);
+            resolve();
+        });
+    });
 };
 const logJobStep = (
   jobId,
@@ -43,16 +51,6 @@ const logJobStep = (
         resolve(this.lastID);
       },
     );
-  });
-};
-
-const updateJobStep = (jobId, nextStep, status = STATUS.IN_PROGRESS) => {
-  return new Promise((resolve, reject) => {
-    const query = `UPDATE production_jobs SET current_step = ?, status = ? WHERE id = ?`;
-    db.run(query, [nextStep, status, jobId], function (err) {
-      if (err) reject(err);
-      resolve(this.changes);
-    });
   });
 };
 
@@ -112,6 +110,30 @@ const getActiveJobs = () => {
         });
     });
 };
+// Get the next serial Job Number (e.g., JOB-0001, JOB-0002)
+const getNextJobNumber = () => {
+    return new Promise((resolve, reject) => {
+        // Find the absolute last job created
+        const query = `SELECT job_number FROM production_jobs ORDER BY id DESC LIMIT 1`;
+        db.get(query, [], (err, row) => {
+            if (err) reject(err);
+            
+            if (!row || !row.job_number) {
+                // If the database is completely empty, start at 1
+                resolve('JOB-0001');
+            } else {
+                // Extract the number part from "JOB-0001" and add 1
+                const parts = row.job_number.split('-'); 
+                const lastNumber = parseInt(parts[1]) || 0;
+                const nextNumber = lastNumber + 1;
+                
+                // Format it back to 4 digits (e.g., 2 becomes "0002")
+                const formattedNumber = `JOB-${String(nextNumber).padStart(4, '0')}`;
+                resolve(formattedNumber);
+            }
+        });
+    });
+};
 module.exports = {
   createJob,
   logJobStep,
@@ -120,4 +142,5 @@ module.exports = {
   getLastStep, 
   addFinishedGoods,
   getActiveJobs,
+  getNextJobNumber,
 };
