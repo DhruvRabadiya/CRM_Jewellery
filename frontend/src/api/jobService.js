@@ -69,3 +69,13 @@ export const getNextJobId = async () => {
     throw error.response?.data || error;
   }
 };
+export const startJobStep = async (jobId) => {
+  try {
+    const response = await axios.post(`${API_URL}/start-step`, {
+      job_id: jobId,
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};

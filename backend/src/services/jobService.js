@@ -10,8 +10,7 @@ const createJob = (
   issue_weight,
 ) => {
   return new Promise((resolve, reject) => {
-    // We set both issue_weight and current_weight to the starting weight
-    const query = `INSERT INTO production_jobs (job_number, metal_type, target_product, current_step, status, issue_weight, current_weight) VALUES (?, ?, ?, ?, 'IN_PROGRESS', ?, ?)`;
+    const query = `INSERT INTO production_jobs (job_number, metal_type, target_product, current_step, status, issue_weight, current_weight) VALUES (?, ?, ?, ?, 'PENDING', ?, ?)`;
     db.run(
       query,
       [
@@ -108,7 +107,7 @@ const addFinishedGoods = (metal_type, target_product, pieces, weight) => {
 
 const getActiveJobs = () => {
   return new Promise((resolve, reject) => {
-    const query = `SELECT * FROM production_jobs WHERE status = 'IN_PROGRESS' ORDER BY id DESC`;
+    const query = `SELECT * FROM production_jobs WHERE status IN ('IN_PROGRESS', 'PENDING') ORDER BY id DESC`;
     db.all(query, [], (err, rows) => {
       if (err) reject(err);
       resolve(rows);
@@ -155,6 +154,16 @@ const getFinishedGoodsInventory = () => {
     });
   });
 };
+
+const startJobStep = (job_id) => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE production_jobs SET status = 'IN_PROGRESS' WHERE id = ?`;
+    db.run(query, [job_id], function (err) {
+      if (err) reject(err);
+      resolve();
+    });
+  });
+};
 module.exports = {
   createJob,
   logJobStep,
@@ -165,4 +174,5 @@ module.exports = {
   getActiveJobs,
   getNextJobNumber,
   getFinishedGoodsInventory,
+  startJobStep,
 };

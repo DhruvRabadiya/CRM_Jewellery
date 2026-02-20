@@ -9,13 +9,15 @@ import {
   AlertTriangle,
   Hash,
   Calculator,
+  PlayCircle,
 } from "lucide-react";
 import {
   getActiveJobs,
   createJob,
   getNextJobId,
   completeStep,
-} from "../api/jobService";
+  startJobStep,
+} from "../api/jobService"; // Imported startJobStep
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 
@@ -149,7 +151,7 @@ const ProductionJobs = () => {
         createForm.target_product,
         weight,
       );
-      showToast("Production Job Created!", "success");
+      showToast("Production Job Created & Queued!", "success");
       setIsCreateModalOpen(false);
       fetchJobs();
     } catch (error) {
@@ -158,10 +160,21 @@ const ProductionJobs = () => {
     }
   };
 
+  // --- NEW: START STEP LOGIC ---
+  const handleStartStep = async (jobId, stepName) => {
+    try {
+      await startJobStep(jobId);
+      showToast(`${stepName} Started!`, "success");
+      fetchJobs(); // Refresh to show IN_PROGRESS
+    } catch (error) {
+      showToast("Failed to start step", "error");
+    }
+  };
+
   const openStepModal = (job) => {
     setSelectedJob(job);
     setStepForm({
-      issue_weight: job.current_weight || "", // Auto-fills from backend if available
+      issue_weight: job.current_weight || "",
       return_weight: "",
       scrap_weight: "",
       return_pieces: "",
@@ -198,7 +211,7 @@ const ProductionJobs = () => {
         scrW,
         return_pieces,
       );
-      showToast(`Step '${selectedJob.current_step}' Completed!`, "success");
+      showToast(`Step Completed! Waiting for next approval.`, "success");
       setIsStepModalOpen(false);
       fetchJobs();
     } catch (error) {
@@ -266,66 +279,84 @@ const ProductionJobs = () => {
             <p>No active production jobs.</p>
           </div>
         ) : (
-          jobs.map((job) => (
-            <div
-              key={job.id}
-              className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between"
-            >
-              <div>
-                <div
-                  className={`absolute top-0 left-0 w-full h-1 ${job.metal_type === "Gold" ? "bg-yellow-400" : "bg-gray-400"}`}
-                ></div>
-                <div className="flex justify-between items-start mb-4 mt-2">
-                  <div>
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                      {job.job_number}
-                    </p>
-                    <h3 className="text-xl font-bold text-gray-800">
-                      {job.target_product}
-                    </h3>
+          jobs.map((job) => {
+            const isPending = job.status === "PENDING";
+
+            return (
+              <div
+                key={job.id}
+                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between"
+              >
+                <div>
+                  <div
+                    className={`absolute top-0 left-0 w-full h-1 ${job.metal_type === "Gold" ? "bg-yellow-400" : "bg-gray-400"}`}
+                  ></div>
+                  <div className="flex justify-between items-start mb-4 mt-2">
+                    <div>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        {job.job_number}
+                      </p>
+                      <h3 className="text-xl font-bold text-gray-800">
+                        {job.target_product}
+                      </h3>
+                    </div>
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold border ${isPending ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-green-50 text-green-700 border-green-200"} flex items-center gap-1`}
+                    >
+                      {isPending ? "WAITING" : "RUNNING"}
+                    </span>
                   </div>
-                  <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
-                    {job.metal_type}
-                  </span>
+
+                  <div
+                    className={`p-4 rounded-xl mb-6 border ${isPending ? "bg-orange-50 border-orange-100" : "bg-blue-50 border-blue-100"}`}
+                  >
+                    <div className="flex justify-between items-center mb-3 pb-3 border-b border-white/40">
+                      <span className="text-sm font-bold opacity-70">
+                        Available Weight:
+                      </span>
+                      <span className="text-lg font-extrabold">
+                        {job.current_weight
+                          ? job.current_weight.toFixed(3)
+                          : "0.000"}{" "}
+                        <span className="text-sm font-medium opacity-70">
+                          g
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold opacity-70">
+                        Current Step:
+                      </span>
+                      <span className="px-3 py-1 bg-white rounded-lg font-bold text-sm tracking-wide shadow-sm">
+                        {job.current_step}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* DISPLAY CURRENT AVAILABLE WEIGHT */}
-                <div className="bg-gray-50 p-4 rounded-xl mb-6 border border-gray-100">
-                  <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-200">
-                    <span className="text-sm font-bold text-gray-500">
-                      Available Weight:
-                    </span>
-                    <span className="text-lg font-extrabold text-gray-800">
-                      {job.current_weight
-                        ? job.current_weight.toFixed(3)
-                        : "0.000"}{" "}
-                      <span className="text-sm font-medium text-gray-400">
-                        g
-                      </span>
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold text-gray-500">
-                      Pending Step:
-                    </span>
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-lg font-bold text-sm tracking-wide animate-pulse">
-                      {job.current_step}
-                    </span>
-                  </div>
-                </div>
+                {/* DYNAMIC BUTTON BASED ON STATUS */}
+                {isPending ? (
+                  <button
+                    onClick={() => handleStartStep(job.id, job.current_step)}
+                    className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl hover:bg-orange-600 shadow-md active:scale-95 transition-all flex justify-center items-center gap-2"
+                  >
+                    <PlayCircle size={18} /> Approve & Start {job.current_step}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => openStepModal(job)}
+                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-md active:scale-95 transition-all flex justify-center items-center gap-2"
+                  >
+                    Complete {job.current_step} <ArrowRightCircle size={18} />
+                  </button>
+                )}
               </div>
-              <button
-                onClick={() => openStepModal(job)}
-                className="w-full bg-blue-50 text-blue-700 font-bold py-3 rounded-xl hover:bg-blue-600 hover:text-white transition-colors flex justify-center items-center gap-2"
-              >
-                Advance to Next Step <ArrowRightCircle size={18} />
-              </button>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* MODAL 1: CREATE JOB */}
+      {/* MODALS RETAINED EXACTLY AS BEFORE... */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -411,12 +442,11 @@ const ProductionJobs = () => {
             type="submit"
             className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md active:scale-95 transition-all flex justify-center gap-2"
           >
-            <Hammer size={20} /> Create Job & Issue Dhal
+            <Hammer size={20} /> Create Job & Queue for Rolling
           </button>
         </form>
       </Modal>
 
-      {/* MODAL 2: COMPLETE WORKFLOW STEP */}
       <Modal
         isOpen={isStepModalOpen}
         onClose={() => setIsStepModalOpen(false)}
@@ -434,7 +464,6 @@ const ProductionJobs = () => {
               <span className="font-bold">{selectedJob.target_product}</span>
             </div>
 
-            {/* HIGHLIGHTED EDITABLE ISSUE WEIGHT */}
             <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
               <label className="block text-xs font-bold text-yellow-800 mb-1 uppercase tracking-wide">
                 1. Issue Weight (Received for this step)
@@ -505,7 +534,6 @@ const ProductionJobs = () => {
               </div>
             )}
 
-            {/* RECEIPT MATH BREAKDOWN */}
             <div className="bg-gray-800 text-gray-200 p-4 rounded-xl mt-4 font-mono shadow-inner">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm">Issue Weight:</span>
@@ -519,7 +547,6 @@ const ProductionJobs = () => {
                 <span className="text-sm">- Scrap/Dust:</span>
                 <span>{scrVal.toFixed(3)}</span>
               </div>
-
               <div className="border-t border-gray-600 pt-3 flex justify-between items-center">
                 <span className="font-bold flex items-center gap-2">
                   <Calculator size={16} /> Calculated Loss:
@@ -530,7 +557,6 @@ const ProductionJobs = () => {
                   {liveLoss.toFixed(3)}
                 </span>
               </div>
-
               {isLossNegative && (
                 <div className="text-red-400 text-xs mt-2 flex items-center gap-1">
                   <AlertTriangle size={14} /> Output + Scrap cannot exceed Issue
@@ -548,7 +574,7 @@ const ProductionJobs = () => {
               }
               className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md active:scale-95 transition-all flex justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
-              Confirm Step & Advance
+              Confirm Step & Send to Next Stage
             </button>
           </form>
         )}

@@ -110,7 +110,7 @@ const completeStep = async (req, res) => {
     }
 
     let nextStep = "";
-    let status = STATUS.IN_PROGRESS;
+    let status = "PENDING"; 
 
     if (step_name === JOB_STEPS.ROLLING) nextStep = JOB_STEPS.PRESS;
     else if (step_name === JOB_STEPS.PRESS) nextStep = JOB_STEPS.TPP;
@@ -176,6 +176,16 @@ const getFinishedGoods = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
+const startJobStep = async (req, res) => {
+  try {
+    const { job_id } = req.body;
+    if (!job_id) return formatResponse(res, 400, false, "Job ID required");
+    await jobService.startJobStep(job_id);
+    return formatResponse(res, 200, true, "Machine started successfully");
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
 module.exports = {
   createJob,
   completeStep,
@@ -183,4 +193,5 @@ module.exports = {
   getActiveJobs,
   getNextJobId,
   getFinishedGoods,
+  startJobStep,
 };
