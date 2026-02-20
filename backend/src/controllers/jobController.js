@@ -168,10 +168,19 @@ const getNextJobId = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
+const getFinishedGoods = async (req, res) => {
+  try {
+    const inventory = await jobService.getFinishedGoodsInventory();
+    return formatResponse(res, 200, true, "Finished goods fetched", inventory);
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
 module.exports = {
   createJob,
   completeStep,
   getJobDetails,
   getActiveJobs,
   getNextJobId,
+  getFinishedGoods,
 };

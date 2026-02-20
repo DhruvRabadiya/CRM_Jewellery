@@ -81,13 +81,14 @@ db.serialize(() => {
     )`);
 
   // 6. FINISHED GOODS (Final Inventory)
-  db.run(`CREATE TABLE IF NOT EXISTS finished_goods (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        metal_type TEXT,
-        product_name TEXT,
-        quantity INTEGER DEFAULT 0, -- Total Pieces Available
-        total_weight REAL DEFAULT 0 -- Total Weight of these pieces
-    )`);
+db.run(`CREATE TABLE IF NOT EXISTS finished_goods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metal_type TEXT,
+    target_product TEXT,
+    pieces INTEGER,
+    weight REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
 });
 
 module.exports = db;

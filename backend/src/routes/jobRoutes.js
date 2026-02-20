@@ -11,4 +11,6 @@ router.get("/active", jobController.getActiveJobs);
 router.get("/next-id", jobController.getNextJobId);
 
 router.get("/:id", jobController.getJobDetails);
+
+router.get("/finished", jobController.getFinishedGoods);
 module.exports = router;
