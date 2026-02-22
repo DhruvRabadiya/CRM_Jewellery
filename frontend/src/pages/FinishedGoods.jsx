@@ -91,7 +91,10 @@ const FinishedGoods = () => {
             <Weight size={14} /> Total Wt.
           </span>
           <span className={`text-xl font-bold text-${colorTheme}-900`}>
-            {item.total_weight.toFixed(3)}
+            {(item.metal_type === "Gold"
+              ? item.total_weight
+              : item.total_weight / 1000
+            ).toFixed(3)}
             <span className="text-sm font-medium opacity-70 ml-1">
               {item.metal_type === "Gold" ? "g" : "kg"}
             </span>

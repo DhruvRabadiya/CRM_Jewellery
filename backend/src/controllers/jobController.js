@@ -1,5 +1,9 @@
 const jobService = require("../services/jobService");
 const stockService = require("../services/stockService");
+const rollingService = require("../services/rollingService");
+const pressService = require("../services/pressService");
+const tppService = require("../services/tppService");
+const packingService = require("../services/packingService");
 const { calculateLoss, formatResponse } = require("../utils/common");
 const {
   MESSAGES,
@@ -110,7 +114,7 @@ const completeStep = async (req, res) => {
     }
 
     let nextStep = "";
-    let status = "PENDING"; 
+    let status = "PENDING";
 
     if (step_name === JOB_STEPS.ROLLING) nextStep = JOB_STEPS.PRESS;
     else if (step_name === JOB_STEPS.PRESS) nextStep = JOB_STEPS.TPP;
@@ -186,6 +190,37 @@ const startJobStep = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
+const getCombinedProcesses = async (req, res) => {
+  try {
+    const rolling = await rollingService.getAllRollingProcesses();
+    const press = await pressService.getAllPressProcesses();
+    const tpp = await tppService.getAllTppProcesses();
+    const packing = await packingService.getAllPackingProcesses();
+
+    const addStage = (arr, stageName) =>
+      arr.map((item) => ({ ...item, stage: stageName }));
+
+    const combined = [
+      ...addStage(rolling, "Rolling"),
+      ...addStage(press, "Press"),
+      ...addStage(tpp, "TPP"),
+      ...addStage(packing, "Packing"),
+    ];
+
+    combined.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return formatResponse(
+      res,
+      200,
+      true,
+      "Combined processes fetched",
+      combined,
+    );
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   createJob,
   completeStep,
@@ -194,4 +229,5 @@ module.exports = {
   getNextJobId,
   getFinishedGoods,
   startJobStep,
+  getCombinedProcesses,
 };

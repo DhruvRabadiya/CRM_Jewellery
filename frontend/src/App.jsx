@@ -6,6 +6,7 @@ import StockManagement from "./pages/StockManagement";
 import MeltingProcess from "./pages/MeltingProcess";
 import ProductionJobs from "./pages/ProductionJobs";
 import FinishedGoods from "./pages/FinishedGoods";
+import JobHistory from "./pages/JobHistory";
 
 // Placeholder pages for now (We will build these next)
 const Placeholder = ({ title }) => (
@@ -28,6 +29,7 @@ function App() {
           <Route path="/melting" element={<MeltingProcess />} />
           <Route path="/production" element={<ProductionJobs />} />
           <Route path="/finished" element={<FinishedGoods />} />
+          <Route path="/job-history/:jobNumber" element={<JobHistory />} />
 
           {/* Fallback for unknown routes */}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -6,6 +6,7 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
   const [formData, setFormData] = useState({
     metal_type: "Gold",
     weight: "",
+    weight_unit: "g",
     description: "",
   });
   const [isShaking, setIsShaking] = useState(false);
@@ -20,13 +21,14 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
       return;
     }
 
+    let finalWeight = parseFloat(formData.weight);
+    if (formData.weight_unit === "kg") {
+      finalWeight *= 1000;
+    }
+
     setIsSubmitting(true);
     try {
-      await addStock(
-        formData.metal_type,
-        formData.weight,
-        formData.description,
-      );
+      await addStock(formData.metal_type, finalWeight, formData.description);
       showToast("Stock Added Successfully!", "success");
       onSuccess();
     } catch (error) {
@@ -69,14 +71,28 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
         <label className="block text-sm font-bold text-gray-700 mb-2">
           Weight
         </label>
-        <input
-          type="number"
-          step="0.001"
-          className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
-          value={formData.weight}
-          onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-          placeholder="0.000"
-        />
+        <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+          <input
+            type="number"
+            step="0.001"
+            className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
+            value={formData.weight}
+            onChange={(e) =>
+              setFormData({ ...formData, weight: e.target.value })
+            }
+            placeholder="0.000"
+          />
+          <select
+            className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+            value={formData.weight_unit}
+            onChange={(e) =>
+              setFormData({ ...formData, weight_unit: e.target.value })
+            }
+          >
+            <option value="g">g</option>
+            <option value="kg">kg</option>
+          </select>
+        </div>
       </div>
 
       <div>

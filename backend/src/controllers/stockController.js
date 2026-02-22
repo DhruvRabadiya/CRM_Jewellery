@@ -9,19 +9,19 @@ const getStock = async (req, res) => {
       stockService.getStockByMetal("Silver"),
     ]);
 
+    const defaultStock = (metal) => ({
+      metal_type: metal,
+      opening_stock: 0,
+      dhal_stock: 0,
+      rolling_stock: 0,
+      press_stock: 0,
+      tpp_stock: 0,
+      total_loss: 0,
+    });
+
     const data = {
-      gold: goldStock || {
-        metal_type: "Gold",
-        opening_stock: 0,
-        dhal_stock: 0,
-        total_loss: 0,
-      },
-      silver: silverStock || {
-        metal_type: "Silver",
-        opening_stock: 0,
-        dhal_stock: 0,
-        total_loss: 0,
-      },
+      gold: goldStock || defaultStock("Gold"),
+      silver: silverStock || defaultStock("Silver"),
     };
 
     return formatResponse(
@@ -61,7 +61,43 @@ const addStock = async (req, res) => {
   }
 };
 
+const getLossStats = async (req, res) => {
+  try {
+    const stats = await stockService.getLossStats();
+    return formatResponse(res, 200, true, "Loss stats fetched", stats);
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const getPurchases = async (req, res) => {
+  try {
+    const purchases = await stockService.getPurchases();
+    return formatResponse(res, 200, true, "Purchases fetched", purchases);
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const getDetailedScrapAndLoss = async (req, res) => {
+  try {
+    const ledger = await stockService.getDetailedScrapAndLoss();
+    return formatResponse(
+      res,
+      200,
+      true,
+      "Scrap & Loss Ledger fetched",
+      ledger,
+    );
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   getStock,
   addStock,
+  getLossStats,
+  getPurchases,
+  getDetailedScrapAndLoss,
 };

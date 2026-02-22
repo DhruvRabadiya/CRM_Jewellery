@@ -3,6 +3,7 @@ const router = express.Router();
 const jobController = require("../controllers/jobController");
 
 router.get("/active", jobController.getActiveJobs);
+router.get("/combined", jobController.getCombinedProcesses);
 router.get("/next-id", jobController.getNextJobId);
 router.get("/finished", jobController.getFinishedGoods);
 

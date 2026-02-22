@@ -12,21 +12,29 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 db.serialize(() => {
-  // 1. STOCK MASTER (Raw Material & Dhal)
+  // 1. STOCK MASTER (Raw Material, Dhal, and Pooled Stages)
   db.run(`CREATE TABLE IF NOT EXISTS stock_master (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         metal_type TEXT UNIQUE, -- 'Gold' or 'Silver'
-        opening_stock REAL DEFAULT 0, -- Raw Material (Grams for Gold, KG for Silver)
-        dhal_stock REAL DEFAULT 0,    -- Pure Metal from Melting
-        total_loss REAL DEFAULT 0     -- Cumulative Loss Counter
+        opening_stock REAL DEFAULT 0, -- Raw Material
+        dhal_stock REAL DEFAULT 0,    -- Pure metal (Source for Rolling)
+        rolling_stock REAL DEFAULT 0, -- Completed Rolling (Source for Press)
+        press_stock REAL DEFAULT 0,   -- Completed Press (Source for TPP)
+        tpp_stock REAL DEFAULT 0,     -- Completed TPP (Source for Packing)
+        total_loss REAL DEFAULT 0     -- Cumulative Loss
     )`);
 
   // Initialize default rows if they don't exist
+  // By using INSERT OR IGNORE, if rows already exist they aren't overridden,
+  // but if we modified the table we might need to add columns safely in real prod,
+  // here since SQLite IF NOT EXISTS is on create table, it won't add new columns to existing tables automatically.
+  // For simplicity, we assume we might drop/recreate db locally or alter table manually if needed,
+  // but let's at least keep the insert valid.
   db.run(
-    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock) VALUES ('Gold', 0, 0)`,
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold', 0, 0, 0, 0, 0)`,
   );
   db.run(
-    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock) VALUES ('Silver', 0, 0)`,
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Silver', 0, 0, 0, 0, 0)`,
   );
 
   // 2. STOCK TRANSACTIONS (Ledger for Audit)
@@ -34,7 +42,7 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT DEFAULT CURRENT_TIMESTAMP,
         metal_type TEXT,
-        transaction_type TEXT, -- 'PURCHASE', 'MELT_ISSUE', 'SCRAP_RETURN', 'DHAL_ADD', 'JOB_ISSUE', 'JOB_RETURN'
+        transaction_type TEXT, 
         weight REAL,
         description TEXT
     )`);
@@ -44,51 +52,105 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         metal_type TEXT,
         issue_weight REAL,
-        return_weight REAL DEFAULT 0, -- Dhal
+        return_weight REAL DEFAULT 0,
         scrap_weight REAL DEFAULT 0,
         loss_weight REAL DEFAULT 0,
-        status TEXT DEFAULT 'RUNNING', -- 'RUNNING', 'COMPLETED'
+        status TEXT DEFAULT 'RUNNING',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         completed_at TEXT
     )`);
 
-  // 4. PRODUCTION JOBS (Parent Container)
-  db.run(`CREATE TABLE IF NOT EXISTS production_jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_number TEXT UNIQUE,
-    metal_type TEXT,
-    target_product TEXT,
-    current_step TEXT,
-    status TEXT,
-    issue_weight REAL,     -- ADDED: Initial weight issued
-    current_weight REAL,   -- ADDED: Weight currently available for the next step
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at DATETIME
-)`);
+  // --- SEPARATED PRODUCTION PROCESSES ---
 
-  // 5. JOB STEPS (Child Processes: Rolling, Press, TPP, Packing)
-  db.run(`CREATE TABLE IF NOT EXISTS job_steps (
+  // 4a. ROLLING PROCESS
+  db.run(`CREATE TABLE IF NOT EXISTS rolling_processes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        job_id INTEGER,
-        step_name TEXT,     -- 'Rolling', 'Press', 'TPP', 'Packing'
-        issue_weight REAL,  -- Weight coming In
-        return_weight REAL DEFAULT 0, -- Weight going Out
+        job_number TEXT,
+        job_name TEXT,
+        date TEXT DEFAULT CURRENT_TIMESTAMP,
+        metal_type TEXT,
+        unit TEXT DEFAULT 'g',
+        employee TEXT,
+        issue_size REAL,
+        category TEXT,
+        status TEXT DEFAULT 'PENDING',
+        issued_weight REAL DEFAULT 0,
+        return_weight REAL DEFAULT 0,
         scrap_weight REAL DEFAULT 0,
-        loss_weight REAL DEFAULT 0,   -- Calculated difference
-        return_pieces INTEGER DEFAULT 0, -- Created at TPP/Packing
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(job_id) REFERENCES production_jobs(id)
+        loss_weight REAL DEFAULT 0,
+        start_time DATETIME,
+        end_time DATETIME
     )`);
 
-  // 6. FINISHED GOODS (Final Inventory)
-db.run(`CREATE TABLE IF NOT EXISTS finished_goods (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    metal_type TEXT,
-    target_product TEXT,
-    pieces INTEGER,
-    weight REAL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
+  // 4b. PRESS PROCESS
+  db.run(`CREATE TABLE IF NOT EXISTS press_processes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_number TEXT,
+        job_name TEXT,
+        date TEXT DEFAULT CURRENT_TIMESTAMP,
+        metal_type TEXT,
+        unit TEXT DEFAULT 'g',
+        employee TEXT,
+        issue_size REAL,
+        category TEXT,
+        status TEXT DEFAULT 'PENDING',
+        issued_weight REAL DEFAULT 0,
+        return_weight REAL DEFAULT 0,
+        scrap_weight REAL DEFAULT 0,
+        loss_weight REAL DEFAULT 0,
+        start_time DATETIME,
+        end_time DATETIME
+    )`);
+
+  // 4c. TPP PROCESS
+  db.run(`CREATE TABLE IF NOT EXISTS tpp_processes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_number TEXT,
+        job_name TEXT,
+        date TEXT DEFAULT CURRENT_TIMESTAMP,
+        metal_type TEXT,
+        unit TEXT DEFAULT 'g',
+        employee TEXT,
+        issue_size REAL,
+        category TEXT,
+        status TEXT DEFAULT 'PENDING',
+        issued_weight REAL DEFAULT 0,
+        return_weight REAL DEFAULT 0,
+        scrap_weight REAL DEFAULT 0,
+        loss_weight REAL DEFAULT 0,
+        start_time DATETIME,
+        end_time DATETIME
+    )`);
+
+  // 4d. PACKING PROCESS
+  db.run(`CREATE TABLE IF NOT EXISTS packing_processes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_number TEXT,
+        job_name TEXT,
+        date TEXT DEFAULT CURRENT_TIMESTAMP,
+        metal_type TEXT,
+        unit TEXT DEFAULT 'g',
+        employee TEXT,
+        issue_size REAL,
+        category TEXT,
+        status TEXT DEFAULT 'PENDING',
+        issued_weight REAL DEFAULT 0,
+        return_weight REAL DEFAULT 0,
+        scrap_weight REAL DEFAULT 0,
+        loss_weight REAL DEFAULT 0,
+        start_time DATETIME,
+        end_time DATETIME
+    )`);
+
+  // 5. FINISHED GOODS (Final Inventory)
+  db.run(`CREATE TABLE IF NOT EXISTS finished_goods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metal_type TEXT,
+      target_product TEXT,
+      pieces INTEGER,
+      weight REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 });
 
 module.exports = db;

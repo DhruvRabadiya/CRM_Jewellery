@@ -117,14 +117,24 @@ const getActiveJobs = () => {
 // Get the next serial Job Number (e.g., JOB-0001, JOB-0002)
 const getNextJobNumber = () => {
   return new Promise((resolve, reject) => {
-    // Find the absolute last job created
-    const query = `SELECT job_number FROM production_jobs ORDER BY id DESC LIMIT 1`;
+    // Find the absolute last job created across all processes
+    const query = `
+      SELECT job_number FROM (
+        SELECT job_number FROM rolling_processes
+        UNION ALL
+        SELECT job_number FROM press_processes
+        UNION ALL
+        SELECT job_number FROM tpp_processes
+        UNION ALL
+        SELECT job_number FROM packing_processes
+      ) ORDER BY job_number DESC LIMIT 1
+    `;
     db.get(query, [], (err, row) => {
-      if (err) reject(err);
+      if (err) return reject(err);
 
       if (!row || !row.job_number) {
         // If the database is completely empty, start at 1
-        resolve("JOB-0001");
+        return resolve("JOB-0001");
       } else {
         // Extract the number part from "JOB-0001" and add 1
         const parts = row.job_number.split("-");

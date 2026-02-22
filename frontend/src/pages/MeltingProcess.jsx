@@ -70,11 +70,16 @@ const MeltingProcess = () => {
       return;
     }
 
+    let finalWeight = parseFloat(startForm.issue_weight);
+    if (startForm.weight_unit === "kg") {
+      finalWeight *= 1000;
+    }
+
     try {
-      await startMelt(startForm.metal_type, startForm.issue_weight);
+      await startMelt(startForm.metal_type, finalWeight);
       showToast("Melting Started Successfully!", "success");
       setIsStartModalOpen(false);
-      setStartForm({ metal_type: "Gold", issue_weight: "" });
+      setStartForm({ metal_type: "Gold", issue_weight: "", weight_unit: "g" });
       fetchMelts();
     } catch (error) {
       triggerError();
@@ -87,8 +92,13 @@ const MeltingProcess = () => {
     e.preventDefault();
 
     // Safety checks before submitting
-    const retWeight = parseFloat(completeForm.return_weight) || 0;
-    const scrWeight = parseFloat(completeForm.scrap_weight) || 0;
+    let retWeight = parseFloat(completeForm.return_weight) || 0;
+    let scrWeight = parseFloat(completeForm.scrap_weight) || 0;
+
+    if (completeForm.weight_unit === "kg") {
+      retWeight *= 1000;
+      scrWeight *= 1000;
+    }
 
     if (retWeight <= 0) {
       triggerError();
@@ -106,7 +116,11 @@ const MeltingProcess = () => {
       await completeMelt(selectedMelt.id, retWeight, scrWeight);
       showToast("Melting Completed & Stock Updated!", "success");
       setIsCompleteModalOpen(false);
-      setCompleteForm({ return_weight: "", scrap_weight: "" });
+      setCompleteForm({
+        return_weight: "",
+        scrap_weight: "",
+        weight_unit: selectedMelt.metal_type === "Silver" ? "kg" : "g",
+      });
       setSelectedMelt(null);
       fetchMelts();
     } catch (error) {
@@ -118,14 +132,23 @@ const MeltingProcess = () => {
   const openCompleteModal = (melt) => {
     setSelectedMelt(melt);
     // Reset form when opening
-    setCompleteForm({ return_weight: "", scrap_weight: "" });
+    setCompleteForm({
+      return_weight: "",
+      scrap_weight: "",
+      weight_unit: melt.metal_type === "Silver" ? "kg" : "g",
+    });
     setIsCompleteModalOpen(true);
   };
 
   // --- REAL-TIME LOSS CALCULATION ---
   const issueW = selectedMelt ? parseFloat(selectedMelt.issue_weight) || 0 : 0;
-  const returnW = parseFloat(completeForm.return_weight) || 0;
-  const scrapW = parseFloat(completeForm.scrap_weight) || 0;
+  let returnW = parseFloat(completeForm.return_weight) || 0;
+  let scrapW = parseFloat(completeForm.scrap_weight) || 0;
+
+  if (completeForm.weight_unit === "kg") {
+    returnW *= 1000;
+    scrapW *= 1000;
+  }
 
   // Calculate and format strictly to 3 decimals to avoid JS floating point bugs
   const liveLoss = parseFloat((issueW - (returnW + scrapW)).toFixed(3));
@@ -211,7 +234,10 @@ const MeltingProcess = () => {
                     Issued Weight
                   </p>
                   <p className="text-2xl font-bold text-gray-800">
-                    {melt.issue_weight.toFixed(3)}{" "}
+                    {(melt.metal_type === "Gold"
+                      ? melt.issue_weight
+                      : melt.issue_weight / 1000
+                    ).toFixed(3)}{" "}
                     <span className="text-base text-gray-400">
                       {melt.metal_type === "Gold" ? "g" : "kg"}
                     </span>
@@ -265,16 +291,28 @@ const MeltingProcess = () => {
             <label className="block text-sm font-bold text-gray-700 mb-2">
               Issue Weight (from Opening Stock)
             </label>
-            <input
-              type="number"
-              step="0.001"
-              className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none focus:bg-white focus:border-orange-500 transition-colors"
-              value={startForm.issue_weight}
-              onChange={(e) =>
-                setStartForm({ ...startForm, issue_weight: e.target.value })
-              }
-              placeholder="0.000"
-            />
+            <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-orange-500 transition-colors overflow-hidden">
+              <input
+                type="number"
+                step="0.001"
+                className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
+                value={startForm.issue_weight}
+                onChange={(e) =>
+                  setStartForm({ ...startForm, issue_weight: e.target.value })
+                }
+                placeholder="0.000"
+              />
+              <select
+                className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                value={startForm.weight_unit}
+                onChange={(e) =>
+                  setStartForm({ ...startForm, weight_unit: e.target.value })
+                }
+              >
+                <option value="g">g</option>
+                <option value="kg">kg</option>
+              </select>
+            </div>
           </div>
           <button
             type="submit"
@@ -299,14 +337,42 @@ const MeltingProcess = () => {
             {/* Issued Weight Indicator */}
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
               <span className="text-blue-800 font-semibold">
-                Total Issued Weight:
+                Total Issued Weight ({completeForm?.weight_unit || "g"}):
               </span>
               <span className="text-xl font-bold text-blue-900">
-                {issueW.toFixed(3)}
+                {(
+                  issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                ).toFixed(3)}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                  Weight Unit
+                </label>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCompleteForm({ ...completeForm, weight_unit: "g" })
+                    }
+                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    Grams (g)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCompleteForm({ ...completeForm, weight_unit: "kg" })
+                    }
+                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    Kilogram (kg)
+                  </button>
+                </div>
+              </div>
+
               {/* Return Input */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide flex items-center gap-1">
@@ -323,7 +389,7 @@ const MeltingProcess = () => {
                       return_weight: e.target.value,
                     })
                   }
-                  placeholder="0.000"
+                  placeholder={`0.000 ${completeForm.weight_unit}`}
                 />
               </div>
 
@@ -343,7 +409,7 @@ const MeltingProcess = () => {
                       scrap_weight: e.target.value,
                     })
                   }
-                  placeholder="0.000"
+                  placeholder={`0.000 ${completeForm.weight_unit}`}
                 />
               </div>
             </div>
@@ -363,7 +429,9 @@ const MeltingProcess = () => {
                 Calculated Loss:
               </span>
               <span className="text-2xl font-extrabold">
-                {liveLoss.toFixed(3)}
+                {(
+                  liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                ).toFixed(3)}
               </span>
             </div>
             {isLossNegative && (

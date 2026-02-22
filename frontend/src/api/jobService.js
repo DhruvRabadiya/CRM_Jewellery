@@ -1,28 +1,34 @@
 import axios from "axios";
+import api from "./axiosConfig";
 
-const API_URL = "http://localhost:3000/api/jobs";
+const API_URL = "/api";
 
-export const getActiveJobs = async () => {
+export const getCombinedProcesses = async () => {
   try {
-    const response = await axios.get(`${API_URL}/active`);
+    // using api instance from axiosConfig if possible, else direct axios
+    const response = await api.get(`/jobs/combined`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
   }
 };
 
-export const createJob = async (
-  jobNumber,
-  metalType,
-  targetProduct,
-  issueWeight,
-) => {
+export const createProcess = async (stage, payload) => {
   try {
-    const response = await axios.post(`${API_URL}/create`, {
-      job_number: jobNumber,
-      metal_type: metalType,
-      target_product: targetProduct,
-      issue_weight: parseFloat(issueWeight),
+    const endpoint = stage.toLowerCase();
+    const response = await api.post(`/${endpoint}/create`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const startProcess = async (stage, processId, issuedWeight) => {
+  try {
+    const endpoint = stage.toLowerCase();
+    const response = await api.post(`/${endpoint}/start`, {
+      process_id: processId,
+      issued_weight: parseFloat(issuedWeight),
     });
     return response.data;
   } catch (error) {
@@ -30,50 +36,29 @@ export const createJob = async (
   }
 };
 
-export const completeStep = async (
-  jobId,
-  stepName,
-  issueWeight,
-  returnWeight,
-  scrapWeight,
-  returnPieces,
-) => {
+export const completeProcess = async (stage, payload) => {
   try {
-    const response = await axios.post(`${API_URL}/step`, {
-      job_id: jobId,
-      step_name: stepName,
-      issue_weight: parseFloat(issueWeight),
-      return_weight: parseFloat(returnWeight),
-      scrap_weight: parseFloat(scrapWeight),
-      return_pieces: parseInt(returnPieces) || 0,
-    });
+    const endpoint = stage.toLowerCase();
+    const response = await api.post(`/${endpoint}/complete`, payload);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
   }
 };
 
-export const getJobDetails = async (jobId) => {
-  try {
-    const response = await axios.get(`${API_URL}/${jobId}`);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || error;
-  }
-};
 export const getNextJobId = async () => {
   try {
-    const response = await axios.get(`${API_URL}/next-id`);
+    const response = await api.get(`/jobs/next-id`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
   }
 };
-export const startJobStep = async (jobId) => {
+
+// Legacy support
+export const getActiveJobs = async () => {
   try {
-    const response = await axios.post(`${API_URL}/start-step`, {
-      job_id: jobId,
-    });
+    const response = await api.get(`/jobs/active`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
