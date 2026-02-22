@@ -71,10 +71,32 @@ const getAllTppProcesses = () => {
   });
 };
 
+const updateTppIssuedWeight = (processId, new_weight) => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE tpp_processes SET issued_weight = ? WHERE id = ?`;
+    db.run(query, [new_weight, processId], function (err) {
+      if (err) reject(err);
+      resolve();
+    });
+  });
+};
+
+const deleteTppProcessById = (id) => {
+  return new Promise((resolve, reject) => {
+    const query = `DELETE FROM tpp_processes WHERE id = ?`;
+    db.run(query, [id], function (err) {
+      if (err) reject(err);
+      resolve();
+    });
+  });
+};
+
 module.exports = {
   createTppProcess,
   startTppProcess,
   completeTppProcess,
   getTppProcessById,
   getAllTppProcesses,
+  updateTppIssuedWeight,
+  deleteTppProcessById,
 };

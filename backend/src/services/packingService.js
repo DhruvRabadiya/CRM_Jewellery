@@ -81,6 +81,44 @@ const addFinishedGoods = (metal_type, target_product, pieces, weight) => {
   });
 };
 
+const removeFinishedGoods = (metal_type, target_product, weight) => {
+  return new Promise((resolve, reject) => {
+    // Attempt to delete exactly ONE matching finished good
+    const query = `
+      DELETE FROM finished_goods 
+      WHERE id = (
+        SELECT id FROM finished_goods 
+        WHERE metal_type = ? AND target_product = ? AND weight = ? 
+        ORDER BY id DESC LIMIT 1
+      )
+    `;
+    db.run(query, [metal_type, target_product, weight], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
+const updatePackingIssuedWeight = (processId, new_weight) => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE packing_processes SET issued_weight = ? WHERE id = ?`;
+    db.run(query, [new_weight, processId], function (err) {
+      if (err) reject(err);
+      resolve();
+    });
+  });
+};
+
+const deletePackingProcessById = (id) => {
+  return new Promise((resolve, reject) => {
+    const query = `DELETE FROM packing_processes WHERE id = ?`;
+    db.run(query, [id], function (err) {
+      if (err) reject(err);
+      resolve();
+    });
+  });
+};
+
 module.exports = {
   createPackingProcess,
   startPackingProcess,
@@ -88,4 +126,7 @@ module.exports = {
   getPackingProcessById,
   getAllPackingProcesses,
   addFinishedGoods,
+  removeFinishedGoods,
+  updatePackingIssuedWeight,
+  deletePackingProcessById,
 };

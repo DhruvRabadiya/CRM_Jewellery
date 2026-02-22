@@ -183,9 +183,153 @@ const getAllPacking = async (req, res) => {
   }
 };
 
+const editPacking = async (req, res) => {
+  try {
+    const process_id = req.params.id;
+    const { issued_weight } = req.body;
+    const newWeight = parseFloat(issued_weight);
+
+    if (!process_id || isNaN(newWeight) || newWeight <= 0) {
+      return formatResponse(res, 400, false, "Invalid issued weight.");
+    }
+
+    const process = await packingService.getPackingProcessById(process_id);
+    if (!process) return formatResponse(res, 404, false, "Process not found.");
+    if (process.status !== "RUNNING") {
+      return formatResponse(
+        res,
+        400,
+        false,
+        "Only RUNNING processes can be edited.",
+      );
+    }
+
+    const oldWeight = process.issued_weight;
+    const delta = newWeight - oldWeight;
+
+    if (delta > 0) {
+      const currentStock = await stockService.getStockByMetal(
+        process.metal_type,
+      );
+      if (
+        !currentStock ||
+        Math.round(currentStock.tpp_stock * 1000) < Math.round(delta * 1000)
+      ) {
+        return formatResponse(
+          res,
+          400,
+          false,
+          "Insufficient pooled TPP Stock to increase issued weight.",
+        );
+      }
+      await stockService.updateProcessStock(
+        "tpp",
+        process.metal_type,
+        delta,
+        false,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "ADJUSTMENT",
+        delta,
+        `Increased issued weight for Packing Job ${process.job_number}`,
+      );
+    } else if (delta < 0) {
+      await stockService.updateProcessStock(
+        "tpp",
+        process.metal_type,
+        Math.abs(delta),
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "ADJUSTMENT",
+        Math.abs(delta),
+        `Decreased/Refunded issued weight for Packing Job ${process.job_number}`,
+      );
+    }
+
+    await packingService.updatePackingIssuedWeight(process_id, newWeight);
+    return formatResponse(
+      res,
+      200,
+      true,
+      "Packing process updated successfully.",
+    );
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const deletePacking = async (req, res) => {
+  try {
+    const process_id = req.params.id;
+    const process = await packingService.getPackingProcessById(process_id);
+
+    if (!process) return formatResponse(res, 404, false, "Process not found.");
+    if (process.status !== "COMPLETED") {
+      return formatResponse(
+        res,
+        400,
+        false,
+        "Only COMPLETED processes can be deleted.",
+      );
+    }
+
+    // 1. Revert Output from Finished Goods pool
+    if (process.return_weight > 0) {
+      await packingService.removeFinishedGoods(
+        process.metal_type,
+        process.category,
+        process.return_weight,
+      );
+    }
+    // 2. Revert Scrap Weight from Opening Stock
+    if (process.scrap_weight > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        process.scrap_weight,
+        false,
+      );
+    }
+    // 3. Revert Loss Weight
+    if (process.loss_weight > 0) {
+      await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
+    }
+    // 4. Refund Issued Weight to TPP Pool
+    if (process.issued_weight > 0) {
+      await stockService.updateProcessStock(
+        "tpp",
+        process.metal_type,
+        process.issued_weight,
+        true,
+      );
+    }
+
+    await stockService.logTransaction(
+      process.metal_type,
+      "REVERSAL",
+      process.issued_weight,
+      `Deleted Completed Packing Job ${process.job_number} (Full Reversal)`,
+    );
+
+    await packingService.deletePackingProcessById(process_id);
+    return formatResponse(
+      res,
+      200,
+      true,
+      "Packing process deleted and stock reversed.",
+    );
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   createPacking,
   startPacking,
   completePacking,
   getAllPacking,
+  editPacking,
+  deletePacking,
 };

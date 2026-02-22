@@ -12,6 +12,8 @@ import {
   Weight,
   Search,
   Eye,
+  Trash2,
+  Edit,
 } from "lucide-react";
 import {
   getCombinedProcesses,
@@ -19,6 +21,8 @@ import {
   startProcess,
   completeProcess,
   getNextJobId,
+  editProcess,
+  deleteProcess,
 } from "../api/jobService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
@@ -89,6 +93,11 @@ const ProductionJobs = () => {
     return_weight: "",
     scrap_weight: "",
     return_pieces: "",
+  });
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    issued_weight: "",
+    weight_unit: "g",
   });
 
   const showToast = (message, type) => {
@@ -228,6 +237,58 @@ const ProductionJobs = () => {
     }
   };
 
+  const openEditModal = (process) => {
+    setSelectedProcess(process);
+    setEditForm({
+      issued_weight:
+        process.metal_type === "Silver"
+          ? process.issued_weight / 1000
+          : process.issued_weight || "",
+      weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditProcess = async (e) => {
+    e.preventDefault();
+    let weight = parseFloat(editForm.issued_weight);
+    if (editForm.weight_unit === "kg") weight *= 1000;
+
+    if (!weight || weight <= 0) {
+      triggerError();
+      return showToast("Invalid weight", "error");
+    }
+
+    try {
+      await editProcess(selectedProcess.stage, selectedProcess.id, {
+        issued_weight: weight,
+      });
+      showToast("Job Updated Successfully!", "success");
+      setIsEditModalOpen(false);
+      fetchProcesses();
+    } catch (error) {
+      triggerError();
+      showToast(error.message || "Failed to edit job", "error");
+    }
+  };
+
+  const handleDeleteProcess = async (process) => {
+    if (
+      !window.confirm(
+        `Are you SURE you want to permanently delete the COMPLETED Job ${process.job_number} at the ${process.stage} stage? This will entirely reverse the stock math and return physical metals back to their raw states.`,
+      )
+    )
+      return;
+
+    try {
+      await deleteProcess(process.stage, process.id);
+      showToast("Job Deleted and Stock Reversed!", "success");
+      fetchProcesses();
+    } catch (error) {
+      showToast(error.message || "Failed to delete job", "error");
+    }
+  };
+
   const openCompleteModal = (process) => {
     setSelectedProcess(process);
     setCompleteForm({
@@ -259,6 +320,24 @@ const ProductionJobs = () => {
     if (liveLoss < 0) {
       triggerError();
       return showToast("Return + Scrap exceeds Issued", "error");
+    }
+
+    let pieces = parseInt(completeForm.return_pieces) || 0;
+    if (
+      selectedProcess.stage === "TPP" ||
+      selectedProcess.stage === "Packing"
+    ) {
+      const catWeight = parseFloat(selectedProcess.category) || 0;
+      if (catWeight > 0) {
+        const maxPieces = Math.floor(issW / catWeight);
+        if (pieces > maxPieces) {
+          triggerError();
+          return showToast(
+            `Max possible pieces for this category is ${maxPieces}`,
+            "error",
+          );
+        }
+      }
     }
 
     try {
@@ -449,42 +528,62 @@ const ProductionJobs = () => {
                       </>
                     )}
                   </td>
-                  <td className="p-4 text-center">
-                    {p.status === "PENDING" && (
-                      <button
-                        onClick={() => openStartModal(p)}
-                        className="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center gap-1 mx-auto"
-                      >
-                        <PlayCircle size={14} /> Start
-                      </button>
-                    )}
-                    {p.status === "RUNNING" && (
-                      <button
-                        onClick={() => openCompleteModal(p)}
-                        className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center gap-1 mx-auto"
-                      >
-                        <ArrowRightCircle size={14} /> Complete
-                      </button>
-                    )}
-                    {p.status === "COMPLETED" && (
-                      <div className="flex flex-col items-center gap-2">
+                  <td className="p-4">
+                    <div className="flex flex-col items-center gap-2">
+                      {p.status === "COMPLETED" && (
                         <CheckCircle size={20} className="text-green-500" />
-                        {p.stage !== "Packing" && (
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        {p.status === "PENDING" && (
                           <button
-                            onClick={() => openNextStepModal(p)}
-                            className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center gap-1"
+                            onClick={() => openStartModal(p)}
+                            className="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center justify-center gap-1 w-28"
                           >
-                            <ArrowRightCircle size={14} /> Start Next
+                            <PlayCircle size={14} /> Start
                           </button>
                         )}
+                        {p.status === "RUNNING" && (
+                          <>
+                            <button
+                              onClick={() => openCompleteModal(p)}
+                              className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center justify-center gap-1 w-28"
+                            >
+                              <ArrowRightCircle size={14} /> Complete
+                            </button>
+                            <button
+                              onClick={() => openEditModal(p)}
+                              className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 w-28"
+                            >
+                              <Edit size={14} /> Edit Weight
+                            </button>
+                          </>
+                        )}
+                        {p.status === "COMPLETED" && (
+                          <>
+                            {p.stage !== "Packing" && (
+                              <button
+                                onClick={() => openNextStepModal(p)}
+                                className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 w-28"
+                              >
+                                <ArrowRightCircle size={14} /> Start Next
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteProcess(p)}
+                              className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 w-28"
+                            >
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => openViewModal(p.job_number)}
+                          className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors w-28"
+                        >
+                          <Eye size={14} /> View
+                        </button>
                       </div>
-                    )}
-                    <button
-                      onClick={() => openViewModal(p.job_number)}
-                      className="mt-3 text-gray-500 hover:text-gray-800 active:scale-95 flex items-center justify-center gap-1 text-xs font-bold transition-colors mx-auto"
-                    >
-                      <Eye size={14} /> View
-                    </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -688,6 +787,14 @@ const ProductionJobs = () => {
           className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
         >
           <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2 bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex justify-between items-center mb-2">
+              <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                Category
+              </span>
+              <span className="text-sm font-black text-indigo-900">
+                {selectedProcess?.category || "N/A"}
+              </span>
+            </div>
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
                 Weight Unit
@@ -812,6 +919,58 @@ const ProductionJobs = () => {
             className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
           >
             Complete & Log
+          </button>
+        </form>
+      </Modal>
+
+      {/* EDIT MODAL */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title={`Edit Weight: ${selectedProcess?.job_number}`}
+      >
+        <form
+          onSubmit={handleEditProcess}
+          className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+        >
+          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+            <label className="block text-sm font-bold text-yellow-800 mb-2">
+              New Issued Weight
+            </label>
+            <div className="flex bg-white border border-yellow-300 rounded-lg overflow-hidden">
+              <input
+                type="number"
+                step="0.001"
+                required
+                className="w-full bg-transparent py-3 px-4 font-bold text-lg text-yellow-900 outline-none"
+                value={editForm.issued_weight}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, issued_weight: e.target.value })
+                }
+                placeholder="0.000"
+              />
+              <select
+                className="bg-yellow-100 border-l border-yellow-300 px-3 font-bold text-yellow-900 outline-none"
+                value={editForm.weight_unit}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, weight_unit: e.target.value })
+                }
+              >
+                <option value="g">g</option>
+                <option value="kg">kg</option>
+              </select>
+            </div>
+            <p className="text-xs text-yellow-700 mt-2 font-semibold">
+              Note: Decreasing this will refund physical metric variants back to
+              base inventory. Increasing this will deduct additional weight from
+              pooling logic.
+            </p>
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 flex justify-center gap-2"
+          >
+            <Edit size={20} /> Update Weight Database
           </button>
         </form>
       </Modal>

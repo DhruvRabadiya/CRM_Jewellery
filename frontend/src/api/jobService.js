@@ -64,3 +64,23 @@ export const getActiveJobs = async () => {
     throw error.response?.data || error;
   }
 };
+
+export const editProcess = async (stage, processId, payload) => {
+  try {
+    const endpoint = stage.toLowerCase();
+    const response = await api.put(`/${endpoint}/${processId}/edit`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const deleteProcess = async (stage, processId) => {
+  try {
+    const endpoint = stage.toLowerCase();
+    const response = await api.delete(`/${endpoint}/${processId}/delete`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};

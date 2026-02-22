@@ -6,5 +6,7 @@ router.get("/", rollingController.getAllRolling);
 router.post("/create", rollingController.createRolling);
 router.post("/start", rollingController.startRolling);
 router.post("/complete", rollingController.completeRolling);
+router.put("/:id/edit", rollingController.editRolling);
+router.delete("/:id/delete", rollingController.deleteRolling);
 
 module.exports = router;
