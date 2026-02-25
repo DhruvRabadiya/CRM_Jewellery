@@ -48,7 +48,16 @@ const createPacking = async (req, res) => {
       category,
     );
 
-    return formatResponse(res, 201, true, "Packing process created", {
+    // DEDUCT IMMEDIATELY UPON CREATION
+    await stockService.updateProcessStock("tpp", metal_type, weight, false);
+    await stockService.logTransaction(
+      metal_type,
+      TRANSACTION_TYPES.JOB_ISSUE,
+      weight,
+      `Queued Packing Job ${job_number}`,
+    );
+
+    return formatResponse(res, 201, true, "Packing process queued", {
       processId,
     });
   } catch (error) {
@@ -68,31 +77,49 @@ const startPacking = async (req, res) => {
       return formatResponse(res, 404, false, "Process not found.");
     }
 
-    const currentStock = await stockService.getStockByMetal(process.metal_type);
-    if (
-      !currentStock ||
-      Math.round(currentStock.tpp_stock * 1000) < Math.round(weight * 1000)
-    ) {
-      return formatResponse(
-        res,
-        400,
+    const delta = weight - process.issue_size;
+
+    if (delta > 0) {
+      const currentStock = await stockService.getStockByMetal(
+        process.metal_type,
+      );
+      if (
+        !currentStock ||
+        Math.round(currentStock.tpp_stock * 1000) < Math.round(delta * 1000)
+      ) {
+        return formatResponse(
+          res,
+          400,
+          false,
+          "Insufficient pooled TPP Stock to increase weight.",
+        );
+      }
+      await stockService.updateProcessStock(
+        "tpp",
+        process.metal_type,
+        delta,
         false,
-        "Insufficient pooled TPP Stock available.",
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "ADJUSTMENT",
+        delta,
+        `Start delta adjustment (added) for Packing Job ${process.job_number}`,
+      );
+    } else if (delta < 0) {
+      await stockService.updateProcessStock(
+        "tpp",
+        process.metal_type,
+        Math.abs(delta),
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "ADJUSTMENT",
+        Math.abs(delta),
+        `Start delta adjustment (refunded) for Packing Job ${process.job_number}`,
       );
     }
-
-    await stockService.updateProcessStock(
-      "tpp",
-      process.metal_type,
-      weight,
-      false,
-    );
-    await stockService.logTransaction(
-      process.metal_type,
-      TRANSACTION_TYPES.JOB_ISSUE,
-      weight,
-      `Issued to Packing Job ${process.job_number}`,
-    );
 
     await packingService.startPackingProcess(process_id, weight);
     return formatResponse(res, 200, true, "Packing process started");
@@ -267,13 +294,59 @@ const deletePacking = async (req, res) => {
     const process = await packingService.getPackingProcessById(process_id);
 
     if (!process) return formatResponse(res, 404, false, "Process not found.");
-    if (process.status !== "COMPLETED") {
+
+    // PENDING Deletion
+    if (process.status === "PENDING") {
+      if (process.issue_size > 0) {
+        await stockService.updateProcessStock(
+          "tpp",
+          process.metal_type,
+          process.issue_size,
+          true,
+        );
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issue_size,
+          `Deleted Queued Packing Job ${process.job_number}`,
+        );
+      }
+      await packingService.deletePackingProcessById(process_id);
       return formatResponse(
         res,
-        400,
-        false,
-        "Only COMPLETED processes can be deleted.",
+        200,
+        true,
+        "Pending packing process deleted and stock refunded.",
       );
+    }
+
+    // RUNNING Deletion
+    if (process.status === "RUNNING") {
+      if (process.issued_weight > 0) {
+        await stockService.updateProcessStock(
+          "tpp",
+          process.metal_type,
+          process.issued_weight,
+          true,
+        );
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issued_weight,
+          `Deleted Running Packing Job ${process.job_number}`,
+        );
+      }
+      await packingService.deletePackingProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        "Running packing process deleted and stock refunded.",
+      );
+    }
+
+    if (process.status !== "COMPLETED") {
+      return formatResponse(res, 400, false, "Invalid status for deletion.");
     }
 
     // 1. Revert Output from Finished Goods pool

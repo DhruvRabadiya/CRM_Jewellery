@@ -48,7 +48,16 @@ const createRolling = async (req, res) => {
       category,
     );
 
-    return formatResponse(res, 201, true, "Rolling process created", {
+    // DEDUCT IMMEDIATELY UPON CREATION
+    await stockService.updateDhalStock(metal_type, weight, false);
+    await stockService.logTransaction(
+      metal_type,
+      TRANSACTION_TYPES.JOB_ISSUE,
+      weight,
+      `Queued Rolling Job ${job_number}`,
+    );
+
+    return formatResponse(res, 201, true, "Rolling process queued", {
       processId,
     });
   } catch (error) {
@@ -69,22 +78,43 @@ const startRolling = async (req, res) => {
       return formatResponse(res, 404, false, "Process not found.");
     }
 
-    const currentStock = await stockService.getStockByMetal(process.metal_type);
-    if (
-      !currentStock ||
-      Math.round(currentStock.dhal_stock * 1000) < Math.round(weight * 1000)
-    ) {
-      return formatResponse(res, 400, false, MESSAGES.INSUFFICIENT_DHAL);
-    }
+    const delta = weight - process.issue_size;
 
-    // Deduct exact weigh-in from Dhal stock
-    await stockService.updateDhalStock(process.metal_type, weight, false);
-    await stockService.logTransaction(
-      process.metal_type,
-      TRANSACTION_TYPES.JOB_ISSUE,
-      weight,
-      `Issued to Rolling Job ${process.job_number}`,
-    );
+    if (delta > 0) {
+      const currentStock = await stockService.getStockByMetal(
+        process.metal_type,
+      );
+      if (
+        !currentStock ||
+        Math.round(currentStock.dhal_stock * 1000) < Math.round(delta * 1000)
+      ) {
+        return formatResponse(
+          res,
+          400,
+          false,
+          "Insufficient Dhal Stock to increase weight.",
+        );
+      }
+      await stockService.updateDhalStock(process.metal_type, delta, false);
+      await stockService.logTransaction(
+        process.metal_type,
+        "ADJUSTMENT",
+        delta,
+        `Start delta adjustment (added) for Rolling Job ${process.job_number}`,
+      );
+    } else if (delta < 0) {
+      await stockService.updateDhalStock(
+        process.metal_type,
+        Math.abs(delta),
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "ADJUSTMENT",
+        Math.abs(delta),
+        `Start delta adjustment (refunded) for Rolling Job ${process.job_number}`,
+      );
+    }
 
     await rollingService.startRollingProcess(process_id, weight);
     return formatResponse(res, 200, true, "Rolling process started");
@@ -252,12 +282,71 @@ const deleteRolling = async (req, res) => {
     const process = await rollingService.getRollingProcessById(process_id);
 
     if (!process) return formatResponse(res, 404, false, "Process not found.");
+
+    // PENDING Deletion
+    if (process.status === "PENDING") {
+      if (process.issue_size > 0) {
+        await stockService.updateDhalStock(
+          process.metal_type,
+          process.issue_size,
+          true,
+        );
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issue_size,
+          `Deleted Queued Rolling Job ${process.job_number}`,
+        );
+      }
+      await rollingService.deleteRollingProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        "Pending rolling process deleted and stock refunded.",
+      );
+    }
+
+    // RUNNING Deletion
+    if (process.status === "RUNNING") {
+      if (process.issued_weight > 0) {
+        await stockService.updateDhalStock(
+          process.metal_type,
+          process.issued_weight,
+          true,
+        );
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issued_weight,
+          `Deleted Running Rolling Job ${process.job_number}`,
+        );
+      }
+      await rollingService.deleteRollingProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        "Running rolling process deleted and stock refunded.",
+      );
+    }
+
     if (process.status !== "COMPLETED") {
+      return formatResponse(res, 400, false, "Invalid status for deletion.");
+    }
+
+    // COMPLETED Deletion Validation
+    const currentStock = await stockService.getStockByMetal(process.metal_type);
+    if (
+      !currentStock ||
+      Math.round(currentStock.rolling_stock * 1000) <
+        Math.round(process.return_weight * 1000)
+    ) {
       return formatResponse(
         res,
         400,
         false,
-        "Only COMPLETED processes can be deleted.",
+        "Cannot delete: Downstream processes have already consumed this metal from the Rolling Stock pool.",
       );
     }
 

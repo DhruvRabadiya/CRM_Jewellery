@@ -79,6 +79,7 @@ const ProductionJobs = () => {
   const [createForm, setCreateForm] = useState({
     stage: "Rolling",
     job_number: "",
+    original_next_job: "",
     metal_type: "Gold",
     category: sizeOptions["Gold"][0],
     issue_size: "",
@@ -131,6 +132,8 @@ const ProductionJobs = () => {
         setCreateForm((prev) => ({
           ...prev,
           job_number: result.data.next_job_number,
+          original_next_job: result.data.next_job_number,
+          stage: "Rolling",
           metal_type: "Gold",
           category: sizeOptions["Gold"][0],
           issue_size: "",
@@ -361,7 +364,6 @@ const ProductionJobs = () => {
     const jobMap = {};
 
     procs.forEach((p) => {
-      // Use job_number as the grouping key. If none exists, fallback to id to avoid hiding unrelated items.
       const key = p.job_number || `unknown-${p.id}`;
 
       if (!jobMap[key]) {
@@ -371,7 +373,6 @@ const ProductionJobs = () => {
         if (stagePriority[p.stage] > stagePriority[existing.stage]) {
           jobMap[key] = p;
         } else if (stagePriority[p.stage] === stagePriority[existing.stage]) {
-          // If same stage and same job number, take the one created most recently
           if (new Date(p.date) > new Date(existing.date)) {
             jobMap[key] = p;
           }
@@ -407,6 +408,20 @@ const ProductionJobs = () => {
   }
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(3));
   const isLossNegative = liveLoss < 0;
+
+  const getAvailableJobNumbers = () => {
+    let prevStage = "Rolling";
+    if (createForm.stage === "TPP") prevStage = "Press";
+    if (createForm.stage === "Packing") prevStage = "TPP";
+
+    return [
+      ...new Set(
+        processes
+          .filter((p) => p.stage === prevStage && p.status === "COMPLETED")
+          .map((p) => p.job_number),
+      ),
+    ];
+  };
 
   if (loading)
     return (
@@ -612,23 +627,114 @@ const ProductionJobs = () => {
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 Stage
               </label>
-              <input
-                type="text"
-                className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
-                value={isNextStep ? createForm.stage : "Rolling"}
-                readOnly
-              />
+              {isNextStep ? (
+                <input
+                  type="text"
+                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
+                  value={createForm.stage}
+                  readOnly
+                />
+              ) : (
+                <select
+                  className="w-full bg-blue-50 border border-blue-200 py-3 px-4 rounded-lg font-bold outline-none text-blue-800"
+                  value={createForm.stage || "Rolling"}
+                  onChange={(e) => {
+                    const newStage = e.target.value;
+                    let nextJobNum = createForm.job_number;
+                    if (newStage === "Rolling") {
+                      nextJobNum = createForm.original_next_job;
+                    } else {
+                      let prevStage = "Rolling";
+                      if (newStage === "TPP") prevStage = "Press";
+                      if (newStage === "Packing") prevStage = "TPP";
+                      const available = [
+                        ...new Set(
+                          processes
+                            .filter(
+                              (p) =>
+                                p.stage === prevStage &&
+                                p.status === "COMPLETED",
+                            )
+                            .map((p) => p.job_number),
+                        ),
+                      ];
+                      nextJobNum = available.length > 0 ? available[0] : "";
+                    }
+
+                    const parentJob = processes.find(
+                      (p) => p.job_number === nextJobNum,
+                    );
+
+                    setCreateForm({
+                      ...createForm,
+                      stage: newStage,
+                      job_number: nextJobNum || "",
+                      ...(parentJob && newStage !== "Rolling"
+                        ? {
+                            metal_type: parentJob.metal_type,
+                            category: parentJob.category,
+                            weight_unit:
+                              parentJob.metal_type === "Silver" ? "kg" : "g",
+                          }
+                        : {}),
+                    });
+                  }}
+                >
+                  <option value="Rolling">Rolling</option>
+                  <option value="Press">Press</option>
+                  <option value="TPP">TPP</option>
+                  <option value="Packing">Packing</option>
+                </select>
+              )}
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 Job Number
               </label>
-              <input
-                type="text"
-                className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-mono text-blue-800 font-bold outline-none"
-                value={createForm.job_number}
-                readOnly
-              />
+              {isNextStep || createForm.stage === "Rolling" ? (
+                <input
+                  type="text"
+                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
+                  value={createForm.job_number}
+                  readOnly
+                />
+              ) : (
+                <select
+                  className="w-full bg-blue-50 border border-blue-200 py-3 px-4 rounded-lg font-mono text-blue-800 font-bold outline-none uppercase"
+                  value={createForm.job_number || ""}
+                  onChange={(e) => {
+                    const jn = e.target.value;
+                    const parentJob = processes.find(
+                      (p) => p.job_number === jn,
+                    );
+                    if (parentJob) {
+                      setCreateForm({
+                        ...createForm,
+                        job_number: jn,
+                        metal_type: parentJob.metal_type,
+                        category: parentJob.category,
+                        weight_unit:
+                          parentJob.metal_type === "Silver" ? "kg" : "g",
+                      });
+                    } else {
+                      setCreateForm({
+                        ...createForm,
+                        job_number: jn,
+                      });
+                    }
+                  }}
+                  required
+                >
+                  <option value="" disabled>
+                    Select Job
+                  </option>
+                  {getAvailableJobNumbers().map((jn) => (
+                    <option key={jn} value={jn}>
+                      {jn}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -636,7 +742,7 @@ const ProductionJobs = () => {
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 Metal
               </label>
-              {isNextStep ? (
+              {isNextStep || createForm.stage !== "Rolling" ? (
                 <input
                   type="text"
                   className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
@@ -665,7 +771,7 @@ const ProductionJobs = () => {
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 Category
               </label>
-              {isNextStep ? (
+              {isNextStep || createForm.stage !== "Rolling" ? (
                 <input
                   type="text"
                   className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
