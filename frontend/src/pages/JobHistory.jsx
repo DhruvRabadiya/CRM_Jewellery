@@ -28,6 +28,7 @@ const JobHistory = () => {
   const { jobNumber } = useParams();
   const navigate = useNavigate();
   const [history, setHistory] = useState([]);
+  const [allProcesses, setAllProcesses] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchHistory = useCallback(async () => {
@@ -40,6 +41,7 @@ const JobHistory = () => {
           (a, b) => stagePriority[a.stage] - stagePriority[b.stage],
         );
         setHistory(jobHistory);
+        setAllProcesses(result.data);
       }
     } catch (error) {
       console.error(error);
@@ -308,13 +310,25 @@ const JobHistory = () => {
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(3));
   const isLossNegative = liveLoss < 0;
 
-  const hasNextStage = (currentStage) => {
+  const hasRemainingStock = (currentStage, currentJobNumber) => {
     let nextStage = null;
     if (currentStage === "Rolling") nextStage = "Press";
     if (currentStage === "Press") nextStage = "TPP";
     if (currentStage === "TPP") nextStage = "Packing";
     if (!nextStage) return false;
-    return history.some((p) => p.stage === nextStage);
+
+    const totalReturned = history
+      .filter((p) => p.stage === currentStage && p.status === "COMPLETED")
+      .reduce((sum, p) => sum + (parseFloat(p.return_weight) || 0), 0);
+
+    const totalConsumed = allProcesses
+      .filter((p) => p.stage === nextStage && p.job_number === currentJobNumber)
+      .reduce(
+        (sum, p) => sum + parseFloat(p.issued_weight || p.issue_size || 0),
+        0,
+      );
+
+    return Math.round(totalReturned * 1000) > Math.round(totalConsumed * 1000);
   };
 
   if (loading)
@@ -479,14 +493,15 @@ const JobHistory = () => {
 
                       {h.status === "COMPLETED" && (
                         <>
-                          {h.stage !== "Packing" && !hasNextStage(h.stage) && (
-                            <button
-                              onClick={() => openNextStepModal(h)}
-                              className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 w-28"
-                            >
-                              <ArrowRightCircle size={14} /> Start Next
-                            </button>
-                          )}
+                          {h.stage !== "Packing" &&
+                            hasRemainingStock(h.stage, h.job_number) && (
+                              <button
+                                onClick={() => openNextStepModal(h)}
+                                className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 w-28"
+                              >
+                                <ArrowRightCircle size={14} /> Start Next
+                              </button>
+                            )}
                           <div className="w-28 flex justify-center text-green-500">
                             <CheckCircle size={20} />
                           </div>
