@@ -1,0 +1,39 @@
+{
+    "name": "jewelcrm-desktop",
+    "version": "1.0.0",
+    "description": "JewelCRM Desktop Application",
+    "main": "main.js",
+    "scripts": {
+        "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" \"wait-on http://localhost:5173 && wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+        "start:backend": "cd backend && npm start",
+        "start:frontend": "cd frontend && npm run dev",
+        "build:frontend": "cd frontend && npm run build",
+        "build:electron": "electron-builder --win",
+        "pack": "npm run build:frontend && npm run build:electron"
+    },
+    "author": "JewelCRM",
+    "license": "ISC",
+    "build": {
+        "appId": "com.jewelcrm.desktop",
+        "productName": "JewelCRM",
+        "win": {
+            "target": "nsis"
+        },
+        "asar": false,
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "main.js",
+            "backend/**/*",
+            "frontend/dist/**/*"
+        ]
+    },
+    "devDependencies": {
+        "concurrently": "^9.2.1",
+        "cross-env": "^10.1.0",
+        "electron": "^40.6.1",
+        "electron-builder": "^26.8.1",
+        "wait-on": "^9.0.4"
+    }
+}
