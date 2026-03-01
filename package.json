@@ -4,7 +4,7 @@
     "description": "JewelCRM Desktop Application",
     "main": "main.js",
     "scripts": {
-        "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" \"wait-on http://localhost:5173 && wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+        "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" \"wait-on http://localhost:5173 && wait-on http://localhost:5000 && cross-env NODE_ENV=development electron .\"",
         "start:backend": "cd backend && npm start",
         "start:frontend": "cd frontend && npm run dev",
         "build:frontend": "cd frontend && npm run build",

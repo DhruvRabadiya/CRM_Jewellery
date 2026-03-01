@@ -174,6 +174,20 @@ const startJobStep = (job_id) => {
     });
   });
 };
+
+// Remove finished goods (for reversals)
+const removeFinishedGoods = (metal_type, target_product, pieces, weight) => {
+  return new Promise((resolve, reject) => {
+    // Try to find and update existing matching row
+    const query = `UPDATE finished_goods SET pieces = MAX(0, pieces - ?), weight = MAX(0, weight - ?) 
+                   WHERE metal_type = ? AND target_product = ?`;
+    db.run(query, [pieces, weight, metal_type, target_product], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createJob,
   logJobStep,
@@ -181,6 +195,7 @@ module.exports = {
   getJobById,
   getLastStep,
   addFinishedGoods,
+  removeFinishedGoods,
   getActiveJobs,
   getNextJobNumber,
   getFinishedGoodsInventory,

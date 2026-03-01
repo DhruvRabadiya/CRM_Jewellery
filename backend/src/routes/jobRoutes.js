@@ -10,6 +10,8 @@ router.get("/finished", jobController.getFinishedGoods);
 router.post("/create", jobController.createJob);
 router.post("/step", jobController.completeStep);
 router.post("/start-step", jobController.startJobStep);
+router.post("/reverse", jobController.reverseProcess);
+router.post("/edit-completed", jobController.editCompletedProcess);
 
 router.get("/:id", jobController.getJobDetails);
 

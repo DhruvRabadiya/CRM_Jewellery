@@ -84,3 +84,28 @@ export const deleteProcess = async (stage, processId) => {
     throw error.response?.data || error;
   }
 };
+
+export const reverseProcess = async (stage, processId) => {
+  try {
+    const response = await api.post(`/jobs/reverse`, {
+      stage,
+      process_id: processId,
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const editCompletedProcess = async (stage, processId, data) => {
+  try {
+    const response = await api.post(`/jobs/edit-completed`, {
+      stage,
+      process_id: processId,
+      ...data,
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};

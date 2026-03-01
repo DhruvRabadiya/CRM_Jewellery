@@ -12,6 +12,8 @@ import {
   Trash2,
   ArrowRightCircle,
   PlusCircle,
+  Undo2,
+  Edit,
 } from "lucide-react";
 import {
   getCombinedProcesses,
@@ -20,6 +22,8 @@ import {
   deleteProcess,
   editProcess,
   createProcess,
+  reverseProcess,
+  editCompletedProcess,
 } from "../api/jobService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
@@ -83,6 +87,16 @@ const JobHistory = () => {
     issue_size: "",
     weight_unit: "g",
   });
+  const [isEditCompletedModalOpen, setIsEditCompletedModalOpen] = useState(false);
+  const [editCompletedForm, setEditCompletedForm] = useState({
+    return_weight: "",
+    scrap_weight: "",
+    return_pieces: "",
+    weight_unit: "g",
+  });
+  const [isReverseModalOpen, setIsReverseModalOpen] = useState(false);
+  const [reversingProcess, setReversingProcess] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -265,6 +279,88 @@ const JobHistory = () => {
     });
     setIsNextStep(true);
     setIsCreateModalOpen(true);
+  };
+
+  // --- REVERSE PROCESS ---
+  const openReverseModal = (process) => {
+    setReversingProcess(process);
+    setIsReverseModalOpen(true);
+  };
+
+  const handleReverseProcess = async () => {
+    if (!reversingProcess) return;
+    setActionLoading(true);
+    try {
+      const result = await reverseProcess(reversingProcess.stage, reversingProcess.id);
+      if (result.success) {
+        showToast(result.message || "Process reversed!", "success");
+        setIsReverseModalOpen(false);
+        setReversingProcess(null);
+        fetchHistory();
+      } else {
+        showToast(result.message || "Reverse failed", "error");
+      }
+    } catch (error) {
+      showToast(error.message || "Failed to reverse process", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // --- EDIT COMPLETED PROCESS ---
+  const openEditCompletedModal = (process) => {
+    setSelectedProcess(process);
+    const unit = process.metal_type === "Silver" ? "kg" : "g";
+    const divisor = unit === "kg" ? 1000 : 1;
+    setEditCompletedForm({
+      return_weight: (process.return_weight / divisor).toString(),
+      scrap_weight: (process.scrap_weight / divisor).toString(),
+      return_pieces: (process.return_pieces || 0).toString(),
+      weight_unit: unit,
+    });
+    setIsEditCompletedModalOpen(true);
+  };
+
+  const handleEditCompletedProcess = async (e) => {
+    e.preventDefault();
+    let retW = parseFloat(editCompletedForm.return_weight) || 0;
+    let scrW = parseFloat(editCompletedForm.scrap_weight) || 0;
+    if (editCompletedForm.weight_unit === "kg") {
+      retW *= 1000;
+      scrW *= 1000;
+    }
+    if (retW < 0 || scrW < 0) {
+      triggerError();
+      return showToast("Weights cannot be negative", "error");
+    }
+    const issW = selectedProcess.issued_weight;
+    const loss = parseFloat((issW - retW - scrW).toFixed(3));
+    if (loss < 0) {
+      triggerError();
+      return showToast("Return + Scrap exceeds Issued Weight!", "error");
+    }
+    setActionLoading(true);
+    try {
+      const result = await editCompletedProcess(selectedProcess.stage, selectedProcess.id, {
+        return_weight: retW,
+        scrap_weight: scrW,
+        return_pieces: parseInt(editCompletedForm.return_pieces) || 0,
+      });
+      if (result.success) {
+        showToast("Completed process updated!", "success");
+        setIsEditCompletedModalOpen(false);
+        setSelectedProcess(null);
+        fetchHistory();
+      } else {
+        triggerError();
+        showToast(result.message || "Update failed", "error");
+      }
+    } catch (error) {
+      triggerError();
+      showToast(error.message || "Failed to update", "error");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleCreateProcess = async (e) => {
@@ -502,6 +598,18 @@ const JobHistory = () => {
                                 <ArrowRightCircle size={14} /> Start Next
                               </button>
                             )}
+                          <button
+                            onClick={() => openReverseModal(h)}
+                            className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-100 active:scale-95 flex items-center justify-center gap-1 w-28"
+                          >
+                            <Undo2 size={14} /> Reverse
+                          </button>
+                          <button
+                            onClick={() => openEditCompletedModal(h)}
+                            className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 w-28"
+                          >
+                            <Edit size={14} /> Edit
+                          </button>
                           <div className="w-28 flex justify-center text-green-500">
                             <CheckCircle size={20} />
                           </div>
@@ -977,8 +1085,120 @@ const JobHistory = () => {
           </button>
         </form>
       </Modal>
+
+      {/* EDIT COMPLETED MODAL */}
+      <Modal
+        isOpen={isEditCompletedModalOpen}
+        onClose={() => setIsEditCompletedModalOpen(false)}
+        title={`Edit Completed: ${selectedProcess?.job_number} (${selectedProcess?.stage})`}
+      >
+        {selectedProcess && (() => {
+          const ecIssW = selectedProcess.issued_weight || 0;
+          let ecRetW = parseFloat(editCompletedForm.return_weight) || 0;
+          let ecScrW = parseFloat(editCompletedForm.scrap_weight) || 0;
+          if (editCompletedForm.weight_unit === "kg") { ecRetW *= 1000; ecScrW *= 1000; }
+          const ecLoss = parseFloat((ecIssW - ecRetW - ecScrW).toFixed(3));
+          const ecIsNeg = ecLoss < 0;
+          const ecDivisor = editCompletedForm.weight_unit === "kg" ? 1000 : 1;
+          return (
+          <form
+            onSubmit={handleEditCompletedProcess}
+            className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+          >
+            <div className="bg-green-50 p-3 rounded-xl border border-green-100 text-sm text-green-700 font-medium">
+              Editing completed process — stock adjustments will be recalculated.
+            </div>
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
+              <span className="text-blue-800 font-semibold">Issued Weight ({editCompletedForm.weight_unit}):</span>
+              <span className="text-xl font-bold text-blue-900">
+                {(ecIssW / ecDivisor).toFixed(3)}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Weight Unit</label>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button type="button" onClick={() => setEditCompletedForm({ ...editCompletedForm, weight_unit: "g" })} className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${editCompletedForm.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Grams (g)</button>
+                  <button type="button" onClick={() => setEditCompletedForm({ ...editCompletedForm, weight_unit: "kg" })} className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${editCompletedForm.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Kilogram (kg)</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-green-700 mb-1 uppercase">Good Output</label>
+                <input type="number" step="0.001" className="w-full bg-green-50 border border-green-200 py-3 px-4 rounded-lg font-bold text-lg outline-none" value={editCompletedForm.return_weight} onChange={(e) => setEditCompletedForm({ ...editCompletedForm, return_weight: e.target.value })} placeholder="0.000" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Scrap/Dust</label>
+                <input type="number" step="0.001" className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-bold text-lg outline-none" value={editCompletedForm.scrap_weight} onChange={(e) => setEditCompletedForm({ ...editCompletedForm, scrap_weight: e.target.value })} placeholder="0.000" />
+              </div>
+            </div>
+            {(selectedProcess.stage === "TPP" || selectedProcess.stage === "Packing") && (
+              <div>
+                <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">Final Pieces</label>
+                <input type="number" step="1" className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none" value={editCompletedForm.return_pieces} onChange={(e) => setEditCompletedForm({ ...editCompletedForm, return_pieces: e.target.value })} placeholder="0" />
+              </div>
+            )}
+            <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4">
+              <div className="flex justify-between text-sm mb-1">
+                <span>Issued ({editCompletedForm.weight_unit}):</span>
+                <span>{(ecIssW / ecDivisor).toFixed(3)}</span>
+              </div>
+              <div className="flex justify-between text-sm mb-1 text-green-400">
+                <span>- Return:</span>
+                <span>{(ecRetW / ecDivisor).toFixed(3)}</span>
+              </div>
+              <div className="flex justify-between text-sm mb-3 text-yellow-400">
+                <span>- Scrap:</span>
+                <span>{(ecScrW / ecDivisor).toFixed(3)}</span>
+              </div>
+              <div className="border-t border-gray-600 pt-3 flex justify-between font-bold">
+                <span>Loss:</span>
+                <span className={ecIsNeg ? "text-red-500" : "text-white"}>
+                  {(ecLoss / ecDivisor).toFixed(3)}
+                </span>
+              </div>
+            </div>
+            <button type="submit" disabled={actionLoading || ecIsNeg} className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl hover:bg-green-700 disabled:opacity-50 flex justify-center gap-2">
+              <CheckCircle size={20} /> {actionLoading ? "Updating..." : "Update Completed Process"}
+            </button>
+          </form>
+          );
+        })()}
+      </Modal>
+
+      {/* REVERSE CONFIRMATION MODAL */}
+      <Modal
+        isOpen={isReverseModalOpen}
+        onClose={() => { setIsReverseModalOpen(false); setReversingProcess(null); }}
+        title="Reverse Process"
+      >
+        {reversingProcess && (
+          <div className="space-y-5">
+            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-center">
+              <Undo2 size={40} className="mx-auto mb-3 text-amber-500" />
+              <p className="text-amber-800 font-bold text-lg mb-1">Reverse this process?</p>
+              <p className="text-amber-700 text-sm">
+                This will reverse <strong>{reversingProcess.job_number}</strong> at the <strong>{reversingProcess.stage}</strong> stage
+                and return weight to the <strong>{reversingProcess.stage === "Rolling" ? "Dhal" : reversingProcess.stage === "Press" ? "Rolling" : reversingProcess.stage === "TPP" ? "Press" : "TPP"}</strong> stock pool.
+              </p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-sm space-y-1">
+              <div className="flex justify-between"><span className="text-gray-500">Metal:</span><span className="font-bold">{reversingProcess.metal_type}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Issued Weight:</span><span className="font-bold">{reversingProcess.issued_weight?.toFixed(3)}g</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Return Weight:</span><span className="font-bold text-green-600">{reversingProcess.return_weight?.toFixed(3)}g</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Loss:</span><span className="font-bold text-red-600">{reversingProcess.loss_weight?.toFixed(3)}g</span></div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setIsReverseModalOpen(false); setReversingProcess(null); }} className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+              <button onClick={handleReverseProcess} disabled={actionLoading} className="flex-1 bg-amber-600 text-white font-bold py-3 rounded-xl hover:bg-amber-700 shadow-md active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50">
+                <Undo2 size={18} /> {actionLoading ? "Reversing..." : "Reverse"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
 
 export default JobHistory;
+
