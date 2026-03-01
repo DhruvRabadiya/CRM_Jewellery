@@ -141,6 +141,36 @@ const getDetailedScrapAndLoss = () => {
   });
 };
 
+const getTransactionById = (id) => {
+  return new Promise((resolve, reject) => {
+    const query = `SELECT * FROM stock_transactions WHERE id = ?`;
+    db.get(query, [id], (err, row) => {
+      if (err) reject(err);
+      resolve(row);
+    });
+  });
+};
+
+const updateTransaction = (id, weight, description) => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE stock_transactions SET weight = ?, description = ? WHERE id = ?`;
+    db.run(query, [weight, description, id], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
+const deleteTransaction = (id) => {
+  return new Promise((resolve, reject) => {
+    const query = `DELETE FROM stock_transactions WHERE id = ?`;
+    db.run(query, [id], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   getStockByMetal,
   updateOpeningStock,
@@ -151,4 +181,7 @@ module.exports = {
   getLossStats,
   getPurchases,
   getDetailedScrapAndLoss,
+  getTransactionById,
+  updateTransaction,
+  deleteTransaction,
 };

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { PlusCircle, Coins } from "lucide-react";
+import { PlusCircle, Coins, Edit, Trash2, CheckCircle } from "lucide-react";
 import {
   getStockData,
   getPurchases,
   getDetailedScrapAndLoss,
+  editPurchase,
+  deletePurchase,
 } from "../api/stockService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
@@ -17,6 +19,16 @@ const StockManagement = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // Edit Purchase State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [editForm, setEditForm] = useState({
+    weight: "",
+    weight_unit: "g",
+    description: "",
+  });
+  const [actionLoading, setActionLoading] = useState(false);
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -56,6 +68,73 @@ const StockManagement = () => {
   const handleSuccess = () => {
     setIsModalOpen(false);
     fetchStock();
+  };
+
+  // 4. Handle Edit Purchase
+  const openEditModal = (purchase) => {
+    setSelectedPurchase(purchase);
+    const unit = purchase.metal_type === "Silver" ? "kg" : "g";
+    const divisor = unit === "kg" ? 1000 : 1;
+    setEditForm({
+      weight: (purchase.weight / divisor).toString(),
+      weight_unit: unit,
+      description: purchase.description || "",
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditPurchase = async (e) => {
+    e.preventDefault();
+    if (!editForm.weight || parseFloat(editForm.weight) <= 0) {
+      return showToast("Valid weight is required", "error");
+    }
+
+    let finalWeight = parseFloat(editForm.weight);
+    if (editForm.weight_unit === "kg") {
+      finalWeight *= 1000;
+    }
+
+    setActionLoading(true);
+    try {
+      const result = await editPurchase(selectedPurchase.id, finalWeight, editForm.description);
+      if (result.success) {
+        showToast("Purchase updated successfully", "success");
+        setIsEditModalOpen(false);
+        setSelectedPurchase(null);
+        fetchStock();
+      } else {
+        showToast(result.message || "Failed to edit purchase", "error");
+      }
+    } catch (error) {
+      showToast(error.message || "Error editing purchase", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 5. Handle Delete Purchase
+  const handleDeletePurchase = async (purchase) => {
+    if (
+      !window.confirm(
+        `Are you SURE you want to permanently delete this ${purchase.metal_type} purchase of ${
+          purchase.metal_type === "Gold" ? purchase.weight.toFixed(3) + "g" : (purchase.weight / 1000).toFixed(3) + "kg"
+        }? This will reverse the stock addition.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const result = await deletePurchase(purchase.id);
+      if (result.success) {
+        showToast("Purchase deleted and stock reversed!", "success");
+        fetchStock();
+      } else {
+        showToast(result.message || "Failed to delete purchase", "error");
+      }
+    } catch (error) {
+      showToast(error.message || "Error deleting purchase", "error");
+    }
   };
 
   if (loading)
@@ -172,8 +251,9 @@ const StockManagement = () => {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
                 <th className="p-4 font-bold rounded-tl-xl w-48">Date Added</th>
-                <th className="p-4 font-bold rounded-tr-xl">Description</th>
+                <th className="p-4 font-bold">Description</th>
                 <th className="p-4 font-bold text-right">Received Weight</th>
+                <th className="p-4 font-bold text-right rounded-tr-xl">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -181,7 +261,7 @@ const StockManagement = () => {
               0 ? (
                 <tr>
                   <td
-                    colSpan="3"
+                    colSpan="4"
                     className="p-8 text-center text-gray-400 font-medium"
                   >
                     No purchase history found for {activeTab}.
@@ -211,6 +291,20 @@ const StockManagement = () => {
                           ? txn.weight.toFixed(3)
                           : (txn.weight / 1000).toFixed(3)}{" "}
                         {activeTab === "Gold" ? "g" : "kg"}
+                      </td>
+                      <td className="p-4 text-sm font-medium text-right flex justify-end gap-2">
+                        <button
+                          onClick={() => openEditModal(txn)}
+                          className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1"
+                        >
+                          <Edit size={14} /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeletePurchase(txn)}
+                          className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -326,6 +420,70 @@ const StockManagement = () => {
           onCancel={() => setIsModalOpen(false)}
           showToast={showToast}
         />
+      </Modal>
+
+      {/* EDIT PURCHASE MODAL */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title={`Edit Purchase: ${selectedPurchase?.metal_type}`}
+      >
+        {selectedPurchase && (
+          <form onSubmit={handleEditPurchase} className="space-y-4">
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
+              <span className="text-blue-800 font-semibold">Original Weight ({editForm.weight_unit}):</span>
+              <span className="text-xl font-bold text-blue-900">
+                {(selectedPurchase.weight / (editForm.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}
+              </span>
+            </div>
+            
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-gray-700 mb-2">Weight</label>
+                <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <input
+                    type="number"
+                    step="0.001"
+                    required
+                    className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
+                    value={editForm.weight}
+                    onChange={(e) => setEditForm({ ...editForm, weight: e.target.value })}
+                  />
+                  <select
+                    className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                    value={editForm.weight_unit}
+                    onChange={(e) => setEditForm({ ...editForm, weight_unit: e.target.value })}
+                  >
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
+              <textarea
+                className="w-full bg-white border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none resize-none"
+                rows="3"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              ></textarea>
+            </div>
+
+            <p className="text-xs text-yellow-700 mt-2 font-semibold">
+              Note: Updating the weight will alter the current opening stock accordingly.
+            </p>
+
+            <button
+              type="submit"
+              disabled={actionLoading}
+              className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 flex justify-center items-center gap-2 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading ? "Updating..." : "Update Purchase"}
+            </button>
+          </form>
+        )}
       </Modal>
     </div>
   );

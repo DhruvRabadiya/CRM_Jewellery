@@ -94,10 +94,73 @@ const getDetailedScrapAndLoss = async (req, res) => {
   }
 };
 
+const editPurchase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { weight, description } = req.body;
+
+    if (!weight || weight <= 0) {
+      return formatResponse(res, 400, false, "Valid wait is required");
+    }
+
+    const transaction = await stockService.getTransactionById(id);
+    if (!transaction) {
+      return formatResponse(res, 404, false, "Purchase not found");
+    }
+
+    if (transaction.transaction_type !== TRANSACTION_TYPES.PURCHASE) {
+      return formatResponse(res, 400, false, "Only PURCHASE transactions can be edited here");
+    }
+
+    const oldWeight = transaction.weight;
+    const newWeight = parseFloat(weight);
+    const weightDiff = newWeight - oldWeight;
+
+    // Adjust Opening Stock
+    if (weightDiff !== 0) {
+      await stockService.updateOpeningStock(transaction.metal_type, Math.abs(weightDiff), weightDiff > 0);
+    }
+
+    // Update Transaction
+    await stockService.updateTransaction(id, newWeight, description);
+
+    return formatResponse(res, 200, true, "Purchase updated successfully");
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const deletePurchase = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const transaction = await stockService.getTransactionById(id);
+    if (!transaction) {
+      return formatResponse(res, 404, false, "Purchase not found");
+    }
+
+    if (transaction.transaction_type !== TRANSACTION_TYPES.PURCHASE) {
+      return formatResponse(res, 400, false, "Only PURCHASE transactions can be deleted here");
+    }
+
+    // Reverse weight from Opening Stock
+    await stockService.updateOpeningStock(transaction.metal_type, transaction.weight, false);
+
+    // Delete Transaction
+    await stockService.deleteTransaction(id);
+
+    return formatResponse(res, 200, true, "Purchase deleted and stock reversed successfully");
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   getStock,
   addStock,
   getLossStats,
   getPurchases,
   getDetailedScrapAndLoss,
+  editPurchase,
+  deletePurchase,
 };

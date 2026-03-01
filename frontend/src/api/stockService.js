@@ -48,3 +48,24 @@ export const getPurchases = async () => {
     throw error;
   }
 };
+
+export const editPurchase = async (id, weight, description) => {
+  try {
+    const response = await api.put(`/stock/purchases/${id}/edit`, {
+      weight: parseFloat(weight),
+      description,
+    });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deletePurchase = async (id) => {
+  try {
+    const response = await api.delete(`/stock/purchases/${id}/delete`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
