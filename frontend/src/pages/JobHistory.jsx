@@ -23,6 +23,7 @@ import {
 } from "../api/jobService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
+import { formatWeight } from "../utils/formatHelpers";
 
 const JobHistory = () => {
   const { jobNumber } = useParams();
@@ -475,19 +476,25 @@ const JobHistory = () => {
                       {new Date(h.date).toLocaleTimeString()}
                     </td>
                     <td className="p-2 px-3 font-black text-gray-700 whitespace-nowrap">
-                      {h.issued_weight
-                        ? h.issued_weight.toFixed(3)
-                        : (h.issue_size || 0).toFixed(3)}
-                      g
+                      {formatWeight(
+                        h.issued_weight ? h.issued_weight : h.issue_size || 0,
+                        h.unit,
+                      )}
                     </td>
                     <td className="p-2 px-3 font-black text-green-600 whitespace-nowrap">
-                      {h.return_weight ? h.return_weight.toFixed(3) + "g" : "-"}
+                      {h.return_weight
+                        ? formatWeight(h.return_weight, h.unit)
+                        : "-"}
                     </td>
                     <td className="p-2 px-3 font-black text-gray-600 whitespace-nowrap">
-                      {h.scrap_weight ? h.scrap_weight.toFixed(3) + "g" : "-"}
+                      {h.scrap_weight
+                        ? formatWeight(h.scrap_weight, h.unit)
+                        : "-"}
                     </td>
                     <td className="p-2 px-3 font-black text-red-500 whitespace-nowrap">
-                      {h.loss_weight ? h.loss_weight.toFixed(3) + "g" : "-"}
+                      {h.loss_weight
+                        ? formatWeight(h.loss_weight, h.unit)
+                        : "-"}
                     </td>
                     <td className="p-2 px-3 flex justify-end gap-2 text-sm">
                       {h.status === "PENDING" && (

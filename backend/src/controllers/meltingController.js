@@ -5,9 +5,10 @@ const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const startMelting = async (req, res) => {
   try {
-    const { metal_type, issue_weight, issue_pieces } = req.body;
+    const { metal_type, weight_unit, issue_weight, issue_pieces } = req.body;
     const weight = parseFloat(issue_weight);
     const pieces = parseInt(issue_pieces) || 0;
+    const unit = weight_unit || "g";
 
     if (!metal_type || isNaN(weight) || weight <= 0) {
       return formatResponse(
@@ -26,6 +27,7 @@ const startMelting = async (req, res) => {
     await stockService.updateOpeningStock(metal_type, weight, false);
     const processId = await meltingService.createMeltingProcess(
       metal_type,
+      unit,
       weight,
       pieces,
     );

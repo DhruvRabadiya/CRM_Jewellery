@@ -26,6 +26,7 @@ import {
 } from "../api/jobService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
+import { formatWeight } from "../utils/formatHelpers";
 import { useNavigate } from "react-router-dom";
 
 const sizeOptions = {
@@ -194,7 +195,7 @@ const ProductionJobs = () => {
         job_number: createForm.job_number,
         job_name: createForm.job_number, // Default to job_number internally to prevent NULL
         metal_type: createForm.metal_type,
-        unit: "g",
+        unit: createForm.weight_unit,
         employee: "Worker",
         issue_size: weight,
         issue_pieces: createForm.issue_pieces || 0,
@@ -235,7 +236,7 @@ const ProductionJobs = () => {
       await startProcess(
         selectedProcess.stage,
         selectedProcess.id,
-        startForm.issued_weight,
+        weight,
         startForm.issue_pieces,
       );
       showToast("Started!", "success");
@@ -539,19 +540,20 @@ const ProductionJobs = () => {
                   <td className="p-2 px-3 text-sm font-mono text-gray-700 whitespace-nowrap">
                     <div>
                       <span className="text-gray-400">Iss:</span>{" "}
-                      {p.issued_weight
-                        ? p.issued_weight.toFixed(2)
-                        : (p.issue_size || 0).toFixed(2)}
+                      {formatWeight(
+                        p.issued_weight ? p.issued_weight : p.issue_size || 0,
+                        p.unit,
+                      )}
                     </div>
                     {p.status === "COMPLETED" && (
                       <>
                         <div className="text-green-600">
                           <span className="text-gray-400">Ret:</span>{" "}
-                          {(p.return_weight || 0).toFixed(2)}
+                          {formatWeight(p.return_weight || 0, p.unit)}
                         </div>
                         <div className="text-red-500">
                           <span className="text-gray-400">Los:</span>{" "}
-                          {(p.loss_weight || 0).toFixed(2)}
+                          {formatWeight(p.loss_weight || 0, p.unit)}
                         </div>
                       </>
                     )}

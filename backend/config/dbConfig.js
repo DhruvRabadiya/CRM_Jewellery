@@ -51,6 +51,7 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS melting_process (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         metal_type TEXT,
+        unit TEXT DEFAULT 'g',
         issue_weight REAL,
         issue_pieces REAL DEFAULT 0,
         return_weight REAL DEFAULT 0,

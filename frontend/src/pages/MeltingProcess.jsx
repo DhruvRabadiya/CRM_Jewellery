@@ -16,6 +16,7 @@ import {
 } from "../api/meltingService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
+import { formatWeight } from "../utils/formatHelpers";
 
 const MeltingProcess = () => {
   const [activeMelts, setActiveMelts] = useState([]);
@@ -338,13 +339,7 @@ const MeltingProcess = () => {
                     Issued Weight
                   </p>
                   <p className="text-2xl font-bold text-gray-800">
-                    {(melt.metal_type === "Gold"
-                      ? melt.issue_weight
-                      : melt.issue_weight / 1000
-                    ).toFixed(3)}{" "}
-                    <span className="text-base text-gray-400">
-                      {melt.metal_type === "Gold" ? "g" : "kg"}
-                    </span>
+                    {formatWeight(melt.issue_weight, melt.unit)}
                   </p>
                 </div>
 
@@ -631,7 +626,7 @@ const MeltingProcess = () => {
                     </span>
                   </td>
                   <td className="p-4 font-bold text-gray-700">
-                    {h.issue_weight}g
+                    {formatWeight(h.issue_weight, h.unit)}
                     {h.issue_pieces > 0 && (
                       <span className="ml-2 text-xs text-gray-400">
                         ({h.issue_pieces} pcs)
@@ -639,7 +634,9 @@ const MeltingProcess = () => {
                     )}
                   </td>
                   <td className="p-4 font-bold text-green-600">
-                    {h.return_weight ? `${h.return_weight}g` : "-"}
+                    {h.return_weight
+                      ? formatWeight(h.return_weight, h.unit)
+                      : "-"}
                     {h.return_pieces > 0 && (
                       <span className="ml-2 text-xs text-green-400">
                         ({h.return_pieces} pcs)
@@ -647,9 +644,14 @@ const MeltingProcess = () => {
                     )}
                   </td>
                   <td className="p-4 font-bold text-gray-600 text-sm">
-                    {h.scrap_weight ? `${h.scrap_weight}g` : "-"} /{" "}
+                    {h.scrap_weight
+                      ? formatWeight(h.scrap_weight, h.unit)
+                      : "-"}{" "}
+                    /{" "}
                     <span className="text-red-500">
-                      {h.loss_weight ? `${h.loss_weight}g` : "-"}
+                      {h.loss_weight
+                        ? formatWeight(h.loss_weight, h.unit)
+                        : "-"}
                     </span>
                   </td>
                   <td className="p-4 flex justify-end gap-2 text-sm">
