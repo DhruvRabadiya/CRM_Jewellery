@@ -58,6 +58,7 @@ const JobHistory = () => {
 
   const [startForm, setStartForm] = useState({
     issued_weight: "",
+    issue_pieces: "",
     weight_unit: "g",
   });
 
@@ -81,6 +82,7 @@ const JobHistory = () => {
     metal_type: "Gold",
     category: "N/A",
     issue_size: "",
+    issue_pieces: "",
     weight_unit: "g",
   });
 
@@ -101,6 +103,7 @@ const JobHistory = () => {
         process.metal_type === "Silver"
           ? process.issue_size / 1000
           : process.issue_size || "",
+      issue_pieces: process.issue_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
     });
     setIsStartModalOpen(true);
@@ -120,6 +123,7 @@ const JobHistory = () => {
         selectedProcess.stage,
         selectedProcess.id,
         startForm.issued_weight,
+        startForm.issue_pieces,
       );
       showToast("Started!", "success");
       setIsStartModalOpen(false);
@@ -161,24 +165,6 @@ const JobHistory = () => {
     if (liveLoss < 0) {
       triggerError();
       return showToast("Return + Scrap exceeds Issued", "error");
-    }
-
-    let pieces = parseInt(completeForm.return_pieces) || 0;
-    if (
-      selectedProcess.stage === "TPP" ||
-      selectedProcess.stage === "Packing"
-    ) {
-      const catWeight = parseFloat(selectedProcess.category) || 0;
-      if (catWeight > 0) {
-        const maxPieces = Math.floor(issW / catWeight);
-        if (pieces > maxPieces) {
-          triggerError();
-          return showToast(
-            `Max possible pieces for this category is ${maxPieces}`,
-            "error",
-          );
-        }
-      }
     }
 
     try {
@@ -249,7 +235,7 @@ const JobHistory = () => {
     }
   };
 
-  const openNextStepModal = (process) => {
+  const openNextStepModal = (process, remainingWeight) => {
     let nextStage = "Rolling";
     if (process.stage === "Rolling") nextStage = "Press";
     if (process.stage === "Press") nextStage = "TPP";
@@ -260,7 +246,11 @@ const JobHistory = () => {
       job_number: process.job_number,
       metal_type: process.metal_type,
       category: process.category,
-      issue_size: "",
+      issue_size:
+        process.metal_type === "Silver"
+          ? (remainingWeight / 1000).toString()
+          : remainingWeight.toString(),
+      issue_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
     });
     setIsNextStep(true);
@@ -280,6 +270,7 @@ const JobHistory = () => {
       await createProcess(createForm.stage, {
         ...createForm,
         issue_size: size,
+        issue_pieces: parseInt(createForm.issue_pieces) || 0,
       });
       showToast("Process Created!", "success");
       setIsCreateModalOpen(false);
@@ -294,9 +285,7 @@ const JobHistory = () => {
     fetchHistory();
   }, [fetchHistory]);
 
-  const reqPieces =
-    selectedProcess &&
-    (selectedProcess.stage === "TPP" || selectedProcess.stage === "Packing");
+  const reqPieces = selectedProcess && selectedProcess.stage === "Packing";
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0
     : 0;
@@ -310,25 +299,52 @@ const JobHistory = () => {
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(3));
   const isLossNegative = liveLoss < 0;
 
-  const hasRemainingStock = (currentStage, currentJobNumber) => {
+  const getRemainingStockForRow = (row, historyItems, allItems) => {
     let nextStage = null;
-    if (currentStage === "Rolling") nextStage = "Press";
-    if (currentStage === "Press") nextStage = "TPP";
-    if (currentStage === "TPP") nextStage = "Packing";
-    if (!nextStage) return false;
+    if (row.stage === "Rolling") nextStage = "Press";
+    if (row.stage === "Press") nextStage = "TPP";
+    if (row.stage === "TPP") nextStage = "Packing";
+    if (!nextStage) return 0;
 
-    const totalReturned = history
-      .filter((p) => p.stage === currentStage && p.status === "COMPLETED")
-      .reduce((sum, p) => sum + (parseFloat(p.return_weight) || 0), 0);
+    let stageReturns = historyItems
+      .filter((p) => p.stage === row.stage && p.status === "COMPLETED")
+      .map((p) => ({ ...p, remaining: parseFloat(p.return_weight) || 0 }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    const totalConsumed = allProcesses
-      .filter((p) => p.stage === nextStage && p.job_number === currentJobNumber)
-      .reduce(
-        (sum, p) => sum + parseFloat(p.issued_weight || p.issue_size || 0),
-        0,
+    let consumedItems = allItems
+      .filter((p) => p.stage === nextStage && p.job_number === row.job_number)
+      .map((p) => parseFloat(p.issued_weight || p.issue_size || 0));
+
+    for (let i = 0; i < consumedItems.length; i++) {
+      let c = consumedItems[i];
+      if (c <= 0) continue;
+
+      let exactMatchIndex = stageReturns.findIndex(
+        (r) => Math.abs(r.remaining - c) < 0.001,
       );
+      if (exactMatchIndex !== -1) {
+        stageReturns[exactMatchIndex].remaining = 0;
+        consumedItems[i] = 0;
+      }
+    }
 
-    return Math.round(totalReturned * 1000) > Math.round(totalConsumed * 1000);
+    let totalConsumed = consumedItems.reduce((sum, c) => sum + c, 0);
+
+    for (let r of stageReturns) {
+      if (totalConsumed <= 0) break;
+      if (r.remaining <= 0) continue;
+
+      if (totalConsumed >= r.remaining) {
+        totalConsumed -= r.remaining;
+        r.remaining = 0;
+      } else {
+        r.remaining -= totalConsumed;
+        totalConsumed = 0;
+      }
+    }
+
+    const targetRow = stageReturns.find((r) => r.id === row.id);
+    return targetRow ? parseFloat(targetRow.remaining.toFixed(3)) : 0;
   };
 
   if (loading)
@@ -494,9 +510,19 @@ const JobHistory = () => {
                       {h.status === "COMPLETED" && (
                         <>
                           {h.stage !== "Packing" &&
-                            hasRemainingStock(h.stage, h.job_number) && (
+                            getRemainingStockForRow(h, history, allProcesses) >
+                              0.001 && (
                               <button
-                                onClick={() => openNextStepModal(h)}
+                                onClick={() =>
+                                  openNextStepModal(
+                                    h,
+                                    getRemainingStockForRow(
+                                      h,
+                                      history,
+                                      allProcesses,
+                                    ),
+                                  )
+                                }
                                 className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 w-28"
                               >
                                 <ArrowRightCircle size={14} /> Start Next
@@ -726,6 +752,22 @@ const JobHistory = () => {
               </select>
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Issue Pieces (Optional)
+            </label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-bold text-lg outline-none focus:border-blue-500"
+              value={createForm.issue_pieces}
+              onChange={(e) =>
+                setCreateForm({ ...createForm, issue_pieces: e.target.value })
+              }
+              placeholder="0 (Optional)"
+            />
+          </div>
           <button
             type="submit"
             className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 flex justify-center gap-2"
@@ -771,6 +813,22 @@ const JobHistory = () => {
                 <option value="kg">kg</option>
               </select>
             </div>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+            <label className="block text-sm font-bold text-yellow-800 mb-2">
+              Actual Piece Count
+            </label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              className="w-full bg-white border border-yellow-300 py-3 px-4 rounded-lg font-bold text-lg text-yellow-900 outline-none focus:border-orange-500"
+              value={startForm.issue_pieces}
+              onChange={(e) =>
+                setStartForm({ ...startForm, issue_pieces: e.target.value })
+              }
+              placeholder="0 (Optional)"
+            />
           </div>
           <button
             type="submit"
@@ -862,27 +920,25 @@ const JobHistory = () => {
               />
             </div>
           </div>
-          {reqPieces && (
-            <div>
-              <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
-                Final Pieces
-              </label>
-              <input
-                type="number"
-                step="1"
-                required
-                className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
-                value={completeForm.return_pieces}
-                onChange={(e) =>
-                  setCompleteForm({
-                    ...completeForm,
-                    return_pieces: e.target.value,
-                  })
-                }
-                placeholder="0"
-              />
-            </div>
-          )}
+          <div className="mt-4">
+            <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
+              Final Pieces {reqPieces ? "" : "(Optional)"}
+            </label>
+            <input
+              type="number"
+              step="1"
+              required={reqPieces}
+              className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
+              value={completeForm.return_pieces}
+              onChange={(e) =>
+                setCompleteForm({
+                  ...completeForm,
+                  return_pieces: e.target.value,
+                })
+              }
+              placeholder={reqPieces ? "0" : "0 (Optional)"}
+            />
+          </div>
           <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4">
             <div className="flex justify-between text-sm mb-1">
               <span>Issued ({completeForm?.weight_unit || "g"}):</span>

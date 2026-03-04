@@ -12,9 +12,11 @@ const createTpp = async (req, res) => {
       unit,
       employee,
       issue_size,
+      issue_pieces,
       category,
     } = req.body;
     const weight = parseFloat(issue_size);
+    const pieces = parseInt(issue_pieces) || 0;
 
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(
@@ -45,6 +47,7 @@ const createTpp = async (req, res) => {
       unit,
       employee,
       weight,
+      pieces,
       category,
     );
 
@@ -67,8 +70,9 @@ const createTpp = async (req, res) => {
 
 const startTpp = async (req, res) => {
   try {
-    const { process_id, issued_weight } = req.body;
+    const { process_id, issued_weight, issue_pieces } = req.body;
     const weight = parseFloat(issued_weight);
+    const pieces = parseInt(issue_pieces) || 0;
     if (!process_id || isNaN(weight) || weight <= 0)
       return formatResponse(res, 400, false, "Invalid issued weight.");
 
@@ -121,7 +125,7 @@ const startTpp = async (req, res) => {
       );
     }
 
-    await tppService.startTppProcess(process_id, weight);
+    await tppService.startTppProcess(process_id, weight, pieces);
     return formatResponse(res, 200, true, "TPP process started");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
@@ -130,8 +134,9 @@ const startTpp = async (req, res) => {
 
 const completeTpp = async (req, res) => {
   try {
-    const { process_id, return_weight, scrap_weight } = req.body;
+    const { process_id, return_weight, return_pieces, scrap_weight } = req.body;
     const retW = parseFloat(return_weight) || 0;
+    const retP = parseInt(return_pieces) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
 
     if (!process_id || retW < 0 || scrW < 0)
@@ -153,7 +158,13 @@ const completeTpp = async (req, res) => {
         `Return + Scrap cannot exceed Issued Weight (${issW}).`,
       );
 
-    await tppService.completeTppProcess(process_id, retW, scrW, lossWeight);
+    await tppService.completeTppProcess(
+      process_id,
+      retW,
+      retP,
+      scrW,
+      lossWeight,
+    );
     await stockService.updateProcessStock(
       "tpp",
       process.metal_type,

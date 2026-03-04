@@ -7,13 +7,23 @@ const createPackingProcess = (
   unit,
   employee,
   issue_size,
+  issue_pieces,
   category,
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO packing_processes (job_number, job_name, metal_type, unit, employee, issue_size, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
+    const query = `INSERT INTO packing_processes (job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
     db.run(
       query,
-      [job_number, job_name, metal_type, unit, employee, issue_size, category],
+      [
+        job_number,
+        job_name,
+        metal_type,
+        unit,
+        employee,
+        issue_size,
+        issue_pieces,
+        category,
+      ],
       function (err) {
         if (err) reject(err);
         resolve(this.lastID);
@@ -22,10 +32,10 @@ const createPackingProcess = (
   });
 };
 
-const startPackingProcess = (processId, issued_weight) => {
+const startPackingProcess = (processId, issued_weight, issue_pieces) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE packing_processes SET status = 'RUNNING', issued_weight = ?, start_time = CURRENT_TIMESTAMP WHERE id = ?`;
-    db.run(query, [issued_weight, processId], function (err) {
+    const query = `UPDATE packing_processes SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, start_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(query, [issued_weight, issue_pieces, processId], function (err) {
       if (err) reject(err);
       resolve();
     });
@@ -35,14 +45,15 @@ const startPackingProcess = (processId, issued_weight) => {
 const completePackingProcess = (
   processId,
   return_weight,
+  return_pieces,
   scrap_weight,
   loss_weight,
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE packing_processes SET status = 'COMPLETED', return_weight = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    const query = `UPDATE packing_processes SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP WHERE id = ?`;
     db.run(
       query,
-      [return_weight, scrap_weight, loss_weight, processId],
+      [return_weight, return_pieces, scrap_weight, loss_weight, processId],
       function (err) {
         if (err) reject(err);
         resolve();

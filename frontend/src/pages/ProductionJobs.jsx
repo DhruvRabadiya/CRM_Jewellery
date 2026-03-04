@@ -83,11 +83,13 @@ const ProductionJobs = () => {
     metal_type: "Gold",
     category: sizeOptions["Gold"][0],
     issue_size: "",
+    issue_pieces: "",
     weight_unit: "g",
   });
 
   const [startForm, setStartForm] = useState({
     issued_weight: "",
+    issue_pieces: "",
     weight_unit: "g",
   });
   const [completeForm, setCompleteForm] = useState({
@@ -137,6 +139,7 @@ const ProductionJobs = () => {
           metal_type: "Gold",
           category: sizeOptions["Gold"][0],
           issue_size: "",
+          issue_pieces: "",
           job_name: "",
           weight_unit: "g",
         }));
@@ -166,6 +169,7 @@ const ProductionJobs = () => {
         process.metal_type === "Silver"
           ? (process.return_weight / 1000).toString()
           : process.return_weight.toString(),
+      issue_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
     });
     setIsNextStep(true);
@@ -193,6 +197,7 @@ const ProductionJobs = () => {
         unit: "g",
         employee: "Worker",
         issue_size: weight,
+        issue_pieces: createForm.issue_pieces || 0,
         category: createForm.category,
       });
       showToast(`${createForm.stage} Process Created!`, "success");
@@ -211,6 +216,7 @@ const ProductionJobs = () => {
         process.metal_type === "Silver"
           ? process.issue_size / 1000
           : process.issue_size || "",
+      issue_pieces: process.issue_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
     });
     setIsStartModalOpen(true);
@@ -230,6 +236,7 @@ const ProductionJobs = () => {
         selectedProcess.stage,
         selectedProcess.id,
         startForm.issued_weight,
+        startForm.issue_pieces,
       );
       showToast("Started!", "success");
       setIsStartModalOpen(false);
@@ -325,24 +332,6 @@ const ProductionJobs = () => {
       return showToast("Return + Scrap exceeds Issued", "error");
     }
 
-    let pieces = parseInt(completeForm.return_pieces) || 0;
-    if (
-      selectedProcess.stage === "TPP" ||
-      selectedProcess.stage === "Packing"
-    ) {
-      const catWeight = parseFloat(selectedProcess.category) || 0;
-      if (catWeight > 0) {
-        const maxPieces = Math.floor(issW / catWeight);
-        if (pieces > maxPieces) {
-          triggerError();
-          return showToast(
-            `Max possible pieces for this category is ${maxPieces}`,
-            "error",
-          );
-        }
-      }
-    }
-
     try {
       await completeProcess(selectedProcess.stage, {
         process_id: selectedProcess.id,
@@ -393,9 +382,7 @@ const ProductionJobs = () => {
       (p.job_name || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  const reqPieces =
-    selectedProcess &&
-    (selectedProcess.stage === "TPP" || selectedProcess.stage === "Packing");
+  const reqPieces = selectedProcess && selectedProcess.stage === "Packing";
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0
     : 0;
@@ -528,17 +515,17 @@ const ProductionJobs = () => {
                       <span className="text-gray-400">Iss:</span>{" "}
                       {p.issued_weight
                         ? p.issued_weight.toFixed(2)
-                        : p.issue_size.toFixed(2)}
+                        : (p.issue_size || 0).toFixed(2)}
                     </div>
                     {p.status === "COMPLETED" && (
                       <>
                         <div className="text-green-600">
                           <span className="text-gray-400">Ret:</span>{" "}
-                          {p.return_weight.toFixed(2)}
+                          {(p.return_weight || 0).toFixed(2)}
                         </div>
                         <div className="text-red-500">
                           <span className="text-gray-400">Los:</span>{" "}
-                          {p.loss_weight.toFixed(2)}
+                          {(p.loss_weight || 0).toFixed(2)}
                         </div>
                       </>
                     )}
@@ -826,6 +813,22 @@ const ProductionJobs = () => {
               </select>
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Issue Pieces (Optional)
+            </label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-bold text-lg outline-none focus:border-blue-500"
+              value={createForm.issue_pieces}
+              onChange={(e) =>
+                setCreateForm({ ...createForm, issue_pieces: e.target.value })
+              }
+              placeholder="0 (Optional)"
+            />
+          </div>
           <button
             type="submit"
             className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 flex justify-center gap-2"
@@ -872,6 +875,22 @@ const ProductionJobs = () => {
                 <option value="kg">kg</option>
               </select>
             </div>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+            <label className="block text-sm font-bold text-yellow-800 mb-2">
+              Actual Piece Count
+            </label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              className="w-full bg-white border border-yellow-300 py-3 px-4 rounded-lg font-bold text-lg text-yellow-900 outline-none focus:border-orange-500"
+              value={startForm.issue_pieces}
+              onChange={(e) =>
+                setStartForm({ ...startForm, issue_pieces: e.target.value })
+              }
+              placeholder="0 (Optional)"
+            />
           </div>
           <button
             type="submit"
@@ -964,27 +983,25 @@ const ProductionJobs = () => {
               />
             </div>
           </div>
-          {reqPieces && (
-            <div>
-              <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
-                Final Pieces
-              </label>
-              <input
-                type="number"
-                step="1"
-                required
-                className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
-                value={completeForm.return_pieces}
-                onChange={(e) =>
-                  setCompleteForm({
-                    ...completeForm,
-                    return_pieces: e.target.value,
-                  })
-                }
-                placeholder="0"
-              />
-            </div>
-          )}
+          <div className="mt-4">
+            <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
+              Final Pieces {reqPieces ? "" : "(Optional)"}
+            </label>
+            <input
+              type="number"
+              step="1"
+              required={reqPieces}
+              className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
+              value={completeForm.return_pieces}
+              onChange={(e) =>
+                setCompleteForm({
+                  ...completeForm,
+                  return_pieces: e.target.value,
+                })
+              }
+              placeholder={reqPieces ? "0" : "0 (Optional)"}
+            />
+          </div>
           <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4">
             <div className="flex justify-between text-sm mb-1">
               <span>Issued ({completeForm?.weight_unit || "g"}):</span>

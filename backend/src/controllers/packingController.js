@@ -12,9 +12,11 @@ const createPacking = async (req, res) => {
       unit,
       employee,
       issue_size,
+      issue_pieces,
       category,
     } = req.body;
     const weight = parseFloat(issue_size);
+    const pieces = parseInt(issue_pieces) || 0;
 
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(
@@ -45,6 +47,7 @@ const createPacking = async (req, res) => {
       unit,
       employee,
       weight,
+      pieces,
       category,
     );
 
@@ -67,8 +70,9 @@ const createPacking = async (req, res) => {
 
 const startPacking = async (req, res) => {
   try {
-    const { process_id, issued_weight } = req.body;
+    const { process_id, issued_weight, issue_pieces } = req.body;
     const weight = parseFloat(issued_weight);
+    const pieces = parseInt(issue_pieces) || 0;
     if (!process_id || isNaN(weight) || weight <= 0)
       return formatResponse(res, 400, false, "Invalid issued weight.");
 
@@ -121,7 +125,7 @@ const startPacking = async (req, res) => {
       );
     }
 
-    await packingService.startPackingProcess(process_id, weight);
+    await packingService.startPackingProcess(process_id, weight, pieces);
     return formatResponse(res, 200, true, "Packing process started");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
@@ -132,8 +136,9 @@ const completePacking = async (req, res) => {
   try {
     const { process_id, return_weight, scrap_weight, return_pieces } = req.body;
     const retW = parseFloat(return_weight) || 0;
+    const retP = parseInt(return_pieces) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
-    const pieces = parseInt(return_pieces) || 0;
+    const pieces = retP; // Packing currently expects just `pieces` for Finished Goods creation.
 
     if (!process_id || retW < 0 || scrW < 0)
       return formatResponse(res, 400, false, "Invalid weights.");
@@ -158,6 +163,7 @@ const completePacking = async (req, res) => {
     await packingService.completePackingProcess(
       process_id,
       retW,
+      retP,
       scrW,
       lossWeight,
     );
