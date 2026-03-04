@@ -25,6 +25,36 @@ import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 import { formatWeight } from "../utils/formatHelpers";
 
+const sizeOptions = {
+  Gold: [
+    "0.05",
+    "0.1 gm",
+    "0.200",
+    "0.5 gm",
+    "1 gm",
+    "2 gm",
+    "5 gm",
+    "10 gm",
+    "20 gm",
+    "25 gm",
+    "50 gm",
+  ],
+  Silver: [
+    "1g -Bar",
+    "2g -Bar",
+    "5g C|B",
+    "10g -C|B",
+    "10g COLOUR",
+    "20g COLOUR",
+    "50g COLOUR",
+    "20g -C|B",
+    "25g-C|B",
+    "50g -C|B",
+    "100g -C|B",
+    "200g -Bar",
+  ],
+};
+
 const JobHistory = () => {
   const { jobNumber } = useParams();
   const navigate = useNavigate();
@@ -218,6 +248,7 @@ const JobHistory = () => {
       issue_pieces: process.issue_pieces || "",
       return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
+      category: process.category || "",
     });
     setIsEditModalOpen(true);
   };
@@ -235,9 +266,13 @@ const JobHistory = () => {
     let payload = {
       issued_weight: issueW,
       issue_pieces: editForm.issue_pieces,
+      category: editForm.category,
     };
 
-    if (selectedProcess?.status === "COMPLETED") {
+    if (
+      selectedProcess?.status === "COMPLETED" ||
+      selectedProcess?.status === "RUNNING"
+    ) {
       let retW = parseFloat(editForm.return_weight) || 0;
       let scrW = parseFloat(editForm.scrap_weight) || 0;
       if (isKg) {
@@ -502,7 +537,7 @@ const JobHistory = () => {
                           onClick={() => openStartModal(h)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded font-bold hover:bg-orange-600 transition-colors justify-center shadow-sm whitespace-nowrap"
                         >
-                          <PlayCircle size={16} /> Start
+                          <PlayCircle size={16} /> Start Process
                         </button>
                       )}
 
@@ -511,7 +546,7 @@ const JobHistory = () => {
                           onClick={() => openCompleteModal(h)}
                           className="bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                         >
-                          <Hammer size={14} /> Complete
+                          <Hammer size={14} /> Complete Process
                         </button>
                       )}
 
@@ -533,7 +568,7 @@ const JobHistory = () => {
                                 }
                                 className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                               >
-                                <ArrowRightCircle size={14} /> Start Next
+                                <ArrowRightCircle size={14} /> Start Next Step
                               </button>
                             )}
                           <div className="w-8 flex justify-center items-center text-green-500">
@@ -863,7 +898,7 @@ const JobHistory = () => {
             type="submit"
             className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 flex justify-center gap-2"
           >
-            <PlayCircle size={20} /> Start Engine
+            <PlayCircle size={20} /> Start Process
           </button>
         </form>
       </Modal>
@@ -1007,7 +1042,7 @@ const JobHistory = () => {
             disabled={isLossNegative}
             className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
           >
-            Complete & Log
+            Complete Process
           </button>
         </form>
       </Modal>
@@ -1021,25 +1056,62 @@ const JobHistory = () => {
           onSubmit={handleEditProcess}
           className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 mb-4">
-            <p className="text-sm text-yellow-800 font-bold mb-1">
-              Retroactive Edit Notice
-            </p>
-            <p className="text-xs text-yellow-700">
-              Modifying weights natively re-balances target pooled stock or base
-              inventory perfectly.
-            </p>
+          <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mb-4 flex gap-3 items-start">
+            <div className="text-yellow-600 mt-0.5">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-yellow-800 font-bold mb-0.5">
+                Retroactive Edit Notice
+              </p>
+              <p className="text-[11px] text-yellow-700 leading-tight">
+                Modifying weights perfectly re-balances pooled stock and base
+                inventory.
+              </p>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                Category
+              </label>
+              <select
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-md font-semibold text-sm outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                value={editForm.category}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    category: e.target.value,
+                  })
+                }
+              >
+                {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
                 New Issue Weight
               </label>
-              <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+              <div className="flex bg-gray-50 border border-gray-200 rounded-md focus-within:border-blue-500 focus-within:bg-white transition-colors overflow-hidden">
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
+                  className="w-full bg-transparent text-gray-700 py-2.5 px-3 text-sm outline-none font-bold"
                   value={editForm.issued_weight}
                   onChange={(e) =>
                     setEditForm({ ...editForm, issued_weight: e.target.value })
@@ -1047,7 +1119,7 @@ const JobHistory = () => {
                   required
                 />
                 <select
-                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                  className="bg-gray-100 border-l border-gray-200 px-2 text-xs font-bold text-gray-600 outline-none"
                   value={editForm.weight_unit}
                   onChange={(e) =>
                     setEditForm({ ...editForm, weight_unit: e.target.value })
@@ -1060,12 +1132,13 @@ const JobHistory = () => {
             </div>
 
             <div className="col-span-2">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Issue Pieces (Optional)
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                Issue Pieces{" "}
+                <span className="text-gray-400 font-normal">(Optional)</span>
               </label>
               <input
                 type="number"
-                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
+                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-blue-500 focus:bg-white transition-colors"
                 value={editForm.issue_pieces}
                 onChange={(e) =>
                   setEditForm({ ...editForm, issue_pieces: e.target.value })
@@ -1074,21 +1147,22 @@ const JobHistory = () => {
               />
             </div>
 
-            {selectedProcess?.status === "COMPLETED" && (
+            {(selectedProcess?.status === "COMPLETED" ||
+              selectedProcess?.status === "RUNNING") && (
               <>
-                <div className="col-span-2 pt-2 border-t border-gray-200 mt-2">
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">
+                <div className="col-span-2 pt-3 border-t border-gray-200 mt-1">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3">
                     Output Adjustments
                   </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-green-700 mb-2">
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-green-700 mb-1.5">
                     Return Weight
                   </label>
                   <input
                     type="number"
                     step="0.001"
-                    className="w-full bg-green-50 border border-green-200 text-green-800 py-3 px-4 rounded-lg outline-none font-bold"
+                    className="w-full bg-green-50/50 border border-green-200 text-green-800 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-green-400 focus:bg-green-50 transition-colors"
                     value={editForm.return_weight}
                     onChange={(e) =>
                       setEditForm({
@@ -1136,7 +1210,7 @@ const JobHistory = () => {
           </div>
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md active:scale-95 transition-all mt-4"
+            className="w-full bg-blue-600 text-white font-bold py-3 text-sm rounded-lg hover:bg-blue-700 shadow border-b-[3px] border-blue-800 active:border-b-0 active:translate-y-0.75 transition-all mt-4 mb-2 flex items-center justify-center gap-2"
           >
             Update Process Database
           </button>

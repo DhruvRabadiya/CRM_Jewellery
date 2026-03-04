@@ -107,23 +107,24 @@ const getPurchases = () => {
 
 const getDetailedScrapAndLoss = () => {
   return new Promise((resolve, reject) => {
-    // We want to return a unified view grouped by job_number if possible, or distinct rows.
-    // However, since Scrap is logged in stock_transactions and Loss is in the process tables,
-    // we can use a UNION approach with a specific format.
+    // Instead of immutable transaction logs, query the source of truth directly so edits sync retroactively.
     const query = `
       -- Scrap Returns
-      SELECT 
-        date, 
-        metal_type, 
-        'SCRAP' as category,
-        description as source, -- This contains "Scrap from [Stage] [Job]"
-        weight
-      FROM stock_transactions 
-      WHERE transaction_type = 'SCRAP_RETURN'
+      SELECT completed_at as date, metal_type, 'SCRAP' as category, 'Scrap from Melting #' || id as source, scrap_weight as weight FROM melting_process WHERE status = 'COMPLETED' AND scrap_weight > 0
+      UNION ALL
+      SELECT end_time as date, metal_type, 'SCRAP' as category, 'Scrap from Rolling ' || job_number as source, scrap_weight as weight FROM rolling_processes WHERE status = 'COMPLETED' AND scrap_weight > 0
+      UNION ALL
+      SELECT end_time as date, metal_type, 'SCRAP' as category, 'Scrap from Press ' || job_number as source, scrap_weight as weight FROM press_processes WHERE status = 'COMPLETED' AND scrap_weight > 0
+      UNION ALL
+      SELECT end_time as date, metal_type, 'SCRAP' as category, 'Scrap from TPP ' || job_number as source, scrap_weight as weight FROM tpp_processes WHERE status = 'COMPLETED' AND scrap_weight > 0
+      UNION ALL
+      SELECT end_time as date, metal_type, 'SCRAP' as category, 'Scrap from Packing ' || job_number as source, scrap_weight as weight FROM packing_processes WHERE status = 'COMPLETED' AND scrap_weight > 0
       
       UNION ALL
       
       -- Losses
+      SELECT completed_at as date, metal_type, 'LOSS' as category, 'Loss from Melting #' || id as source, loss_weight as weight FROM melting_process WHERE status = 'COMPLETED' AND loss_weight > 0
+      UNION ALL
       SELECT end_time as date, metal_type, 'LOSS' as category, 'Loss from Rolling ' || job_number as source, loss_weight as weight FROM rolling_processes WHERE status = 'COMPLETED' AND loss_weight > 0
       UNION ALL
       SELECT end_time as date, metal_type, 'LOSS' as category, 'Loss from Press ' || job_number as source, loss_weight as weight FROM press_processes WHERE status = 'COMPLETED' AND loss_weight > 0

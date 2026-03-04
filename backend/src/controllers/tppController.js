@@ -165,25 +165,49 @@ const completeTpp = async (req, res) => {
       scrW,
       lossWeight,
     );
-    await stockService.updateProcessStock(
-      "tpp",
-      process.metal_type,
-      retW,
-      true,
-    );
-
-    if (scrW > 0) {
-      await stockService.updateOpeningStock(process.metal_type, scrW, true);
-      await stockService.logTransaction(
+    // Math diff to prevent double counting if weights were previously updated in RUNNING edit
+    const retWeightDiff = retW - (process.return_weight || 0);
+    if (retWeightDiff > 0) {
+      await stockService.updateProcessStock(
+        "tpp",
         process.metal_type,
-        TRANSACTION_TYPES.SCRAP_RETURN,
-        scrW,
-        `Scrap from TPP ${process.job_number}`,
+        retWeightDiff,
+        true,
+      );
+    } else if (retWeightDiff < 0) {
+      await stockService.updateProcessStock(
+        "tpp",
+        process.metal_type,
+        Math.abs(retWeightDiff),
+        false,
       );
     }
 
-    if (lossWeight > 0)
-      await stockService.addTotalLoss(process.metal_type, lossWeight);
+    const scrWeightDiff = scrW - (process.scrap_weight || 0);
+    if (scrWeightDiff > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        scrWeightDiff,
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "SCRAP_RETURN",
+        scrWeightDiff,
+        `Scrap from TPP ${process.job_number}`,
+      );
+    } else if (scrWeightDiff < 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        Math.abs(scrWeightDiff),
+        false,
+      );
+    }
+
+    const lossWeightDiff = lossWeight - (process.loss_weight || 0);
+    if (lossWeightDiff !== 0) {
+      await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
+    }
 
     return formatResponse(res, 200, true, "TPP completed", {
       loss: lossWeight,
@@ -229,7 +253,7 @@ const editTpp = async (req, res) => {
     let newPieces = process.return_pieces;
     let newLossWeight = process.loss_weight;
 
-    if (process.status === "COMPLETED") {
+    if (process.status === "COMPLETED" || process.status === "RUNNING") {
       newRetWeight =
         return_weight !== undefined
           ? parseFloat(return_weight) || 0
@@ -292,8 +316,11 @@ const editTpp = async (req, res) => {
           ? parseInt(issue_pieces) || 0
           : process.issue_pieces,
     };
+    if (req.body.category !== undefined) {
+      updates.category = req.body.category;
+    }
 
-    if (process.status === "COMPLETED") {
+    if (process.status === "COMPLETED" || process.status === "RUNNING") {
       // Sync Return Weight -> tpp_stock
       const retWeightDiff = newRetWeight - process.return_weight;
       if (retWeightDiff > 0) {

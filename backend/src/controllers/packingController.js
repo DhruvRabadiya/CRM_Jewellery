@@ -168,21 +168,40 @@ const completePacking = async (req, res) => {
       lossWeight,
     );
 
-    // Packing is final. It creates Finished Goods.
+    // Remove old finished goods if it was retroactively added while RUNNING
+    const oldRetW = process.return_weight || 0;
+    if (oldRetW > 0) {
+      await packingService.removeFinishedGoods(
+        process.metal_type,
+        process.category,
+        oldRetW,
+      );
+    }
     await packingService.addFinishedGoods(
       process.metal_type,
       process.category,
-      pieces,
+      retP,
       retW,
     );
 
-    if (scrW > 0) {
-      await stockService.updateOpeningStock(process.metal_type, scrW, true);
+    const scrWeightDiff = scrW - (process.scrap_weight || 0);
+    if (scrWeightDiff > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        scrWeightDiff,
+        true,
+      );
       await stockService.logTransaction(
         process.metal_type,
-        TRANSACTION_TYPES.SCRAP_RETURN,
-        scrW,
+        "SCRAP_RETURN",
+        scrWeightDiff,
         `Scrap from Packing ${process.job_number}`,
+      );
+    } else if (scrWeightDiff < 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        Math.abs(scrWeightDiff),
+        false,
       );
     }
 
@@ -243,7 +262,7 @@ const editPacking = async (req, res) => {
     let newPieces = process.return_pieces;
     let newLossWeight = process.loss_weight;
 
-    if (process.status === "COMPLETED") {
+    if (process.status === "COMPLETED" || process.status === "RUNNING") {
       newRetWeight =
         return_weight !== undefined
           ? parseFloat(return_weight) || 0
@@ -306,26 +325,34 @@ const editPacking = async (req, res) => {
           ? parseInt(issue_pieces) || 0
           : process.issue_pieces,
     };
+    if (req.body.category !== undefined) {
+      updates.category = req.body.category;
+    }
 
-    if (process.status === "COMPLETED") {
-      // Re-create the Finished Goods Record if Return Weight or Return Pieces changed
+    if (process.status === "COMPLETED" || process.status === "RUNNING") {
+      // Re-create the Finished Goods Record if Return Weight or Return Pieces or Category changed
       if (
         newRetWeight !== process.return_weight ||
-        newPieces !== process.return_pieces
+        newPieces !== process.return_pieces ||
+        req.body.category !== undefined
       ) {
-        // Delete the heuristic old row
-        await packingService.removeFinishedGoods(
-          process.metal_type,
-          process.category,
-          process.return_weight,
-        );
-        // Add new finished goods
-        await packingService.addFinishedGoods(
-          process.metal_type,
-          process.category,
-          newPieces,
-          newRetWeight,
-        );
+        if ((process.return_weight || 0) > 0) {
+          // Delete the heuristic old row
+          await packingService.removeFinishedGoods(
+            process.metal_type,
+            process.category,
+            process.return_weight,
+          );
+        }
+        if (newRetWeight > 0) {
+          // Add new finished goods
+          await packingService.addFinishedGoods(
+            process.metal_type,
+            updates.category || process.category,
+            newPieces,
+            newRetWeight,
+          );
+        }
       }
 
       // Sync Scrap Weight -> opening_stock

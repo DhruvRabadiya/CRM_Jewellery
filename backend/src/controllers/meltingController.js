@@ -91,20 +91,46 @@ const completeMelting = async (req, res) => {
       scrW,
       lossWeight,
     );
-    await stockService.updateDhalStock(process.metal_type, retW, true);
-
-    if (scrW > 0) {
-      await stockService.updateOpeningStock(process.metal_type, scrW, true);
-      await stockService.logTransaction(
+    // Math diff to prevent double counting if weights were previously updated in RUNNING edit
+    const retWeightDiff = retW - (process.return_weight || 0);
+    if (retWeightDiff > 0) {
+      await stockService.updateDhalStock(
         process.metal_type,
-        TRANSACTION_TYPES.SCRAP_RETURN,
-        scrW,
-        `Scrap from Melt #${process_id}`,
+        retWeightDiff,
+        true,
+      );
+    } else if (retWeightDiff < 0) {
+      await stockService.updateDhalStock(
+        process.metal_type,
+        Math.abs(retWeightDiff),
+        false,
       );
     }
 
-    if (lossWeight > 0) {
-      await stockService.addTotalLoss(process.metal_type, lossWeight);
+    const scrWeightDiff = scrW - (process.scrap_weight || 0);
+    if (scrWeightDiff > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        scrWeightDiff,
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "SCRAP_RETURN",
+        scrWeightDiff,
+        `Scrap from Melt #${process_id}`,
+      );
+    } else if (scrWeightDiff < 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        Math.abs(scrWeightDiff),
+        false,
+      );
+    }
+
+    const lossWeightDiff = lossWeight - (process.loss_weight || 0);
+    if (lossWeightDiff !== 0) {
+      await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
     }
 
     await stockService.logTransaction(
@@ -159,7 +185,7 @@ const editMeltingProcess = async (req, res) => {
     let newPieces = process.return_pieces;
     let newLossWeight = process.loss_weight;
 
-    if (process.status === STATUS.COMPLETED) {
+    if (process.status === STATUS.COMPLETED || process.status === "RUNNING") {
       newRetWeight =
         return_weight !== undefined
           ? parseFloat(return_weight) || 0
@@ -213,7 +239,7 @@ const editMeltingProcess = async (req, res) => {
           : process.issue_pieces,
     };
 
-    if (process.status === STATUS.COMPLETED) {
+    if (process.status === STATUS.COMPLETED || process.status === "RUNNING") {
       // Handle Dhal Stock diffs (Return goes to Dhal in melting)
       const retWeightDiff = newRetWeight - process.return_weight;
       if (retWeightDiff > 0) {

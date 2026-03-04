@@ -291,7 +291,7 @@ const MeltingProcess = () => {
           className="flex items-center gap-2 bg-orange-600 text-white px-6 py-3 rounded-xl hover:bg-orange-700 shadow-lg active:scale-95 transition-all"
         >
           <Flame size={20} />{" "}
-          <span className="font-semibold">Start New Melt</span>
+          <span className="font-semibold">Start Process</span>
         </button>
       </div>
 
@@ -431,7 +431,7 @@ const MeltingProcess = () => {
             type="submit"
             className="w-full bg-orange-600 text-white font-bold py-3.5 rounded-xl hover:bg-orange-700 shadow-md active:scale-95 transition-all flex justify-center gap-2"
           >
-            <Flame size={20} /> Ignite Furnace
+            <Flame size={20} /> Start Process
           </button>
         </form>
       </Modal>
@@ -800,7 +800,7 @@ const MeltingProcess = () => {
             type="submit"
             className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md active:scale-95 transition-all mt-4"
           >
-            Update Melting Process
+            Update Process Database
           </button>
         </form>
       </Modal>
