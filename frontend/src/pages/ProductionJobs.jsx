@@ -249,30 +249,54 @@ const ProductionJobs = () => {
 
   const openEditModal = (process) => {
     setSelectedProcess(process);
+    const isSil = process.metal_type === "Silver";
+    const div = isSil ? 1000 : 1;
     setEditForm({
-      issued_weight:
-        process.metal_type === "Silver"
-          ? process.issued_weight / 1000
-          : process.issued_weight || "",
-      weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      issued_weight: process.issued_weight ? process.issued_weight / div : "",
+      return_weight:
+        process.return_weight !== null && process.return_weight !== undefined
+          ? process.return_weight / div
+          : "",
+      scrap_weight:
+        process.scrap_weight !== null && process.scrap_weight !== undefined
+          ? process.scrap_weight / div
+          : "",
+      issue_pieces: process.issue_pieces || "",
+      return_pieces: process.return_pieces || "",
+      weight_unit: isSil ? "kg" : "g",
     });
     setIsEditModalOpen(true);
   };
 
   const handleEditProcess = async (e) => {
     e.preventDefault();
-    let weight = parseFloat(editForm.issued_weight);
-    if (editForm.weight_unit === "kg") weight *= 1000;
-
-    if (!weight || weight <= 0) {
+    let issueW = parseFloat(editForm.issued_weight);
+    if (!issueW || issueW <= 0) {
       triggerError();
-      return showToast("Invalid weight", "error");
+      return showToast("Invalid issued weight", "error");
+    }
+    const isKg = editForm.weight_unit === "kg";
+    if (isKg) issueW *= 1000;
+
+    let payload = {
+      issued_weight: issueW,
+      issue_pieces: editForm.issue_pieces,
+    };
+
+    if (selectedProcess?.status === "COMPLETED") {
+      let retW = parseFloat(editForm.return_weight) || 0;
+      let scrW = parseFloat(editForm.scrap_weight) || 0;
+      if (isKg) {
+        retW *= 1000;
+        scrW *= 1000;
+      }
+      payload.return_weight = retW;
+      payload.scrap_weight = scrW;
+      payload.return_pieces = editForm.return_pieces;
     }
 
     try {
-      await editProcess(selectedProcess.stage, selectedProcess.id, {
-        issued_weight: weight,
-      });
+      await editProcess(selectedProcess.stage, selectedProcess.id, payload);
       showToast("Job Updated Successfully!", "success");
       setIsEditModalOpen(false);
       fetchProcesses();
@@ -382,7 +406,7 @@ const ProductionJobs = () => {
       (p.job_name || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  const reqPieces = selectedProcess && selectedProcess.stage === "Packing";
+  const reqPieces = false;
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0
     : 0;
@@ -460,22 +484,22 @@ const ProductionJobs = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 text-gray-500 text-sm uppercase tracking-wider">
-                <th className="p-4 font-bold border-b border-gray-100">
+                <th className="p-2 px-3 font-bold border-b border-gray-100">
                   Job No
                 </th>
-                <th className="p-4 font-bold border-b border-gray-100">
+                <th className="p-2 px-3 font-bold border-b border-gray-100">
                   Stage
                 </th>
-                <th className="p-4 font-bold border-b border-gray-100">
+                <th className="p-2 px-3 font-bold border-b border-gray-100">
                   Metal / Category
                 </th>
-                <th className="p-4 font-bold border-b border-gray-100">
+                <th className="p-2 px-3 font-bold border-b border-gray-100">
                   Status
                 </th>
-                <th className="p-4 font-bold border-b border-gray-100">
+                <th className="p-2 px-3 font-bold border-b border-gray-100">
                   Weights (Iss/Ret/Loss)
                 </th>
-                <th className="p-4 font-bold border-b border-gray-100 text-center">
+                <th className="p-2 px-3 font-bold border-b border-gray-100 text-center">
                   Action
                 </th>
               </tr>
@@ -486,14 +510,16 @@ const ProductionJobs = () => {
                   key={`${p.stage}-${p.id}`}
                   className="hover:bg-gray-50 border-b border-gray-50 transition-colors"
                 >
-                  <td className="p-4">
+                  <td className="p-2 px-3">
                     <div className="font-bold text-gray-800">
                       {p.job_number}
                     </div>
                     <div className="text-xs text-gray-500">{p.job_name}</div>
                   </td>
-                  <td className="p-4 font-bold text-blue-800">{p.stage}</td>
-                  <td className="p-4 flex flex-col items-start gap-1">
+                  <td className="p-2 px-3 font-bold text-blue-800">
+                    {p.stage}
+                  </td>
+                  <td className="p-2 px-3 flex flex-col items-start gap-1">
                     <span
                       className={`px-2 py-1 rounded-md text-xs font-bold ${p.metal_type === "Gold" ? "bg-yellow-100 text-yellow-800" : "bg-gray-200 text-gray-700"}`}
                     >
@@ -503,14 +529,14 @@ const ProductionJobs = () => {
                       {p.category}
                     </span>
                   </td>
-                  <td className="p-4">
+                  <td className="p-2 px-3">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-bold border ${p.status === "PENDING" ? "bg-orange-50 text-orange-700 border-orange-200" : p.status === "RUNNING" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"}`}
                     >
                       {p.status}
                     </span>
                   </td>
-                  <td className="p-4 text-sm font-mono text-gray-700">
+                  <td className="p-2 px-3 text-sm font-mono text-gray-700 whitespace-nowrap">
                     <div>
                       <span className="text-gray-400">Iss:</span>{" "}
                       {p.issued_weight
@@ -530,7 +556,7 @@ const ProductionJobs = () => {
                       </>
                     )}
                   </td>
-                  <td className="p-4">
+                  <td className="p-2 px-3">
                     <div className="flex flex-col items-center gap-2">
                       {p.status === "COMPLETED" && (
                         <CheckCircle size={20} className="text-green-500" />
@@ -539,48 +565,42 @@ const ProductionJobs = () => {
                         {p.status === "PENDING" && (
                           <button
                             onClick={() => openStartModal(p)}
-                            className="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center justify-center gap-1 w-28"
+                            className="bg-orange-500 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <PlayCircle size={14} /> Start
                           </button>
                         )}
                         {p.status === "RUNNING" && (
-                          <>
-                            <button
-                              onClick={() => openCompleteModal(p)}
-                              className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center justify-center gap-1 w-28"
-                            >
-                              <ArrowRightCircle size={14} /> Complete
-                            </button>
-                            <button
-                              onClick={() => openEditModal(p)}
-                              className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 w-28"
-                            >
-                              <Edit size={14} /> Edit Weight
-                            </button>
-                          </>
+                          <button
+                            onClick={() => openCompleteModal(p)}
+                            className="bg-blue-600 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                          >
+                            <ArrowRightCircle size={14} /> Complete
+                          </button>
                         )}
-                        {p.status === "COMPLETED" && (
-                          <>
-                            {p.stage !== "Packing" && (
-                              <button
-                                onClick={() => openNextStepModal(p)}
-                                className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 w-28"
-                              >
-                                <ArrowRightCircle size={14} /> Start Next
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDeleteProcess(p)}
-                              className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 w-28"
-                            >
-                              <Trash2 size={14} /> Delete
-                            </button>
-                          </>
+                        {p.status === "COMPLETED" && p.stage !== "Packing" && (
+                          <button
+                            onClick={() => openNextStepModal(p)}
+                            className="bg-blue-100 text-blue-700 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                          >
+                            <ArrowRightCircle size={14} /> Start Next
+                          </button>
                         )}
                         <button
+                          onClick={() => openEditModal(p)}
+                          className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                        >
+                          <Edit size={14} /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProcess(p)}
+                          className="bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                        <button
                           onClick={() => openViewModal(p.job_number)}
-                          className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors w-28"
+                          className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
                         >
                           <Eye size={14} /> View
                         </button>
@@ -1050,50 +1070,131 @@ const ProductionJobs = () => {
       <Modal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title={`Edit Weight: ${selectedProcess?.job_number}`}
+        title={`Edit Job: ${selectedProcess?.job_number} (${selectedProcess?.stage})`}
       >
         <form
           onSubmit={handleEditProcess}
           className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-            <label className="block text-sm font-bold text-yellow-800 mb-2">
-              New Issued Weight
-            </label>
-            <div className="flex bg-white border border-yellow-300 rounded-lg overflow-hidden">
+          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 mb-4">
+            <p className="text-sm text-yellow-800 font-bold mb-1">
+              Retroactive Edit Notice
+            </p>
+            <p className="text-xs text-yellow-700">
+              Modifying weights natively re-balances target pooled stock or base
+              inventory perfectly.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                New Issue Weight
+              </label>
+              <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+                <input
+                  type="number"
+                  step="0.001"
+                  className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
+                  value={editForm.issued_weight}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, issued_weight: e.target.value })
+                  }
+                  required
+                />
+                <select
+                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                  value={editForm.weight_unit}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, weight_unit: e.target.value })
+                  }
+                >
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Issue Pieces (Optional)
+              </label>
               <input
                 type="number"
-                step="0.001"
-                required
-                className="w-full bg-transparent py-3 px-4 font-bold text-lg text-yellow-900 outline-none"
-                value={editForm.issued_weight}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
+                value={editForm.issue_pieces}
                 onChange={(e) =>
-                  setEditForm({ ...editForm, issued_weight: e.target.value })
+                  setEditForm({ ...editForm, issue_pieces: e.target.value })
                 }
-                placeholder="0.000"
+                placeholder="0"
               />
-              <select
-                className="bg-yellow-100 border-l border-yellow-300 px-3 font-bold text-yellow-900 outline-none"
-                value={editForm.weight_unit}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, weight_unit: e.target.value })
-                }
-              >
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-              </select>
             </div>
-            <p className="text-xs text-yellow-700 mt-2 font-semibold">
-              Note: Decreasing this will refund physical metric variants back to
-              base inventory. Increasing this will deduct additional weight from
-              pooling logic.
-            </p>
+
+            {selectedProcess?.status === "COMPLETED" && (
+              <>
+                <div className="col-span-2 pt-2 border-t border-gray-200 mt-2">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">
+                    Output Adjustments
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-green-700 mb-2">
+                    Return Weight
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    className="w-full bg-green-50 border border-green-200 text-green-800 py-3 px-4 rounded-lg outline-none font-bold"
+                    value={editForm.return_weight}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        return_weight: e.target.value,
+                      })
+                    }
+                    placeholder="0.000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Scrap/Dust Weight
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
+                    value={editForm.scrap_weight}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, scrap_weight: e.target.value })
+                    }
+                    placeholder="0.000"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Return Pieces (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
+                    value={editForm.return_pieces}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        return_pieces: e.target.value,
+                      })
+                    }
+                    placeholder="0"
+                  />
+                </div>
+              </>
+            )}
           </div>
           <button
             type="submit"
-            className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 flex justify-center gap-2"
+            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md active:scale-95 transition-all mt-4"
           >
-            <Edit size={20} /> Update Weight Database
+            <Edit size={20} className="inline-block mr-2" /> Update Process
+            Database
           </button>
         </form>
       </Modal>

@@ -102,6 +102,24 @@ const deletePressProcessById = (id) => {
   });
 };
 
+const editPressProcessUniversal = (processId, updates) => {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+    values.push(processId);
+
+    const query = `UPDATE press_processes SET ${fields.join(", ")} WHERE id = ?`;
+    db.run(query, values, function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createPressProcess,
   startPressProcess,
@@ -110,4 +128,5 @@ module.exports = {
   getAllPressProcesses,
   updatePressIssuedWeight,
   deletePressProcessById,
+  editPressProcessUniversal,
 };

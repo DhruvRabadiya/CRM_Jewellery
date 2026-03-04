@@ -213,7 +213,13 @@ const getAllPress = async (req, res) => {
 const editPress = async (req, res) => {
   try {
     const process_id = req.params.id;
-    const { issued_weight } = req.body;
+    const {
+      issued_weight,
+      return_weight,
+      scrap_weight,
+      issue_pieces,
+      return_pieces,
+    } = req.body;
     const newWeight = parseFloat(issued_weight);
 
     if (!process_id || isNaN(newWeight) || newWeight <= 0) {
@@ -222,17 +228,39 @@ const editPress = async (req, res) => {
 
     const process = await pressService.getPressProcessById(process_id);
     if (!process) return formatResponse(res, 404, false, "Process not found.");
-    if (process.status !== "RUNNING") {
-      return formatResponse(
-        res,
-        400,
-        false,
-        "Only RUNNING processes can be edited.",
-      );
-    }
 
-    const oldWeight = process.issued_weight;
+    const oldWeight = process.issue_size || process.issued_weight || 0;
     const delta = newWeight - oldWeight;
+
+    let newRetWeight = process.return_weight;
+    let newScrWeight = process.scrap_weight;
+    let newPieces = process.return_pieces;
+    let newLossWeight = process.loss_weight;
+
+    if (process.status === "COMPLETED") {
+      newRetWeight =
+        return_weight !== undefined
+          ? parseFloat(return_weight) || 0
+          : process.return_weight;
+      newScrWeight =
+        scrap_weight !== undefined
+          ? parseFloat(scrap_weight) || 0
+          : process.scrap_weight;
+      newPieces =
+        return_pieces !== undefined
+          ? parseInt(return_pieces) || 0
+          : process.return_pieces;
+
+      newLossWeight = calculateLoss(newWeight, newRetWeight, newScrWeight);
+      if (newLossWeight < 0) {
+        return formatResponse(
+          res,
+          400,
+          false,
+          "Update makes Return + Scrap exceed Issue limit.",
+        );
+      }
+    }
 
     if (delta > 0) {
       const currentStock = await stockService.getStockByMetal(
@@ -255,12 +283,6 @@ const editPress = async (req, res) => {
         delta,
         false,
       );
-      await stockService.logTransaction(
-        process.metal_type,
-        "ADJUSTMENT",
-        delta,
-        `Increased issued weight for Press Job ${process.job_number}`,
-      );
     } else if (delta < 0) {
       await stockService.updateProcessStock(
         "rolling",
@@ -268,15 +290,68 @@ const editPress = async (req, res) => {
         Math.abs(delta),
         true,
       );
-      await stockService.logTransaction(
-        process.metal_type,
-        "ADJUSTMENT",
-        Math.abs(delta),
-        `Decreased/Refunded issued weight for Press Job ${process.job_number}`,
-      );
     }
 
-    await pressService.updatePressIssuedWeight(process_id, newWeight);
+    let updates = {
+      issued_weight: newWeight,
+      issue_size: newWeight,
+      issue_pieces:
+        issue_pieces !== undefined
+          ? parseInt(issue_pieces) || 0
+          : process.issue_pieces,
+    };
+
+    if (process.status === "COMPLETED") {
+      // Sync Return Weight -> press_stock
+      const retWeightDiff = newRetWeight - process.return_weight;
+      if (retWeightDiff > 0) {
+        await stockService.updateProcessStock(
+          "press",
+          process.metal_type,
+          retWeightDiff,
+          true,
+        );
+      } else if (retWeightDiff < 0) {
+        await stockService.updateProcessStock(
+          "press",
+          process.metal_type,
+          Math.abs(retWeightDiff),
+          false,
+        );
+      }
+
+      // Sync Scrap Weight -> opening_stock
+      const scrWeightDiff = newScrWeight - process.scrap_weight;
+      if (scrWeightDiff > 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          scrWeightDiff,
+          true,
+        );
+      } else if (scrWeightDiff < 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          Math.abs(scrWeightDiff),
+          false,
+        );
+      }
+
+      // Sync exact Total Loss ledger differences
+      const oldLoss = process.loss_weight;
+      const lossWeightDiff = newLossWeight - oldLoss;
+      if (lossWeightDiff !== 0) {
+        await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
+      }
+
+      updates.return_weight = newRetWeight;
+      updates.scrap_weight = newScrWeight;
+      updates.loss_weight = newLossWeight;
+      if (return_pieces !== undefined)
+        updates.return_pieces = parseInt(return_pieces) || 0;
+    }
+
+    await pressService.editPressProcessUniversal(process_id, updates);
+
     return formatResponse(
       res,
       200,

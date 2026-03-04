@@ -7,5 +7,8 @@ router.post("/start", meltingController.startMelting);
 router.post("/complete", meltingController.completeMelting);
 
 router.get("/running", meltingController.getRunningMelts);
+router.put("/:id", meltingController.editMeltingProcess);
+router.delete("/:id", meltingController.deleteMeltingProcess);
+router.get("/", meltingController.getAllMelting);
 
 module.exports = router;

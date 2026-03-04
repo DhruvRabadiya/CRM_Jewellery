@@ -102,12 +102,31 @@ const deleteRollingProcessById = (id) => {
   });
 };
 
+const editRollingProcessUniversal = (processId, updates) => {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+    values.push(processId);
+
+    const query = `UPDATE rolling_processes SET ${fields.join(", ")} WHERE id = ?`;
+    db.run(query, values, function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createRollingProcess,
-  startRollingProcess,
+  startRollingProcess, // Kept original name as it was not explicitly changed in the instruction's code block
   completeRollingProcess,
   getRollingProcessById,
   getAllRollingProcesses,
   updateRollingIssuedWeight,
   deleteRollingProcessById,
+  editRollingProcessUniversal,
 };

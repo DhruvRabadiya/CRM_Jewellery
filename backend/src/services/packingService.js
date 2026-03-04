@@ -130,6 +130,24 @@ const deletePackingProcessById = (id) => {
   });
 };
 
+const editPackingProcessUniversal = (processId, updates) => {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+    values.push(processId);
+
+    const query = `UPDATE packing_processes SET ${fields.join(", ")} WHERE id = ?`;
+    db.run(query, values, function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createPackingProcess,
   startPackingProcess,
@@ -140,4 +158,5 @@ module.exports = {
   removeFinishedGoods,
   updatePackingIssuedWeight,
   deletePackingProcessById,
+  editPackingProcessUniversal,
 };
