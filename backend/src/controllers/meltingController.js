@@ -301,25 +301,57 @@ const deleteMeltingProcess = async (req, res) => {
     if (!process)
       return formatResponse(res, 404, false, MESSAGES.JOB_NOT_FOUND);
 
-    await stockService.updateOpeningStock(
-      process.metal_type,
-      process.issue_weight,
-      true,
-    );
-
-    if (process.status === STATUS.COMPLETED) {
+    // 1. Revert Return Weight from Dhal Pool
+    if (process.return_weight > 0) {
+      const currentStock = await stockService.getStockByMetal(
+        process.metal_type,
+      );
+      if (
+        !currentStock ||
+        Math.round(currentStock.dhal_stock * 1000) <
+          Math.round(process.return_weight * 1000)
+      ) {
+        return formatResponse(
+          res,
+          400,
+          false,
+          "Cannot delete: Downstream processes have already consumed this metal from the Dhal Stock pool.",
+        );
+      }
       await stockService.updateDhalStock(
         process.metal_type,
         process.return_weight,
         false,
       );
-      if (process.scrap_weight > 0) {
-        await stockService.updateOpeningStock(
-          process.metal_type,
-          process.scrap_weight,
-          false,
-        );
-      }
+    }
+
+    // 2. Revert Scrap Weight from Opening Stock
+    if (process.scrap_weight > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        process.scrap_weight,
+        false,
+      );
+    }
+
+    // 3. Revert Loss Weight
+    if (process.loss_weight > 0) {
+      await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
+    }
+
+    // 4. Refund Issued Weight to Opening Stock
+    if (process.issue_weight > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        process.issue_weight,
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "REVERSAL",
+        process.issue_weight,
+        `Deleted ${process.status} Melting Job #${process.id} (Full Reversal)`,
+      );
     }
 
     await meltingService.deleteMeltingProcess(id);
@@ -328,7 +360,7 @@ const deleteMeltingProcess = async (req, res) => {
       res,
       200,
       true,
-      "Melting process reversed and deleted.",
+      `${process.status.charAt(0) + process.status.slice(1).toLowerCase()} melting process deleted and stock refunded.`,
     );
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

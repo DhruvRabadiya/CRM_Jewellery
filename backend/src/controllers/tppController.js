@@ -409,8 +409,51 @@ const deleteTpp = async (req, res) => {
       );
     }
 
-    // RUNNING Deletion
-    if (process.status === "RUNNING") {
+    // RUNNING or COMPLETED Deletion
+    if (process.status === "RUNNING" || process.status === "COMPLETED") {
+      // 1. Validate and Revert Return Weight from TPP Pool
+      if (process.return_weight > 0) {
+        const currentStock = await stockService.getStockByMetal(
+          process.metal_type,
+        );
+        if (
+          !currentStock ||
+          Math.round(currentStock.tpp_stock * 1000) <
+            Math.round(process.return_weight * 1000)
+        ) {
+          return formatResponse(
+            res,
+            400,
+            false,
+            "Cannot delete: Downstream processes have already consumed this metal from the TPP Stock pool.",
+          );
+        }
+        await stockService.updateProcessStock(
+          "tpp",
+          process.metal_type,
+          process.return_weight,
+          false,
+        );
+      }
+
+      // 2. Revert Scrap Weight from Opening Stock
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          process.scrap_weight,
+          false,
+        );
+      }
+
+      // 3. Revert Loss Weight
+      if (process.loss_weight > 0) {
+        await stockService.addTotalLoss(
+          process.metal_type,
+          -process.loss_weight,
+        );
+      }
+
+      // 4. Refund Issued Weight to Press Pool
       if (process.issued_weight > 0) {
         await stockService.updateProcessStock(
           "press",
@@ -422,82 +465,18 @@ const deleteTpp = async (req, res) => {
           process.metal_type,
           "REVERSAL",
           process.issued_weight,
-          `Deleted Running TPP Job ${process.job_number}`,
+          `Deleted ${process.status} TPP Job ${process.job_number} (Full Reversal)`,
         );
       }
+
       await tppService.deleteTppProcessById(process_id);
       return formatResponse(
         res,
         200,
         true,
-        "Running TPP process deleted and stock refunded.",
+        `${process.status.charAt(0) + process.status.slice(1).toLowerCase()} TPP process deleted and stock refunded.`,
       );
     }
-
-    if (process.status !== "COMPLETED") {
-      return formatResponse(res, 400, false, "Invalid status for deletion.");
-    }
-
-    // COMPLETED Deletion Validation
-    const currentStock = await stockService.getStockByMetal(process.metal_type);
-    if (
-      !currentStock ||
-      Math.round(currentStock.tpp_stock * 1000) <
-        Math.round(process.return_weight * 1000)
-    ) {
-      return formatResponse(
-        res,
-        400,
-        false,
-        "Cannot delete: Downstream processes have already consumed this metal from the TPP Stock pool.",
-      );
-    }
-
-    // 1. Revert Return Weight from TPP Pool
-    if (process.return_weight > 0) {
-      await stockService.updateProcessStock(
-        "tpp",
-        process.metal_type,
-        process.return_weight,
-        false,
-      );
-    }
-    // 2. Revert Scrap Weight from Opening Stock
-    if (process.scrap_weight > 0) {
-      await stockService.updateOpeningStock(
-        process.metal_type,
-        process.scrap_weight,
-        false,
-      );
-    }
-    // 3. Revert Loss Weight
-    if (process.loss_weight > 0) {
-      await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
-    }
-    // 4. Refund Issued Weight to Press Pool
-    if (process.issued_weight > 0) {
-      await stockService.updateProcessStock(
-        "press",
-        process.metal_type,
-        process.issued_weight,
-        true,
-      );
-    }
-
-    await stockService.logTransaction(
-      process.metal_type,
-      "REVERSAL",
-      process.issued_weight,
-      `Deleted Completed TPP Job ${process.job_number} (Full Reversal)`,
-    );
-
-    await tppService.deleteTppProcessById(process_id);
-    return formatResponse(
-      res,
-      200,
-      true,
-      "TPP process deleted and stock reversed.",
-    );
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }

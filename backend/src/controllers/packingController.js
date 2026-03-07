@@ -429,8 +429,35 @@ const deletePacking = async (req, res) => {
       );
     }
 
-    // RUNNING Deletion
-    if (process.status === "RUNNING") {
+    // RUNNING or COMPLETED Deletion
+    if (process.status === "RUNNING" || process.status === "COMPLETED") {
+      // 1. Revert Output from Finished Goods pool
+      if (process.return_weight > 0) {
+        await packingService.removeFinishedGoods(
+          process.metal_type,
+          process.category,
+          process.return_weight,
+        );
+      }
+
+      // 2. Revert Scrap Weight from Opening Stock
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          process.scrap_weight,
+          false,
+        );
+      }
+
+      // 3. Revert Loss Weight
+      if (process.loss_weight > 0) {
+        await stockService.addTotalLoss(
+          process.metal_type,
+          -process.loss_weight,
+        );
+      }
+
+      // 4. Refund Issued Weight to TPP Pool
       if (process.issued_weight > 0) {
         await stockService.updateProcessStock(
           "tpp",
@@ -442,66 +469,18 @@ const deletePacking = async (req, res) => {
           process.metal_type,
           "REVERSAL",
           process.issued_weight,
-          `Deleted Running Packing Job ${process.job_number}`,
+          `Deleted ${process.status} Packing Job ${process.job_number} (Full Reversal)`,
         );
       }
+
       await packingService.deletePackingProcessById(process_id);
       return formatResponse(
         res,
         200,
         true,
-        "Running packing process deleted and stock refunded.",
+        `${process.status.charAt(0) + process.status.slice(1).toLowerCase()} packing process deleted and stock refunded.`,
       );
     }
-
-    if (process.status !== "COMPLETED") {
-      return formatResponse(res, 400, false, "Invalid status for deletion.");
-    }
-
-    // 1. Revert Output from Finished Goods pool
-    if (process.return_weight > 0) {
-      await packingService.removeFinishedGoods(
-        process.metal_type,
-        process.category,
-        process.return_weight,
-      );
-    }
-    // 2. Revert Scrap Weight from Opening Stock
-    if (process.scrap_weight > 0) {
-      await stockService.updateOpeningStock(
-        process.metal_type,
-        process.scrap_weight,
-        false,
-      );
-    }
-    // 3. Revert Loss Weight
-    if (process.loss_weight > 0) {
-      await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
-    }
-    // 4. Refund Issued Weight to TPP Pool
-    if (process.issued_weight > 0) {
-      await stockService.updateProcessStock(
-        "tpp",
-        process.metal_type,
-        process.issued_weight,
-        true,
-      );
-    }
-
-    await stockService.logTransaction(
-      process.metal_type,
-      "REVERSAL",
-      process.issued_weight,
-      `Deleted Completed Packing Job ${process.job_number} (Full Reversal)`,
-    );
-
-    await packingService.deletePackingProcessById(process_id);
-    return formatResponse(
-      res,
-      200,
-      true,
-      "Packing process deleted and stock reversed.",
-    );
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }

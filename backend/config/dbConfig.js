@@ -37,6 +37,21 @@ db.serialize(() => {
     `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Silver', 0, 0, 0, 0, 0)`,
   );
 
+  // Safe migration for total_loss column on existing databases
+  db.all(`PRAGMA table_info(stock_master)`, (err, columns) => {
+    if (!err && columns && !columns.some((col) => col.name === "total_loss")) {
+      db.run(
+        "ALTER TABLE stock_master ADD COLUMN total_loss REAL DEFAULT 0",
+        (alterErr) => {
+          if (alterErr)
+            console.error("Error migrating total_loss:", alterErr.message);
+          else
+            console.log("Successfully added total_loss column to stock_master");
+        },
+      );
+    }
+  });
+
   // 2. STOCK TRANSACTIONS (Ledger for Audit)
   db.run(`CREATE TABLE IF NOT EXISTS stock_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
