@@ -177,6 +177,31 @@ db.serialize(() => {
       weight REAL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Safe migration for description column across all process tables
+  const processTables = [
+    "melting_process",
+    "rolling_processes",
+    "press_processes",
+    "tpp_processes",
+    "packing_processes",
+  ];
+
+  processTables.forEach((tableName) => {
+    db.all(`PRAGMA table_info(${tableName})`, (err, columns) => {
+      if (!err && columns && !columns.some((col) => col.name === "description")) {
+        db.run(
+          `ALTER TABLE ${tableName} ADD COLUMN description TEXT DEFAULT ''`,
+          (alterErr) => {
+            if (alterErr)
+              console.error(`Error migrating description for ${tableName}:`, alterErr.message);
+            else
+              console.log(`Successfully added description column to ${tableName}`);
+          },
+        );
+      }
+    });
+  });
 });
 
 module.exports = db;

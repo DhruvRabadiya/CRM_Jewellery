@@ -8,6 +8,7 @@ router.post("/complete", meltingController.completeMelting);
 
 router.get("/running", meltingController.getRunningMelts);
 router.put("/:id", meltingController.editMeltingProcess);
+router.post("/revert/:id", meltingController.revertMeltingProcess);
 router.delete("/:id", meltingController.deleteMeltingProcess);
 router.get("/", meltingController.getAllMelting);
 

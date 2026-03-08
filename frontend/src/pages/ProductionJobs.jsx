@@ -23,9 +23,11 @@ import {
   getNextJobId,
   editProcess,
   deleteProcess,
+  revertProcess,
 } from "../api/jobService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
 import { useNavigate } from "react-router-dom";
 
@@ -67,6 +69,14 @@ const ProductionJobs = () => {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [isShaking, setIsShaking] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    isDestructive: false,
+    confirmText: "Confirm"
+  });
   const navigate = useNavigate();
 
   // Modals
@@ -85,23 +95,29 @@ const ProductionJobs = () => {
     category: sizeOptions["Gold"][0],
     issue_size: "",
     issue_pieces: "",
+    job_name: "",
     weight_unit: "g",
+    description: "",
   });
 
   const [startForm, setStartForm] = useState({
     issued_weight: "",
     issue_pieces: "",
     weight_unit: "g",
+    description: "",
   });
   const [completeForm, setCompleteForm] = useState({
     return_weight: "",
     scrap_weight: "",
     return_pieces: "",
+    weight_unit: "g",
+    description: "",
   });
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     issued_weight: "",
     weight_unit: "g",
+    description: "",
   });
 
   const showToast = (message, type) => {
@@ -143,6 +159,7 @@ const ProductionJobs = () => {
           issue_pieces: "",
           job_name: "",
           weight_unit: "g",
+          description: "",
         }));
         setIsNextStep(false);
         setIsCreateModalOpen(true);
@@ -172,6 +189,7 @@ const ProductionJobs = () => {
           : process.return_weight.toString(),
       issue_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      description: "",
     });
     setIsNextStep(true);
     setIsCreateModalOpen(true);
@@ -200,6 +218,7 @@ const ProductionJobs = () => {
         issue_size: weight,
         issue_pieces: createForm.issue_pieces || 0,
         category: createForm.category,
+        description: createForm.description || "",
       });
       showToast(`${createForm.stage} Process Created!`, "success");
       setIsCreateModalOpen(false);
@@ -219,6 +238,7 @@ const ProductionJobs = () => {
           : process.issue_size || "",
       issue_pieces: process.issue_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      description: "",
     });
     setIsStartModalOpen(true);
   };
@@ -233,12 +253,12 @@ const ProductionJobs = () => {
       return showToast("Invalid weight", "error");
     }
     try {
-      await startProcess(
-        selectedProcess.stage,
-        selectedProcess.id,
-        weight,
-        startForm.issue_pieces,
-      );
+      await startProcess(selectedProcess.stage, {
+        process_id: selectedProcess.id,
+        issued_weight: weight,
+        issue_pieces: startForm.issue_pieces || 0,
+        description: startForm.description || "",
+      });
       showToast("Started!", "success");
       setIsStartModalOpen(false);
       fetchProcesses();
@@ -266,6 +286,7 @@ const ProductionJobs = () => {
       return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
       category: process.category || "",
+      description: process.description || "",
     });
     setIsEditModalOpen(true);
   };
@@ -285,6 +306,9 @@ const ProductionJobs = () => {
       issue_pieces: editForm.issue_pieces,
       category: editForm.category,
     };
+    if (editForm.description !== undefined) {
+      payload.description = editForm.description;
+    }
 
     if (
       selectedProcess?.status === "COMPLETED" ||
@@ -313,20 +337,41 @@ const ProductionJobs = () => {
   };
 
   const handleDeleteProcess = async (process) => {
-    if (
-      !window.confirm(
-        `Are you SURE you want to permanently delete the COMPLETED Job ${process.job_number} at the ${process.stage} stage? This will entirely reverse the stock math and return physical metals back to their raw states.`,
-      )
-    )
-      return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Process",
+      message: `Are you SURE you want to permanently delete the COMPLETED Job ${process.job_number} at the ${process.stage} stage? This will entirely reverse the stock math and return physical metals back to their raw states.`,
+      isDestructive: true,
+      confirmText: "Yes, Delete It",
+      onConfirm: async () => {
+        try {
+          await deleteProcess(process.stage, process.id);
+          showToast("Job Deleted and Stock Reversed!", "success");
+          fetchProcesses();
+        } catch (error) {
+          showToast(error.message || "Failed to delete job", "error");
+        }
+      }
+    });
+  };
 
-    try {
-      await deleteProcess(process.stage, process.id);
-      showToast("Job Deleted and Stock Reversed!", "success");
-      fetchProcesses();
-    } catch (error) {
-      showToast(error.message || "Failed to delete job", "error");
-    }
+  const handleRevertProcess = async (process) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Revert Process",
+      message: `Are you sure you want to REVERT Job ${process.job_number}? This will un-do the current stage and step backwards, restoring stock correctly.`,
+      isDestructive: false,
+      confirmText: "Revert Now",
+      onConfirm: async () => {
+        try {
+          await revertProcess(process.stage, process.id);
+          showToast("Job Successfully Reverted!", "success");
+          fetchProcesses();
+        } catch (error) {
+          showToast(error.message || "Failed to revert job", "error");
+        }
+      }
+    });
   };
 
   const openCompleteModal = (process) => {
@@ -336,6 +381,7 @@ const ProductionJobs = () => {
       scrap_weight: "",
       return_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      description: "",
     });
     setIsCompleteModalOpen(true);
   };
@@ -368,6 +414,7 @@ const ProductionJobs = () => {
         return_weight: retW,
         scrap_weight: scrW,
         return_pieces: parseInt(completeForm.return_pieces) || 0,
+        description: completeForm.description || "",
       });
       showToast("Completed!", "success");
       setIsCompleteModalOpen(false);
@@ -606,6 +653,13 @@ const ProductionJobs = () => {
                           <Trash2 size={14} /> Delete
                         </button>
                         <button
+                          onClick={() => handleRevertProcess(p)}
+                          className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                          title="Revert Step & Re-Balance Stock"
+                        >
+                          <ArrowDownLeft size={14} /> Revert
+                        </button>
+                        <button
                           onClick={() => openViewModal(p.job_number)}
                           className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
                         >
@@ -631,26 +685,27 @@ const ProductionJobs = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         title="Create Process Job"
+        maxWidth="max-w-2xl"
       >
         <form
           onSubmit={handleCreateProcess}
-          className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+          className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Stage
               </label>
               {isNextStep ? (
                 <input
                   type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
+                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
                   value={createForm.stage}
                   readOnly
                 />
               ) : (
                 <select
-                  className="w-full bg-blue-50 border border-blue-200 py-3 px-4 rounded-lg font-bold outline-none text-blue-800"
+                  className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold outline-none text-blue-800"
                   value={createForm.stage || "Rolling"}
                   onChange={(e) => {
                     const newStage = e.target.value;
@@ -701,20 +756,21 @@ const ProductionJobs = () => {
                 </select>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Job Number
               </label>
               {isNextStep || createForm.stage === "Rolling" ? (
                 <input
                   type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
+                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
                   value={createForm.job_number}
                   readOnly
                 />
               ) : (
                 <select
-                  className="w-full bg-blue-50 border border-blue-200 py-3 px-4 rounded-lg font-mono text-blue-800 font-bold outline-none uppercase"
+                  className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none uppercase"
                   value={createForm.job_number || ""}
                   onChange={(e) => {
                     const jn = e.target.value;
@@ -750,22 +806,21 @@ const ProductionJobs = () => {
                 </select>
               )}
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Metal
               </label>
               {isNextStep || createForm.stage !== "Rolling" ? (
                 <input
                   type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
+                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
                   value={createForm.metal_type}
                   readOnly
                 />
               ) : (
                 <select
-                  className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-semibold outline-none"
+                  className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none"
                   value={createForm.metal_type}
                   onChange={(e) =>
                     setCreateForm({
@@ -781,12 +836,13 @@ const ProductionJobs = () => {
                 </select>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Category
               </label>
               <select
-                className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-semibold outline-none"
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none"
                 value={createForm.category}
                 onChange={(e) =>
                   setCreateForm({
@@ -802,54 +858,71 @@ const ProductionJobs = () => {
                 ))}
               </select>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Issue Size (Taken from previous pool)
-            </label>
-            <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 overflow-hidden">
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Size (Previous Pool)
+              </label>
+              <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 overflow-hidden transition-colors">
+                <input
+                  type="number"
+                  step="0.001"
+                  required
+                  className="w-full bg-transparent py-2.5 px-3 font-bold text-lg outline-none"
+                  value={createForm.issue_size}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, issue_size: e.target.value })
+                  }
+                  placeholder="0.000"
+                />
+                <select
+                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                  value={createForm.weight_unit}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, weight_unit: e.target.value })
+                  }
+                >
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
               <input
                 type="number"
-                step="0.001"
-                required
-                className="w-full bg-transparent py-3 px-4 font-bold text-lg outline-none"
-                value={createForm.issue_size}
+                step="1"
+                min="0"
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
+                value={createForm.issue_pieces}
                 onChange={(e) =>
-                  setCreateForm({ ...createForm, issue_size: e.target.value })
+                  setCreateForm({ ...createForm, issue_pieces: e.target.value })
                 }
-                placeholder="0.000"
+                placeholder="0"
               />
-              <select
-                className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
-                value={createForm.weight_unit}
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-gray-50 border border-gray-200 py-2 px-3 text-sm rounded-lg outline-none focus:bg-white focus:border-blue-500 min-h-20 transition-colors"
+                value={createForm.description}
                 onChange={(e) =>
-                  setCreateForm({ ...createForm, weight_unit: e.target.value })
+                  setCreateForm({ ...createForm, description: e.target.value })
                 }
-              >
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-              </select>
+                placeholder="Add any specific requirements or notes..."
+              />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Issue Pieces (Optional)
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-bold text-lg outline-none focus:border-blue-500"
-              value={createForm.issue_pieces}
-              onChange={(e) =>
-                setCreateForm({ ...createForm, issue_pieces: e.target.value })
-              }
-              placeholder="0 (Optional)"
-            />
-          </div>
+
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 flex justify-center gap-2"
+            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 flex justify-center gap-2 transition-colors active:scale-95"
           >
             <PlusCircle size={20} /> Create Job
           </button>
@@ -861,286 +934,34 @@ const ProductionJobs = () => {
         isOpen={isStartModalOpen}
         onClose={() => setIsStartModalOpen(false)}
         title={`Start ${selectedProcess?.stage}`}
+        maxWidth="max-w-2xl"
       >
         <form
           onSubmit={handleStartProcess}
-          className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+          className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-            <label className="block text-sm font-bold text-yellow-800 mb-2">
-              Actual Weigh-In (Issued Weight)
-            </label>
-            <div className="flex bg-white border border-yellow-300 rounded-lg overflow-hidden">
-              <input
-                type="number"
-                step="0.001"
-                required
-                className="w-full bg-transparent py-3 px-4 font-bold text-lg text-yellow-900 outline-none"
-                value={startForm.issued_weight}
-                onChange={(e) =>
-                  setStartForm({ ...startForm, issued_weight: e.target.value })
-                }
-                placeholder="0.000"
-              />
-              <select
-                className="bg-yellow-100 border-l border-yellow-300 px-3 font-bold text-yellow-900 outline-none"
-                value={startForm.weight_unit}
-                onChange={(e) =>
-                  setStartForm({ ...startForm, weight_unit: e.target.value })
-                }
-              >
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-              </select>
-            </div>
-          </div>
-          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-            <label className="block text-sm font-bold text-yellow-800 mb-2">
-              Actual Piece Count
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              className="w-full bg-white border border-yellow-300 py-3 px-4 rounded-lg font-bold text-lg text-yellow-900 outline-none focus:border-orange-500"
-              value={startForm.issue_pieces}
-              onChange={(e) =>
-                setStartForm({ ...startForm, issue_pieces: e.target.value })
-              }
-              placeholder="0 (Optional)"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 flex justify-center gap-2"
-          >
-            <PlayCircle size={20} /> Start Process
-          </button>
-        </form>
-      </Modal>
-
-      {/* COMPLETE MODAL */}
-      <Modal
-        isOpen={isCompleteModalOpen}
-        onClose={() => setIsCompleteModalOpen(false)}
-        title={`Complete ${selectedProcess?.stage}`}
-      >
-        <form
-          onSubmit={handleCompleteProcess}
-          className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex justify-between items-center mb-2">
-              <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
-                Category
-              </span>
-              <span className="text-sm font-black text-indigo-900">
-                {selectedProcess?.category || "N/A"}
-              </span>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
-                Weight Unit
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+              <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
+                Actual Weigh-In (Issued)
               </label>
-              <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCompleteForm({ ...completeForm, weight_unit: "g" })
-                  }
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                >
-                  Grams (g)
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCompleteForm({ ...completeForm, weight_unit: "kg" })
-                  }
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                >
-                  Kilogram (kg)
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-green-700 mb-1 uppercase">
-                Good Output
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                required
-                className="w-full bg-green-50 border border-green-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
-                value={completeForm.return_weight}
-                onChange={(e) =>
-                  setCompleteForm({
-                    ...completeForm,
-                    return_weight: e.target.value,
-                  })
-                }
-                placeholder="0.000"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">
-                Scrap/Dust
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
-                value={completeForm.scrap_weight}
-                onChange={(e) =>
-                  setCompleteForm({
-                    ...completeForm,
-                    scrap_weight: e.target.value,
-                  })
-                }
-                placeholder="0.000"
-              />
-            </div>
-          </div>
-          <div className="mt-4">
-            <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
-              Final Pieces {reqPieces ? "" : "(Optional)"}
-            </label>
-            <input
-              type="number"
-              step="1"
-              required={reqPieces}
-              className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
-              value={completeForm.return_pieces}
-              onChange={(e) =>
-                setCompleteForm({
-                  ...completeForm,
-                  return_pieces: e.target.value,
-                })
-              }
-              placeholder={reqPieces ? "0" : "0 (Optional)"}
-            />
-          </div>
-          <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4">
-            <div className="flex justify-between text-sm mb-1">
-              <span>Issued ({completeForm?.weight_unit || "g"}):</span>
-              <span>
-                {(
-                  issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                ).toFixed(3)}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm mb-1 text-green-400">
-              <span>- Return:</span>
-              <span>
-                {(
-                  retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                ).toFixed(3)}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm mb-3 text-yellow-400">
-              <span>- Scrap:</span>
-              <span>
-                {(
-                  scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                ).toFixed(3)}
-              </span>
-            </div>
-            <div className="border-t border-gray-600 pt-3 flex justify-between font-bold">
-              <span>Loss:</span>
-              <span className={isLossNegative ? "text-red-500" : "text-white"}>
-                {(
-                  liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                ).toFixed(3)}
-              </span>
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={isLossNegative}
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
-          >
-            Complete Process
-          </button>
-        </form>
-      </Modal>
-
-      {/* EDIT MODAL */}
-      <Modal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        title={`Edit Job: ${selectedProcess?.job_number} (${selectedProcess?.stage})`}
-      >
-        <form
-          onSubmit={handleEditProcess}
-          className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
-        >
-          <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mb-4 flex gap-3 items-start">
-            <div className="text-yellow-600 mt-0.5">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs text-yellow-800 font-bold mb-0.5">
-                Retroactive Edit Notice
-              </p>
-              <p className="text-[11px] text-yellow-700 leading-tight">
-                Modifying weights perfectly re-balances pooled stock and base
-                inventory.
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-1">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Category
-              </label>
-              <select
-                className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-semibold outline-none"
-                value={editForm.category}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    category: e.target.value,
-                  })
-                }
-              >
-                {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-1">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                New Issue Weight
-              </label>
-              <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+              <div className="flex bg-white border border-yellow-300 rounded-lg overflow-hidden focus-within:border-orange-500 transition-colors">
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
-                  value={editForm.issued_weight}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, issued_weight: e.target.value })
-                  }
                   required
+                  className="w-full bg-transparent py-2.5 px-3 font-bold text-lg text-yellow-900 outline-none"
+                  value={startForm.issued_weight}
+                  onChange={(e) =>
+                    setStartForm({ ...startForm, issued_weight: e.target.value })
+                  }
+                  placeholder="0.000"
                 />
                 <select
-                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
-                  value={editForm.weight_unit}
+                  className="bg-yellow-100 border-l border-yellow-300 px-3 font-bold text-yellow-900 outline-none"
+                  value={startForm.weight_unit}
                   onChange={(e) =>
-                    setEditForm({ ...editForm, weight_unit: e.target.value })
+                    setStartForm({ ...startForm, weight_unit: e.target.value })
                   }
                 >
                   <option value="g">g</option>
@@ -1149,94 +970,346 @@ const ProductionJobs = () => {
               </div>
             </div>
 
-            <div className="col-span-2">
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                Issue Pieces{" "}
-                <span className="text-gray-400 font-normal">(Optional)</span>
+            <div className="col-span-1 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+              <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
+                Actual Piece Count <span className="text-yellow-600/70 font-normal tracking-normal">(Optional)</span>
               </label>
               <input
                 type="number"
-                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-blue-500 focus:bg-white transition-colors"
-                value={editForm.issue_pieces}
+                step="1"
+                min="0"
+                className="w-full bg-white border border-yellow-300 py-2.5 px-3 rounded-lg font-bold text-lg text-yellow-900 outline-none focus:border-orange-500 transition-colors"
+                value={startForm.issue_pieces}
                 onChange={(e) =>
-                  setEditForm({ ...editForm, issue_pieces: e.target.value })
+                  setStartForm({ ...startForm, issue_pieces: e.target.value })
                 }
                 placeholder="0"
               />
             </div>
 
-            {(selectedProcess?.status === "COMPLETED" ||
-              selectedProcess?.status === "RUNNING") && (
-              <>
-                <div className="col-span-2 pt-3 border-t border-gray-200 mt-1">
-                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3">
-                    Output Adjustments
-                  </p>
-                </div>
-                <div className="col-span-1">
-                  <label className="block text-xs font-bold text-green-700 mb-1.5">
-                    Return Weight
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    className="w-full bg-green-50/50 border border-green-200 text-green-800 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-green-400 focus:bg-green-50 transition-colors"
-                    value={editForm.return_weight}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        return_weight: e.target.value,
-                      })
-                    }
-                    placeholder="0.000"
-                  />
-                </div>
-                <div className="col-span-1">
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                    Scrap/Dust
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-blue-500 focus:bg-white transition-colors"
-                    value={editForm.scrap_weight}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, scrap_weight: e.target.value })
-                    }
-                    placeholder="0.000"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                    Return Pieces{" "}
-                    <span className="text-gray-400 font-normal">
-                      (Optional)
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-blue-500 focus:bg-white transition-colors"
-                    value={editForm.return_pieces}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        return_pieces: e.target.value,
-                      })
-                    }
-                    placeholder="0"
-                  />
-                </div>
-              </>
-            )}
+            <div className="col-span-2 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+              <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-yellow-600/70 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-white border border-yellow-300 py-2 px-3 text-sm rounded-lg outline-none focus:border-orange-500 min-h-20 transition-colors"
+                value={startForm.description}
+                onChange={(e) =>
+                  setStartForm({ ...startForm, description: e.target.value })
+                }
+                placeholder="Add any specific requirements or notes..."
+              />
+            </div>
           </div>
+
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-bold py-3 text-sm rounded-lg hover:bg-blue-700 shadow border-b-[3px] border-blue-800 active:border-b-0 active:translate-y-0.75 transition-all mt-4 mb-2 flex items-center justify-center gap-2"
+            className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 flex justify-center gap-2 transition-colors active:scale-95"
+          >
+            <PlayCircle size={20} /> Start Process
+          </button>
+        </form>
+      </Modal>
+
+      {/* COMPLETE MODAL */}
+      {/* COMPLETE MODAL */}
+      <Modal
+        isOpen={isCompleteModalOpen}
+        onClose={() => setIsCompleteModalOpen(false)}
+        title={`Complete ${selectedProcess?.stage}`}
+        maxWidth="max-w-2xl"
+      >
+        <form
+          onSubmit={handleCompleteProcess}
+          className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1 bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-100 flex justify-between items-center h-full">
+              <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                Category
+              </span>
+              <span className="text-sm font-black text-indigo-900">
+                {selectedProcess?.category || "N/A"}
+              </span>
+            </div>
+            
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Weight Unit
+              </label>
+              <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setCompleteForm({ ...completeForm, weight_unit: "g" })}
+                  className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  Grams (g)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompleteForm({ ...completeForm, weight_unit: "kg" })}
+                  className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  Kilogram (kg)
+                </button>
+              </div>
+            </div>
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-green-700 mb-1.5 uppercase">
+                Good Output
+              </label>
+              <input
+                type="number"
+                step="0.001"
+                required
+                className="w-full bg-green-50 border border-green-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
+                value={completeForm.return_weight}
+                onChange={(e) => setCompleteForm({ ...completeForm, return_weight: e.target.value })}
+                placeholder="0.000"
+              />
+            </div>
+            
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+                Scrap/Dust
+              </label>
+              <input
+                type="number"
+                step="0.001"
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
+                value={completeForm.scrap_weight}
+                onChange={(e) => setCompleteForm({ ...completeForm, scrap_weight: e.target.value })}
+                placeholder="0.000"
+              />
+            </div>
+
+            <div className="col-span-1 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-bold text-purple-700 mb-1.5 uppercase">
+                  Final Pieces {reqPieces ? "" : "(Optional)"}
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  required={reqPieces}
+                  className="w-full bg-purple-50 border border-purple-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
+                  value={completeForm.return_pieces}
+                  onChange={(e) => setCompleteForm({ ...completeForm, return_pieces: e.target.value })}
+                  placeholder={reqPieces ? "0" : "0 (Optional)"}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+                  Description / Notes (Optional)
+                </label>
+                <textarea
+                  className="w-full bg-gray-50 border border-gray-200 py-2 px-3 rounded-lg outline-none focus:border-blue-500 min-h-20 text-sm"
+                  value={completeForm.description || ""}
+                  onChange={(e) => setCompleteForm({ ...completeForm, description: e.target.value })}
+                  placeholder="Add completion notes or issues..."
+                />
+              </div>
+            </div>
+
+            <div className="col-span-1 flex flex-col justify-end">
+              <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner h-full flex flex-col justify-center gap-1.5">
+                <div className="flex justify-between text-sm">
+                  <span>Issued ({completeForm?.weight_unit || "g"}):</span>
+                  <span>{(issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-green-400">
+                  <span>- Return:</span>
+                  <span>{(retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-yellow-400 mb-2">
+                  <span>- Scrap:</span>
+                  <span>{(scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}</span>
+                </div>
+                <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
+                  <span>Loss:</span>
+                  <span className={isLossNegative ? "text-red-500" : "text-white"}>
+                    {(liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLossNegative}
+            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            Complete Process
+          </button>
+        </form>
+      </Modal>
+
+      {/* EDIT MODAL */}
+      {/* EDIT MODAL */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title={`Edit Job: ${selectedProcess?.job_number} (${selectedProcess?.stage})`}
+        maxWidth="max-w-2xl"
+      >
+        <form
+          onSubmit={handleEditProcess}
+          className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
+        >
+          <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 flex gap-3 items-start">
+            <div className="text-yellow-600 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <p className="text-xs text-yellow-800 font-bold mb-0.5">
+                Retroactive Edit Notice
+              </p>
+              <p className="text-[11px] text-yellow-700 leading-tight">
+                Modifying weights perfectly re-balances pooled stock and base inventory.
+              </p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Category
+              </label>
+              <select
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-semibold outline-none"
+                value={editForm.category}
+                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+              >
+                {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Weight
+              </label>
+              <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+                <input
+                  type="number"
+                  step="0.001"
+                  className="w-full bg-transparent text-gray-700 py-2.5 px-3 outline-none font-bold"
+                  value={editForm.issued_weight}
+                  onChange={(e) => setEditForm({ ...editForm, issued_weight: e.target.value })}
+                  required
+                />
+                <select
+                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                  value={editForm.weight_unit}
+                  onChange={(e) => setEditForm({ ...editForm, weight_unit: e.target.value })}
+                >
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <input
+                type="number"
+                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
+                value={editForm.issue_pieces}
+                onChange={(e) => setEditForm({ ...editForm, issue_pieces: e.target.value })}
+                placeholder="0"
+              />
+            </div>
+
+            {(selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING") ? (
+              <>
+                <div className="col-span-1 border-l border-gray-200 pl-6 space-y-4 row-span-3">
+                  <div>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3">
+                      Output Adjustments
+                    </p>
+                    <label className="block text-xs font-bold text-green-700 mb-1.5">
+                      Return Weight
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      className="w-full bg-green-50/50 border border-green-200 text-green-800 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-green-400 transition-colors"
+                      value={editForm.return_weight}
+                      onChange={(e) => setEditForm({ ...editForm, return_weight: e.target.value })}
+                      placeholder="0.000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                      Scrap / Dust
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
+                      value={editForm.scrap_weight}
+                      onChange={(e) => setEditForm({ ...editForm, scrap_weight: e.target.value })}
+                      placeholder="0.000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                      Return Pieces <span className="text-gray-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
+                      value={editForm.return_pieces}
+                      onChange={(e) => setEditForm({ ...editForm, return_pieces: e.target.value })}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+               <div className="col-span-1 border-l border-gray-100 pl-6 flex items-center justify-center text-sm text-gray-400 italic">
+                  <p>Job is PENDING. Output fields are locked.</p>
+               </div>
+            )}
+
+            <div className={`col-span-1 flex flex-col ${selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING" ? "mt-4" : ""}`}>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2 px-3 text-sm rounded-lg outline-none focus:border-blue-500 transition-colors flex-1 min-h-20"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="View or edit notes..."
+              />
+            </div>
+          </div>
+          
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white font-bold py-3.5 text-sm rounded-xl hover:bg-blue-700 transition-all mt-2 flex items-center justify-center gap-2"
           >
             <Edit size={16} /> Update Process Database
           </button>
         </form>
       </Modal>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        isDestructive={confirmModal.isDestructive}
+        confirmText={confirmModal.confirmText}
+      />
     </div>
   );
 };

@@ -5,7 +5,7 @@ const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const startMelting = async (req, res) => {
   try {
-    const { metal_type, weight_unit, issue_weight, issue_pieces } = req.body;
+    const { metal_type, weight_unit, issue_weight, issue_pieces, description } = req.body;
     const weight = parseFloat(issue_weight);
     const pieces = parseInt(issue_pieces) || 0;
     const unit = weight_unit || "g";
@@ -30,6 +30,7 @@ const startMelting = async (req, res) => {
       unit,
       weight,
       pieces,
+      description || "",
     );
     await stockService.logTransaction(
       metal_type,
@@ -52,7 +53,7 @@ const startMelting = async (req, res) => {
 
 const completeMelting = async (req, res) => {
   try {
-    const { process_id, return_weight, return_pieces, scrap_weight } = req.body;
+    const { process_id, return_weight, return_pieces, scrap_weight, description } = req.body;
 
     const retW = parseFloat(return_weight) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
@@ -90,6 +91,7 @@ const completeMelting = async (req, res) => {
       retPieces,
       scrW,
       lossWeight,
+      description !== undefined ? description : null,
     );
     // Math diff to prevent double counting if weights were previously updated in RUNNING edit
     const retWeightDiff = retW - (process.return_weight || 0);
@@ -167,6 +169,7 @@ const editMeltingProcess = async (req, res) => {
       scrap_weight,
       issue_pieces,
       return_pieces,
+      description,
     } = req.body;
 
     const newWeight = parseFloat(issued_weight);
@@ -185,7 +188,7 @@ const editMeltingProcess = async (req, res) => {
     let newPieces = process.return_pieces;
     let newLossWeight = process.loss_weight;
 
-    if (process.status === STATUS.COMPLETED || process.status === "RUNNING") {
+    if (process.status === STATUS.COMPLETED) {
       newRetWeight =
         return_weight !== undefined
           ? parseFloat(return_weight) || 0
@@ -238,8 +241,9 @@ const editMeltingProcess = async (req, res) => {
           ? parseInt(issue_pieces) || 0
           : process.issue_pieces,
     };
+    if (description !== undefined) updates.description = description;
 
-    if (process.status === STATUS.COMPLETED || process.status === "RUNNING") {
+    if (process.status === STATUS.COMPLETED) {
       // Handle Dhal Stock diffs (Return goes to Dhal in melting)
       const retWeightDiff = newRetWeight - process.return_weight;
       if (retWeightDiff > 0) {
@@ -376,6 +380,76 @@ const getAllMelting = async (req, res) => {
   }
 };
 
+const revertMeltingProcess = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const process = await meltingService.getMeltingProcessById(id);
+    if (!process)
+      return formatResponse(res, 404, false, MESSAGES.JOB_NOT_FOUND);
+
+    if (process.status === "COMPLETED") {
+      // Revert from COMPLETED -> RUNNING
+      if (process.return_weight > 0) {
+        const currentStock = await stockService.getStockByMetal(process.metal_type);
+        if (
+          !currentStock ||
+          Math.round(currentStock.dhal_stock * 1000) < Math.round(process.return_weight * 1000)
+        ) {
+          return formatResponse(
+            res,
+            400,
+            false,
+            "Cannot revert: Downstream processes have already consumed this metal from the Dhal Stock pool.",
+          );
+        }
+        await stockService.updateDhalStock(process.metal_type, process.return_weight, false);
+      }
+
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);
+      }
+
+      if (process.loss_weight > 0) {
+        await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
+      }
+
+      await stockService.logTransaction(
+        process.metal_type,
+        "REVERSAL",
+        process.issue_weight,
+        `Reverted Melting Job #${process.id} to RUNNING`,
+      );
+
+      const updates = {
+        return_weight: 0,
+        return_pieces: 0,
+        scrap_weight: 0,
+        loss_weight: 0,
+        status: "RUNNING",
+        completed_at: null,
+      };
+      await meltingService.editMeltingProcess(id, updates);
+      return formatResponse(res, 200, true, "Melting process reverted to RUNNING successfully.");
+
+    } else if (process.status === "RUNNING") {
+      // Revert from RUNNING -> Deleted/Removed (Refund Opening Stock)
+      await stockService.updateOpeningStock(process.metal_type, process.issue_weight, true);
+      await stockService.logTransaction(
+        process.metal_type,
+        "REVERSAL",
+        process.issue_weight,
+        `Reverted RUNNING Melting Job #${process.id} back to Opening Stock`,
+      );
+      await meltingService.deleteMeltingProcess(id);
+      return formatResponse(res, 200, true, "Melting process reversed and deleted successfully.");
+    } else {
+      return formatResponse(res, 400, false, "Process is in an invalid state for reversion.");
+    }
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   startMelting,
   completeMelting,
@@ -383,4 +457,5 @@ module.exports = {
   editMeltingProcess,
   deleteMeltingProcess,
   getAllMelting,
+  revertMeltingProcess,
 };

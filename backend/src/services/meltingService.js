@@ -6,12 +6,13 @@ const createMeltingProcess = (
   unit,
   issueWeight,
   issuePieces = 0,
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO melting_process (metal_type, unit, issue_weight, issue_pieces, status) VALUES (?, ?, ?, ?, ?)`;
+    const query = `INSERT INTO melting_process (metal_type, unit, issue_weight, issue_pieces, status, description) VALUES (?, ?, ?, ?, ?, ?)`;
     db.run(
       query,
-      [metalType, unit, issueWeight, issuePieces, STATUS.RUNNING],
+      [metalType, unit, issueWeight, issuePieces, STATUS.RUNNING, description],
       function (err) {
         if (err) reject(err);
         resolve(this.lastID);
@@ -26,10 +27,11 @@ const updateMeltingProcess = (
   returnPieces,
   scrapWeight,
   lossWeight,
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
     const query = `UPDATE melting_process 
-                       SET return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, status = ?, completed_at = CURRENT_TIMESTAMP 
+                       SET return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, status = ?, completed_at = CURRENT_TIMESTAMP, description = COALESCE(?, description) 
                        WHERE id = ?`;
 
     db.run(
@@ -40,6 +42,7 @@ const updateMeltingProcess = (
         scrapWeight,
         lossWeight,
         STATUS.COMPLETED,
+        description,
         processId,
       ],
       function (err) {

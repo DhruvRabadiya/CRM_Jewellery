@@ -20,9 +20,12 @@ import {
   deleteProcess,
   editProcess,
   createProcess,
+  revertProcess,
 } from "../api/jobService";
+import { ArrowDownLeft } from "lucide-react";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
 
 const sizeOptions = {
@@ -86,23 +89,35 @@ const JobHistory = () => {
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [toast, setToast] = useState(null);
   const [isShaking, setIsShaking] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    isDestructive: false,
+    confirmText: "Confirm"
+  });
 
   const [startForm, setStartForm] = useState({
     issued_weight: "",
     issue_pieces: "",
     weight_unit: "g",
+    description: "",
   });
 
   const [completeForm, setCompleteForm] = useState({
     return_weight: "",
     scrap_weight: "",
     return_pieces: "",
+    weight_unit: "g",
+    description: "",
   });
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     issued_weight: "",
     weight_unit: "g",
+    description: "",
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -115,6 +130,7 @@ const JobHistory = () => {
     issue_size: "",
     issue_pieces: "",
     weight_unit: "g",
+    description: "",
   });
 
   const showToast = (message, type) => {
@@ -136,6 +152,7 @@ const JobHistory = () => {
           : process.issue_size || "",
       issue_pieces: process.issue_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      description: "",
     });
     setIsStartModalOpen(true);
   };
@@ -150,12 +167,12 @@ const JobHistory = () => {
       return showToast("Invalid weight", "error");
     }
     try {
-      await startProcess(
-        selectedProcess.stage,
-        selectedProcess.id,
-        startForm.issued_weight,
-        startForm.issue_pieces,
-      );
+      await startProcess(selectedProcess.stage, {
+        process_id: selectedProcess.id,
+        issued_weight: weight,
+        issue_pieces: startForm.issue_pieces || 0,
+        description: startForm.description || "",
+      });
       showToast("Started!", "success");
       setIsStartModalOpen(false);
       fetchHistory();
@@ -172,6 +189,7 @@ const JobHistory = () => {
       scrap_weight: "",
       return_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      description: "",
     });
     setIsCompleteModalOpen(true);
   };
@@ -204,6 +222,7 @@ const JobHistory = () => {
         return_weight: retW,
         scrap_weight: scrW,
         return_pieces: parseInt(completeForm.return_pieces) || 0,
+        description: completeForm.description || "",
       });
       showToast("Completed!", "success");
       setIsCompleteModalOpen(false);
@@ -215,20 +234,41 @@ const JobHistory = () => {
   };
 
   const handleDeleteProcess = async (process) => {
-    if (
-      !window.confirm(
-        `Are you SURE you want to permanently delete the ${process.status} Job ${process.job_number} at the ${process.stage} stage? This will entirely reverse the stock math and return physical metals back to their raw states.`,
-      )
-    )
-      return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Process",
+      message: `Are you SURE you want to permanently delete the ${process.status} Job ${process.job_number} at the ${process.stage} stage? This will entirely reverse the stock math and return physical metals back to their raw states.`,
+      isDestructive: true,
+      confirmText: "Yes, Delete It",
+      onConfirm: async () => {
+        try {
+          await deleteProcess(process.stage, process.id);
+          showToast("Job Deleted and Stock Reversed!", "success");
+          fetchHistory();
+        } catch (error) {
+          showToast(error.message || "Failed to delete job", "error");
+        }
+      }
+    });
+  };
 
-    try {
-      await deleteProcess(process.stage, process.id);
-      showToast("Job Deleted and Stock Reversed!", "success");
-      fetchHistory();
-    } catch (error) {
-      showToast(error.message || "Failed to delete job", "error");
-    }
+  const handleRevertProcess = async (process) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Revert Process",
+      message: `Are you sure you want to REVERT Job ${process.job_number}? This will un-do the current stage and step backwards, restoring stock correctly.`,
+      isDestructive: false,
+      confirmText: "Revert Now",
+      onConfirm: async () => {
+        try {
+          await revertProcess(process.stage, process.id);
+          showToast("Job Successfully Reverted!", "success");
+          fetchHistory();
+        } catch (error) {
+          showToast(error.message || "Failed to revert job", "error");
+        }
+      }
+    });
   };
 
   const openEditModal = (process) => {
@@ -249,6 +289,7 @@ const JobHistory = () => {
       return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
       category: process.category || "",
+      description: process.description || "",
     });
     setIsEditModalOpen(true);
   };
@@ -268,6 +309,9 @@ const JobHistory = () => {
       issue_pieces: editForm.issue_pieces,
       category: editForm.category,
     };
+    if (editForm.description !== undefined) {
+      payload.description = editForm.description;
+    }
 
     if (
       selectedProcess?.status === "COMPLETED" ||
@@ -312,6 +356,7 @@ const JobHistory = () => {
           : remainingWeight.toString(),
       issue_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      description: "",
     });
     setIsNextStep(true);
     setIsCreateModalOpen(true);
@@ -331,6 +376,7 @@ const JobHistory = () => {
         ...createForm,
         issue_size: size,
         issue_pieces: parseInt(createForm.issue_pieces) || 0,
+        description: createForm.description || "",
       });
       showToast("Process Created!", "success");
       setIsCreateModalOpen(false);
@@ -599,10 +645,17 @@ const JobHistory = () => {
                       </button>
                       <button
                         onClick={() => handleDeleteProcess(h)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded font-bold hover:bg-red-100 transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded font-bold hover:bg-red-100 transition-colors shadow-sm whitespace-nowrap"
                         title="Delete Process Row"
                       >
                         <Trash2 size={16} /> Delete
+                      </button>
+                      <button
+                        onClick={() => handleRevertProcess(h)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 rounded font-bold hover:bg-purple-100 transition-colors shadow-sm whitespace-nowrap"
+                        title="Revert Job Backwards"
+                      >
+                        <ArrowDownLeft size={16} /> Revert
                       </button>
                     </td>
                   </tr>
@@ -616,27 +669,28 @@ const JobHistory = () => {
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="Create Process Job"
+        title="Create Next Job"
+        maxWidth="max-w-2xl"
       >
         <form
           onSubmit={handleCreateProcess}
-          className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+          className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Stage
               </label>
-              {isNextStep ? (
+              {(isNextStep || true) ? (
                 <input
                   type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
+                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
                   value={createForm.stage}
                   readOnly
                 />
               ) : (
                 <select
-                  className="w-full bg-blue-50 border border-blue-200 py-3 px-4 rounded-lg font-bold outline-none text-blue-800"
+                  className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold outline-none text-blue-800 transition-colors focus:border-blue-500 focus:bg-white"
                   value={createForm.stage || "Rolling"}
                   onChange={(e) => {
                     const newStage = e.target.value;
@@ -687,20 +741,21 @@ const JobHistory = () => {
                 </select>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+            
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Job Number
               </label>
               {isNextStep || createForm.stage === "Rolling" ? (
                 <input
                   type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
+                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
                   value={createForm.job_number}
                   readOnly
                 />
               ) : (
                 <select
-                  className="w-full bg-blue-50 border border-blue-200 py-3 px-4 rounded-lg font-mono text-blue-800 font-bold outline-none uppercase"
+                  className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none uppercase transition-colors focus:border-blue-500 focus:bg-white"
                   value={createForm.job_number || ""}
                   onChange={(e) => {
                     const jn = e.target.value;
@@ -732,22 +787,20 @@ const JobHistory = () => {
                 </select>
               )}
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Metal
               </label>
-              {isNextStep || createForm.stage !== "Rolling" ? (
+              {(isNextStep || true) ? (
                 <input
                   type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
+                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
                   value={createForm.metal_type}
                   readOnly
                 />
               ) : (
                 <select
-                  className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-semibold outline-none"
+                  className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-semibold outline-none"
                   value={createForm.metal_type}
                   onChange={(e) =>
                     setCreateForm({
@@ -762,79 +815,93 @@ const JobHistory = () => {
                 </select>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Category
               </label>
-              {isNextStep || createForm.stage !== "Rolling" ? (
-                <input
-                  type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-3 px-4 rounded-lg font-semibold text-gray-600 outline-none cursor-not-allowed"
-                  value={createForm.category || "N/A"}
-                  readOnly
-                />
-              ) : (
-                <input
-                  type="text"
-                  className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-semibold outline-none"
-                  value={createForm.category}
-                  onChange={(e) =>
-                    setCreateForm({
-                      ...createForm,
-                      category: e.target.value,
-                    })
-                  }
-                />
-              )}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Issue Size (Taken from previous pool)
-            </label>
-            <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 overflow-hidden">
-              <input
-                type="number"
-                step="0.001"
-                required
-                className="w-full bg-transparent py-3 px-4 font-bold text-lg outline-none"
-                value={createForm.issue_size}
-                onChange={(e) =>
-                  setCreateForm({ ...createForm, issue_size: e.target.value })
-                }
-                placeholder="0.000"
-              />
               <select
-                className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
-                value={createForm.weight_unit}
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none cursor-pointer"
+                value={createForm.category}
                 onChange={(e) =>
-                  setCreateForm({ ...createForm, weight_unit: e.target.value })
+                  setCreateForm({
+                    ...createForm,
+                    category: e.target.value,
+                  })
                 }
               >
-                <option value="g">g</option>
-                <option value="kg">kg</option>
+                {sizeOptions[createForm.metal_type]?.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
             </div>
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Size (Previous Pool)
+              </label>
+              <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+                <input
+                  type="number"
+                  step="0.001"
+                  required
+                  className="w-full bg-transparent py-2.5 px-3 font-bold text-lg outline-none"
+                  value={createForm.issue_size}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, issue_size: e.target.value })
+                  }
+                  placeholder="0.000"
+                />
+                <select
+                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none cursor-pointer"
+                  value={createForm.weight_unit}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, weight_unit: e.target.value })
+                  }
+                >
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
+                value={createForm.issue_pieces}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, issue_pieces: e.target.value })
+                }
+                placeholder="0"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-gray-50 border border-gray-200 py-2 px-3 text-sm rounded-lg outline-none focus:bg-white focus:border-blue-500 min-h-20 transition-colors"
+                value={createForm.description}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, description: e.target.value })
+                }
+                placeholder="Add any specific requirements or notes..."
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Issue Pieces (Optional)
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-bold text-lg outline-none focus:border-blue-500"
-              value={createForm.issue_pieces}
-              onChange={(e) =>
-                setCreateForm({ ...createForm, issue_pieces: e.target.value })
-              }
-              placeholder="0 (Optional)"
-            />
-          </div>
+
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 flex justify-center gap-2"
+            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 flex justify-center gap-2 transition-colors active:scale-95"
           >
             <PlusCircle size={20} /> Create & Queue Next Stage
           </button>
@@ -845,58 +912,77 @@ const JobHistory = () => {
         isOpen={isStartModalOpen}
         onClose={() => setIsStartModalOpen(false)}
         title={`Start ${selectedProcess?.stage}`}
+        maxWidth="max-w-2xl"
       >
         <form
           onSubmit={handleStartProcess}
-          className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+          className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-            <label className="block text-sm font-bold text-yellow-800 mb-2">
-              Actual Weigh-In (Issued Weight)
-            </label>
-            <div className="flex bg-white border border-yellow-300 rounded-lg overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+              <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
+                Actual Weigh-In (Issued)
+              </label>
+              <div className="flex bg-white border border-yellow-300 rounded-lg overflow-hidden focus-within:border-orange-500 transition-colors">
+                <input
+                  type="number"
+                  step="0.001"
+                  required
+                  className="w-full bg-transparent py-2.5 px-3 font-bold text-lg text-yellow-900 outline-none"
+                  value={startForm.issued_weight}
+                  onChange={(e) =>
+                    setStartForm({ ...startForm, issued_weight: e.target.value })
+                  }
+                  placeholder="0.000"
+                />
+                <select
+                  className="bg-yellow-100 border-l border-yellow-300 px-3 font-bold text-yellow-900 outline-none"
+                  value={startForm.weight_unit}
+                  onChange={(e) =>
+                    setStartForm({ ...startForm, weight_unit: e.target.value })
+                  }
+                >
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="col-span-1 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+              <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
+                Actual Piece Count <span className="text-yellow-600/70 font-normal tracking-normal">(Optional)</span>
+              </label>
               <input
                 type="number"
-                step="0.001"
-                required
-                className="w-full bg-transparent py-3 px-4 font-bold text-lg text-yellow-900 outline-none"
-                value={startForm.issued_weight}
+                step="1"
+                min="0"
+                className="w-full bg-white border border-yellow-300 py-2.5 px-3 rounded-lg font-bold text-lg text-yellow-900 outline-none focus:border-orange-500 transition-colors"
+                value={startForm.issue_pieces}
                 onChange={(e) =>
-                  setStartForm({ ...startForm, issued_weight: e.target.value })
+                  setStartForm({ ...startForm, issue_pieces: e.target.value })
                 }
-                placeholder="0.000"
+                placeholder="0"
               />
-              <select
-                className="bg-yellow-100 border-l border-yellow-300 px-3 font-bold text-yellow-900 outline-none"
-                value={startForm.weight_unit}
+            </div>
+
+            <div className="col-span-2 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+              <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-yellow-600/70 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-white border border-yellow-300 py-2 px-3 text-sm rounded-lg outline-none focus:border-orange-500 min-h-20 transition-colors"
+                value={startForm.description}
                 onChange={(e) =>
-                  setStartForm({ ...startForm, weight_unit: e.target.value })
+                  setStartForm({ ...startForm, description: e.target.value })
                 }
-              >
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-              </select>
+                placeholder="Add any specific requirements or notes..."
+              />
             </div>
           </div>
-          <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-            <label className="block text-sm font-bold text-yellow-800 mb-2">
-              Actual Piece Count
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              className="w-full bg-white border border-yellow-300 py-3 px-4 rounded-lg font-bold text-lg text-yellow-900 outline-none focus:border-orange-500"
-              value={startForm.issue_pieces}
-              onChange={(e) =>
-                setStartForm({ ...startForm, issue_pieces: e.target.value })
-              }
-              placeholder="0 (Optional)"
-            />
-          </div>
+
           <button
             type="submit"
-            className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 flex justify-center gap-2"
+            className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 flex justify-center gap-2 transition-colors active:scale-95"
           >
             <PlayCircle size={20} /> Start Process
           </button>
@@ -984,24 +1070,42 @@ const JobHistory = () => {
               />
             </div>
           </div>
-          <div className="mt-4">
-            <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
-              Final Pieces {reqPieces ? "" : "(Optional)"}
-            </label>
-            <input
-              type="number"
-              step="1"
-              required={reqPieces}
-              className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
-              value={completeForm.return_pieces}
-              onChange={(e) =>
-                setCompleteForm({
-                  ...completeForm,
-                  return_pieces: e.target.value,
-                })
-              }
-              placeholder={reqPieces ? "0" : "0 (Optional)"}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
+                Final Pieces {reqPieces ? "" : "(Optional)"}
+              </label>
+              <input
+                type="number"
+                step="1"
+                required={reqPieces}
+                className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
+                value={completeForm.return_pieces}
+                onChange={(e) =>
+                  setCompleteForm({
+                    ...completeForm,
+                    return_pieces: e.target.value,
+                  })
+                }
+                placeholder={reqPieces ? "0" : "0 (Optional)"}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">
+                Description / Notes (Optional)
+              </label>
+              <textarea
+                className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg outline-none focus:border-blue-500 min-h-20"
+                value={completeForm.description}
+                onChange={(e) =>
+                  setCompleteForm({
+                    ...completeForm,
+                    description: e.target.value,
+                  })
+                }
+                placeholder="Add completion notes or issues..."
+              />
+            </div>
           </div>
           <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4">
             <div className="flex justify-between text-sm mb-1">
@@ -1040,7 +1144,7 @@ const JobHistory = () => {
           <button
             type="submit"
             disabled={isLossNegative}
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
+            className="w-full mt-4 bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
           >
             Complete Process
           </button>
@@ -1149,73 +1253,112 @@ const JobHistory = () => {
 
             {(selectedProcess?.status === "COMPLETED" ||
               selectedProcess?.status === "RUNNING") && (
-              <>
-                <div className="col-span-2 pt-3 border-t border-gray-200 mt-1">
-                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3">
-                    Output Adjustments
+              <div className="col-span-2 grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 mt-1">
+                <div className="col-span-2">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
+                    Completion Data
                   </p>
                 </div>
+                
                 <div className="col-span-1">
-                  <label className="block text-xs font-bold text-green-700 mb-1.5">
+                  <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                     Return Weight
                   </label>
                   <input
                     type="number"
                     step="0.001"
-                    className="w-full bg-green-50/50 border border-green-200 text-green-800 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-green-400 focus:bg-green-50 transition-colors"
+                    className="w-full bg-blue-50 border border-blue-200 text-blue-900 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
                     value={editForm.return_weight}
                     onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        return_weight: e.target.value,
-                      })
+                      setEditForm({ ...editForm, return_weight: e.target.value })
                     }
-                    placeholder="0.000"
+                    placeholder={`0.000 ${editForm.weight_unit}`}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Scrap/Dust Weight
+
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    Return Pieces
                   </label>
                   <input
                     type="number"
-                    step="0.001"
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
-                    value={editForm.scrap_weight}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, scrap_weight: e.target.value })
-                    }
-                    placeholder="0.000"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Return Pieces (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
+                    step="1"
+                    min="0"
+                    className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
                     value={editForm.return_pieces}
                     onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        return_pieces: e.target.value,
-                      })
+                      setEditForm({ ...editForm, return_pieces: e.target.value })
                     }
                     placeholder="0"
                   />
                 </div>
-              </>
+
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    Scrap / Dust
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
+                    value={editForm.scrap_weight}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, scrap_weight: e.target.value })
+                    }
+                    placeholder={`0.000 ${editForm.weight_unit}`}
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    Live Loss Calculation
+                  </label>
+                  <div
+                    className={`w-full py-2.5 px-3 rounded-lg font-bold text-lg border flex items-center shadow-inner ${
+                      editForm.loss_weight < 0
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-gray-100 text-gray-700 border-gray-200"
+                    }`}
+                  >
+                    {editForm.loss_weight} {editForm.weight_unit}
+                  </div>
+                </div>
+              </div>
             )}
+
+            <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
+              <label className="block text-xs font-bold text-blue-800 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-blue-600/70 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-white border border-blue-200 py-2 px-3 text-sm rounded-lg outline-none focus:border-blue-500 min-h-20 transition-colors"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+                placeholder="View or edit notes..."
+              />
+            </div>
           </div>
+          
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-bold py-3 text-sm rounded-lg hover:bg-blue-700 shadow border-b-[3px] border-blue-800 active:border-b-0 active:translate-y-0.75 transition-all mt-4 mb-2 flex items-center justify-center gap-2"
+            className="w-full bg-blue-600 text-white font-bold py-3.5 text-sm rounded-xl hover:bg-blue-700 shadow flex items-center justify-center gap-2 active:scale-95 transition-all mt-2"
           >
             Update Process Database
           </button>
         </form>
       </Modal>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        isDestructive={confirmModal.isDestructive}
+        confirmText={confirmModal.confirmText}
+      />
     </div>
   );
 };

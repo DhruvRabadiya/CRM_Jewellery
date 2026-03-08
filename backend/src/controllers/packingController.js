@@ -14,6 +14,7 @@ const createPacking = async (req, res) => {
       issue_size,
       issue_pieces,
       category,
+      description,
     } = req.body;
     const weight = parseFloat(issue_size);
     const pieces = parseInt(issue_pieces) || 0;
@@ -49,6 +50,7 @@ const createPacking = async (req, res) => {
       weight,
       pieces,
       category,
+      description || "",
     );
 
     // DEDUCT IMMEDIATELY UPON CREATION
@@ -134,7 +136,7 @@ const startPacking = async (req, res) => {
 
 const completePacking = async (req, res) => {
   try {
-    const { process_id, return_weight, scrap_weight, return_pieces } = req.body;
+    const { process_id, return_weight, scrap_weight, return_pieces, description } = req.body;
     const retW = parseFloat(return_weight) || 0;
     const retP = parseInt(return_pieces) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
@@ -166,6 +168,7 @@ const completePacking = async (req, res) => {
       retP,
       scrW,
       lossWeight,
+      description !== undefined ? description : null,
     );
 
     // Remove old finished goods if it was retroactively added while RUNNING
@@ -244,6 +247,7 @@ const editPacking = async (req, res) => {
       scrap_weight,
       issue_pieces,
       return_pieces,
+      description,
     } = req.body;
     const newWeight = parseFloat(issued_weight);
 
@@ -262,7 +266,7 @@ const editPacking = async (req, res) => {
     let newPieces = process.return_pieces;
     let newLossWeight = process.loss_weight;
 
-    if (process.status === "COMPLETED" || process.status === "RUNNING") {
+    if (process.status === "COMPLETED") {
       newRetWeight =
         return_weight !== undefined
           ? parseFloat(return_weight) || 0
@@ -328,8 +332,11 @@ const editPacking = async (req, res) => {
     if (req.body.category !== undefined) {
       updates.category = req.body.category;
     }
+    if (description !== undefined) {
+      updates.description = description;
+    }
 
-    if (process.status === "COMPLETED" || process.status === "RUNNING") {
+    if (process.status === "COMPLETED") {
       // Re-create the Finished Goods Record if Return Weight or Return Pieces or Category changed
       if (
         newRetWeight !== process.return_weight ||
@@ -486,6 +493,75 @@ const deletePacking = async (req, res) => {
   }
 };
 
+const revertPacking = async (req, res) => {
+  try {
+    const process_id = req.params.id;
+    const process = await packingService.getPackingProcessById(process_id);
+
+    if (!process) return formatResponse(res, 404, false, "Process not found.");
+
+    if (process.status === "COMPLETED") {
+      if (process.return_weight > 0) {
+        // Packing outputs directly to Finished Goods. We remove it from there.
+        await packingService.removeFinishedGoods(
+          process.metal_type,
+          process.category,
+          process.return_weight,
+        );
+      }
+      
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);
+      }
+      
+      if (process.loss_weight > 0) {
+        await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
+      }
+
+      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted Packing Job ${process.job_number} to RUNNING`);
+
+      const updates = {
+        status: "RUNNING",
+        return_weight: 0,
+        return_pieces: 0,
+        scrap_weight: 0,
+        loss_weight: 0,
+        end_time: null,
+      };
+      await packingService.editPackingProcessUniversal(process_id, updates);
+      return formatResponse(res, 200, true, "Packing process reverted to RUNNING.");
+
+    } else if (process.status === "RUNNING") {
+      const delta = process.issued_weight - process.issue_size;
+      
+      if (delta > 0) {
+         await stockService.updateProcessStock("tpp", process.metal_type, delta, true);
+      } else if (delta < 0) {
+         const currentStock = await stockService.getStockByMetal(process.metal_type);
+         if (!currentStock || Math.round(currentStock.tpp_stock * 1000) < Math.round(Math.abs(delta) * 1000)) {
+            return formatResponse(res, 400, false, "Cannot revert: Insufficient TPP stock to restore PENDING issue_size.");
+         }
+         await stockService.updateProcessStock("tpp", process.metal_type, Math.abs(delta), false);
+      }
+
+      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Packing Job ${process.job_number} to PENDING`);
+
+      const updates = {
+        status: "PENDING",
+        issued_weight: 0,
+        start_time: null,
+      };
+      await packingService.editPackingProcessUniversal(process_id, updates);
+      return formatResponse(res, 200, true, "Packing process reverted to PENDING.");
+
+    } else {
+      return formatResponse(res, 400, false, "Only RUNNING or COMPLETED processes can be reverted.");
+    }
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   createPacking,
   startPacking,
@@ -493,4 +569,5 @@ module.exports = {
   getAllPacking,
   editPacking,
   deletePacking,
+  revertPacking,
 };

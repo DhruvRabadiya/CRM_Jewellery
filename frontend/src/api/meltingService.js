@@ -2,12 +2,13 @@ import api from "./axiosConfig";
 
 const API_URL = "/melting";
 
-export const startMelt = async (metalType, issueWeight, issuePieces = 0) => {
+export const startMelt = async (metalType, issueWeight, issuePieces = 0, description = "") => {
   try {
     const response = await api.post(`${API_URL}/start`, {
       metal_type: metalType,
       issue_weight: parseFloat(issueWeight),
       issue_pieces: issuePieces,
+      description,
     });
     return response.data;
   } catch (error) {
@@ -20,6 +21,7 @@ export const completeMelt = async (
   returnWeight,
   scrapWeight,
   returnPieces = 0,
+  description = "",
 ) => {
   try {
     const response = await api.post(`${API_URL}/complete`, {
@@ -27,6 +29,7 @@ export const completeMelt = async (
       return_weight: parseFloat(returnWeight),
       scrap_weight: parseFloat(scrapWeight),
       return_pieces: returnPieces,
+      description,
     });
     return response.data;
   } catch (error) {
@@ -64,6 +67,15 @@ export const editMelt = async (id, updates) => {
 export const deleteMelt = async (id) => {
   try {
     const response = await api.delete(`${API_URL}/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const revertMelt = async (id) => {
+  try {
+    const response = await api.post(`${API_URL}/revert/${id}`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;

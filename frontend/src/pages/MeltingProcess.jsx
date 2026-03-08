@@ -13,9 +13,11 @@ import {
   getAllMelts,
   editMelt,
   deleteMelt,
+  revertMelt,
 } from "../api/meltingService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
 
 const MeltingProcess = () => {
@@ -36,18 +38,29 @@ const MeltingProcess = () => {
     issue_weight: "",
     issue_pieces: "",
     weight_unit: "g",
+    description: "",
   });
   const [completeForm, setCompleteForm] = useState({
     return_weight: "",
     scrap_weight: "",
     return_pieces: "",
     weight_unit: "g",
+    description: "",
   });
   const [editForm, setEditForm] = useState({
     issued_weight: "",
     weight_unit: "g",
+    description: "",
   });
   const [isShaking, setIsShaking] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    isDestructive: false,
+    confirmText: "Confirm"
+  });
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -100,7 +113,12 @@ const MeltingProcess = () => {
       // Wait, meltingService.js starts melt with api.post('/start', { metal_type, issue_weight, issue_pieces? }).
       // I will need to patch startMelt in api/meltingService.js to pass issuePieces, but for now I'll use it if updated.
       // Let's assume startMelt(metalType, issueWeight, issuePieces) works (we need to update api/meltingService to accept it).
-      await startMelt(startForm.metal_type, finalWeight, pieces);
+      await startMelt(
+        startForm.metal_type,
+        finalWeight,
+        pieces,
+        startForm.description || "",
+      );
       showToast("Melting Started Successfully!", "success");
       setIsStartModalOpen(false);
       setStartForm({
@@ -108,6 +126,7 @@ const MeltingProcess = () => {
         issue_weight: "",
         issue_pieces: "",
         weight_unit: "g",
+        description: "",
       });
       fetchMelts();
     } catch (error) {
@@ -148,6 +167,7 @@ const MeltingProcess = () => {
         retWeight,
         scrWeight,
         parseInt(completeForm.return_pieces) || 0,
+        completeForm.description || "",
       );
       showToast("Melting Completed & Stock Updated!", "success");
       setIsCompleteModalOpen(false);
@@ -156,6 +176,7 @@ const MeltingProcess = () => {
         scrap_weight: "",
         return_pieces: "",
         weight_unit: selectedMelt.metal_type === "Silver" ? "kg" : "g",
+        description: "",
       });
       setSelectedMelt(null);
       fetchMelts();
@@ -172,24 +193,47 @@ const MeltingProcess = () => {
       scrap_weight: "",
       return_pieces: "",
       weight_unit: melt.metal_type === "Silver" ? "kg" : "g",
+      description: "",
     });
     setIsCompleteModalOpen(true);
   };
 
   const handleDeleteMelt = async (melt) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this process? Stock will be fully reversed.",
-      )
-    )
-      return;
-    try {
-      await deleteMelt(melt.id);
-      showToast("Melting process reversed & deleted", "success");
-      fetchMelts();
-    } catch (error) {
-      showToast(error.message || "Failed to delete from DB", "error");
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Melting Process",
+      message: "Are you sure you want to delete this process? Stock will be fully reversed.",
+      isDestructive: true,
+      confirmText: "Yes, Delete",
+      onConfirm: async () => {
+        try {
+          await deleteMelt(melt.id);
+          showToast("Melting process reversed & deleted", "success");
+          fetchMelts();
+        } catch (error) {
+          showToast(error.message || "Failed to delete from DB", "error");
+        }
+      }
+    });
+  };
+
+  const handleRevertMelt = async (melt) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Revert Melting Process",
+      message: `Are you sure you want to REVERT Melting Process #${melt.id}? This will un-do the current stage and restore stock backwards.`,
+      isDestructive: false,
+      confirmText: "Revert Process",
+      onConfirm: async () => {
+        try {
+          await revertMelt(melt.id);
+          showToast("Melting process reverted successfully!", "success");
+          fetchMelts();
+        } catch (error) {
+          showToast(error.message || "Failed to revert melt", "error");
+        }
+      }
+    });
   };
 
   const handleEditMeltSubmit = async (e) => {
@@ -206,14 +250,25 @@ const MeltingProcess = () => {
       issued_weight: issueW,
       issue_pieces: editForm.issue_pieces,
     };
+    if (editForm.description !== undefined) {
+      payload.description = editForm.description;
+    }
 
     if (selectedMelt?.status === "COMPLETED") {
       let retW = parseFloat(editForm.return_weight) || 0;
       let scrW = parseFloat(editForm.scrap_weight) || 0;
+      
       if (isKg) {
         retW *= 1000;
         scrW *= 1000;
       }
+      
+      // Safety check: is the loss negative on grammatical scale?
+      if (issueW - retW - scrW < 0) {
+         showToast("Error: Impossible weights.", "error");
+         return;
+      }
+
       payload.return_weight = retW;
       payload.scrap_weight = scrW;
       payload.return_pieces = editForm.return_pieces;
@@ -241,6 +296,7 @@ const MeltingProcess = () => {
       issue_pieces: melt.issue_pieces || "",
       return_pieces: melt.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
+      description: melt.description || "",
     });
     setIsEditModalOpen(true);
   };
@@ -328,6 +384,14 @@ const MeltingProcess = () => {
                     >
                       {melt.metal_type} Melt
                     </h3>
+                    {melt.description && (
+                      <div
+                        className="text-xs text-indigo-600 mt-1 max-w-[180px] truncate"
+                        title={melt.description}
+                      >
+                        {melt.description}
+                      </div>
+                    )}
                   </div>
                   <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse">
                     <Flame size={12} /> Running
@@ -343,12 +407,21 @@ const MeltingProcess = () => {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => openCompleteModal(melt)}
-                  className="w-full bg-green-50 text-green-700 font-bold py-3 rounded-xl hover:bg-green-600 hover:text-white transition-colors flex justify-center items-center gap-2"
-                >
-                  <CheckCircle size={18} /> Complete Process
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openCompleteModal(melt)}
+                    className="flex-1 bg-green-50 text-green-700 font-bold py-3 rounded-xl hover:bg-green-600 hover:text-white transition-colors flex justify-center items-center gap-2"
+                  >
+                    <CheckCircle size={18} /> Complete Process
+                  </button>
+                  <button
+                    onClick={() => handleRevertMelt(melt)}
+                    className="px-4 bg-purple-50 text-purple-600 font-bold rounded-xl hover:bg-purple-100 transition-colors shadow-sm"
+                    title="Revert Process"
+                  >
+                    <ArrowDownLeft size={18} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -360,76 +433,96 @@ const MeltingProcess = () => {
         isOpen={isStartModalOpen}
         onClose={() => setIsStartModalOpen(false)}
         title="Start Melting Process"
+        maxWidth="max-w-2xl"
       >
         <form
           onSubmit={handleStartMelt}
           className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Metal Type
-            </label>
-            <div className="relative">
-              <select
-                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none cursor-pointer"
-                value={startForm.metal_type}
-                onChange={(e) =>
-                  setStartForm({ ...startForm, metal_type: e.target.value })
-                }
-              >
-                <option value="Gold">Gold</option>
-                <option value="Silver">Silver</option>
-              </select>
-              <ArrowDownLeft
-                className="absolute right-4 top-3 text-gray-500 pointer-events-none"
-                size={16}
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Metal Type
+              </label>
+              <div className="relative">
+                <select
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg font-bold outline-none cursor-pointer"
+                  value={startForm.metal_type}
+                  onChange={(e) =>
+                    setStartForm({ ...startForm, metal_type: e.target.value })
+                  }
+                >
+                  <option value="Gold">Gold</option>
+                  <option value="Silver">Silver</option>
+                </select>
+                <ArrowDownLeft
+                  className="absolute right-3 top-3 text-gray-400 pointer-events-none"
+                  size={16}
+                />
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Issue Weight (from Opening Stock)
-            </label>
-            <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-orange-500 transition-colors overflow-hidden">
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Weight (Opening Stock)
+              </label>
+              <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-orange-500 transition-colors overflow-hidden">
+                <input
+                  type="number"
+                  step="0.001"
+                  className="w-full bg-transparent text-gray-700 py-2.5 px-3 outline-none font-bold"
+                  value={startForm.issue_weight}
+                  onChange={(e) =>
+                    setStartForm({ ...startForm, issue_weight: e.target.value })
+                  }
+                  placeholder="0.000"
+                />
+                <select
+                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                  value={startForm.weight_unit}
+                  onChange={(e) =>
+                    setStartForm({ ...startForm, weight_unit: e.target.value })
+                  }
+                >
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
               <input
                 type="number"
-                step="0.001"
-                className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
-                value={startForm.issue_weight}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg font-bold outline-none focus:bg-white focus:border-orange-500 transition-colors"
+                value={startForm.issue_pieces}
                 onChange={(e) =>
-                  setStartForm({ ...startForm, issue_weight: e.target.value })
+                  setStartForm({ ...startForm, issue_pieces: e.target.value })
                 }
-                placeholder="0.000"
+                placeholder="0"
               />
-              <select
-                className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
-                value={startForm.weight_unit}
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-gray-50 border border-gray-200 py-2 px-3 text-sm rounded-lg outline-none focus:bg-white focus:border-orange-500 min-h-20 transition-colors"
+                value={startForm.description}
                 onChange={(e) =>
-                  setStartForm({ ...startForm, weight_unit: e.target.value })
+                  setStartForm({ ...startForm, description: e.target.value })
                 }
-              >
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-              </select>
+                placeholder="Add any specific requirements or notes..."
+              />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Issue Pieces (Optional)
-            </label>
-            <input
-              type="number"
-              className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none focus:border-orange-500 font-bold"
-              value={startForm.issue_pieces}
-              onChange={(e) =>
-                setStartForm({ ...startForm, issue_pieces: e.target.value })
-              }
-              placeholder="0"
-            />
-          </div>
+
           <button
             type="submit"
-            className="w-full bg-orange-600 text-white font-bold py-3.5 rounded-xl hover:bg-orange-700 shadow-md active:scale-95 transition-all flex justify-center gap-2"
+            className="w-full bg-orange-600 text-white font-bold py-3.5 rounded-xl hover:bg-orange-700 shadow-md active:scale-95 transition-colors flex justify-center gap-2"
           >
             <Flame size={20} /> Start Process
           </button>
@@ -437,49 +530,44 @@ const MeltingProcess = () => {
       </Modal>
 
       {/* MODAL 2: COMPLETE MELT (WITH REAL-TIME LOSS) */}
+      {/* MODAL 2: COMPLETE MELT (WITH REAL-TIME LOSS) */}
       <Modal
         isOpen={isCompleteModalOpen}
         onClose={() => setIsCompleteModalOpen(false)}
         title="Complete Melting"
+        maxWidth="max-w-2xl"
       >
         {selectedMelt && (
           <form
             onSubmit={handleCompleteMelt}
             className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
           >
-            {/* Issued Weight Indicator */}
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
-              <span className="text-blue-800 font-semibold">
-                Total Issued Weight ({completeForm?.weight_unit || "g"}):
-              </span>
-              <span className="text-xl font-bold text-blue-900">
-                {(
-                  issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                ).toFixed(3)}
-              </span>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+              <div className="col-span-1 bg-blue-50 px-4 py-3 rounded-xl border border-blue-100 flex justify-between items-center h-full">
+                <span className="text-blue-800 font-bold text-xs uppercase tracking-wide">
+                  Total Issued ({completeForm?.weight_unit || "g"})
+                </span>
+                <span className="text-xl font-bold text-blue-900">
+                  {(issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}
+                </span>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Weight Unit
                 </label>
                 <div className="flex bg-gray-100 p-1 rounded-lg">
                   <button
                     type="button"
-                    onClick={() =>
-                      setCompleteForm({ ...completeForm, weight_unit: "g" })
-                    }
-                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                    onClick={() => setCompleteForm({ ...completeForm, weight_unit: "g" })}
+                    className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                   >
                     Grams (g)
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setCompleteForm({ ...completeForm, weight_unit: "kg" })
-                    }
-                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                    onClick={() => setCompleteForm({ ...completeForm, weight_unit: "kg" })}
+                    className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                   >
                     Kilogram (kg)
                   </button>
@@ -487,90 +575,86 @@ const MeltingProcess = () => {
               </div>
 
               {/* Return Input */}
-              <div>
-                <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
+              <div className="col-span-1">
+                <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   <Weight size={14} /> Pure Dhal
                 </label>
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
                   value={completeForm.return_weight}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      return_weight: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setCompleteForm({ ...completeForm, return_weight: e.target.value })}
                   placeholder={`0.000 ${completeForm.weight_unit}`}
                 />
               </div>
 
               {/* Scrap Input */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Scrap / Dust
                 </label>
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-3 rounded-lg outline-none focus:bg-white focus:border-gray-500 transition-colors text-lg font-bold"
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-gray-500 transition-colors text-lg font-bold"
                   value={completeForm.scrap_weight}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      scrap_weight: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setCompleteForm({ ...completeForm, scrap_weight: e.target.value })}
                   placeholder={`0.000 ${completeForm.weight_unit}`}
                 />
               </div>
 
-              {/* Pieces Input */}
-              <div className="col-span-2">
-                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
-                  Return Pieces (Optional)
-                </label>
-                <input
-                  type="number"
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
-                  value={completeForm.return_pieces}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      return_pieces: e.target.value,
-                    })
-                  }
-                  placeholder="0"
-                />
+              <div className="col-span-1 flex flex-col gap-4">
+                {/* Pieces Input */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    Return Pieces (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
+                    value={completeForm.return_pieces}
+                    onChange={(e) => setCompleteForm({ ...completeForm, return_pieces: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+
+                {/* Description Input */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    Description / Notes (Optional)
+                  </label>
+                  <textarea
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors font-bold min-h-20 text-sm"
+                    value={completeForm.description}
+                    onChange={(e) => setCompleteForm({ ...completeForm, description: e.target.value })}
+                    placeholder="Notes for completion..."
+                  />
+                </div>
+              </div>
+
+              {/* DYNAMIC LOSS CALCULATOR */}
+              <div className="col-span-1 flex flex-col justify-end">
+                <div
+                  className={`p-4 rounded-xl border flex flex-col justify-center h-full transition-colors ${
+                    isLossNegative ? "bg-red-50 border-red-200 text-red-700" : liveLoss > 0 ? "bg-orange-50 border-orange-200 text-orange-700" : "bg-gray-50 border-gray-200 text-gray-500"
+                  }`}
+                >
+                  <span className="font-bold flex items-center justify-center gap-2 mb-2">
+                    {isLossNegative ? <AlertTriangle size={18} /> : null}
+                    Calculated Loss:
+                  </span>
+                  <span className="text-3xl font-extrabold text-center">
+                    {(liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}
+                  </span>
+                </div>
+                {isLossNegative && (
+                  <p className="text-red-500 text-xs text-center font-bold mt-2">
+                    Error: Return + Scrap cannot be larger than Issued Weight!
+                  </p>
+                )}
               </div>
             </div>
-
-            {/* DYNAMIC LOSS CALCULATOR */}
-            <div
-              className={`p-4 rounded-xl border flex justify-between items-center transition-colors ${
-                isLossNegative
-                  ? "bg-red-50 border-red-200 text-red-700"
-                  : liveLoss > 0
-                    ? "bg-orange-50 border-orange-200 text-orange-700"
-                    : "bg-gray-50 border-gray-200 text-gray-500"
-              }`}
-            >
-              <span className="font-bold flex items-center gap-2">
-                {isLossNegative ? <AlertTriangle size={18} /> : null}
-                Calculated Loss:
-              </span>
-              <span className="text-2xl font-extrabold">
-                {(
-                  liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                ).toFixed(3)}
-              </span>
-            </div>
-            {isLossNegative && (
-              <p className="text-red-500 text-xs text-center font-bold">
-                Error: Return + Scrap cannot be larger than Issued Weight!
-              </p>
-            )}
 
             <button
               type="submit"
@@ -614,6 +698,14 @@ const MeltingProcess = () => {
                       {new Date(h.date).toLocaleDateString()}{" "}
                       {new Date(h.date).toLocaleTimeString()}
                     </div>
+                    {h.description && (
+                      <div
+                        className="text-[11px] font-normal text-indigo-600 mt-0.5 truncate max-w-[120px]"
+                        title={h.description}
+                      >
+                        {h.description}
+                      </div>
+                    )}
                   </td>
                   <td className="p-4 font-bold text-gray-700">
                     {h.metal_type}
@@ -667,6 +759,13 @@ const MeltingProcess = () => {
                     >
                       Delete
                     </button>
+                    <button
+                      onClick={() => handleRevertMelt(h)}
+                      className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                      title="Revert Process Backwards"
+                    >
+                      Revert
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -693,23 +792,23 @@ const MeltingProcess = () => {
             Fix issues retroactively. Physical balances will correctly adjust to
             compensate your edit natively.
           </p>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 New Issue Weight
               </label>
               <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-transparent text-gray-700 py-3 px-4 outline-none font-bold"
+                  className="w-full bg-transparent text-gray-700 py-2.5 px-3 outline-none font-bold text-lg"
                   value={editForm.issued_weight}
                   onChange={(e) =>
                     setEditForm({ ...editForm, issued_weight: e.target.value })
                   }
                 />
                 <select
-                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                  className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none cursor-pointer"
                   value={editForm.weight_unit}
                   onChange={(e) =>
                     setEditForm({ ...editForm, weight_unit: e.target.value })
@@ -721,13 +820,13 @@ const MeltingProcess = () => {
               </div>
             </div>
 
-            <div className="col-span-2">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Issue Pieces (Optional)
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
               </label>
               <input
                 type="number"
-                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
+                className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold text-lg focus:bg-white focus:border-blue-500 transition-colors"
                 value={editForm.issue_pieces}
                 onChange={(e) =>
                   setEditForm({ ...editForm, issue_pieces: e.target.value })
@@ -737,20 +836,21 @@ const MeltingProcess = () => {
             </div>
 
             {selectedMelt?.status === "COMPLETED" && (
-              <>
-                <div className="col-span-2 pt-2 border-t border-gray-200 mt-2">
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">
-                    Output Adjustments
+              <div className="col-span-2 grid grid-cols-2 gap-x-6 gap-y-4 pt-3 border-t border-gray-200 mt-1">
+                <div className="col-span-2">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest -mb-1">
+                    Completion Adjustment Data
                   </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-green-700 mb-2">
+                
+                <div className="col-span-1">
+                  <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                     Return Weight
                   </label>
                   <input
                     type="number"
                     step="0.001"
-                    className="w-full bg-green-50 border border-green-200 text-green-800 py-3 px-4 rounded-lg outline-none font-bold"
+                    className="w-full bg-blue-50 border border-blue-200 text-blue-900 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
                     value={editForm.return_weight}
                     onChange={(e) =>
                       setEditForm({
@@ -761,28 +861,14 @@ const MeltingProcess = () => {
                     placeholder="0.000"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Scrap/Dust Weight
+                
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    Return Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
                   </label>
                   <input
                     type="number"
-                    step="0.001"
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
-                    value={editForm.scrap_weight}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, scrap_weight: e.target.value })
-                    }
-                    placeholder="0.000"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Return Pieces (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none font-bold"
+                    className="w-full bg-blue-50 border border-blue-200 text-blue-900 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
                     value={editForm.return_pieces}
                     onChange={(e) =>
                       setEditForm({
@@ -793,17 +879,91 @@ const MeltingProcess = () => {
                     placeholder="0"
                   />
                 </div>
-              </>
+                
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    Scrap/Dust Weight
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
+                    value={editForm.scrap_weight}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, scrap_weight: e.target.value })
+                    }
+                    placeholder="0.000"
+                  />
+                </div>
+                
+                {(() => {
+                  let iss = parseFloat(editForm.issued_weight) || 0;
+                  let ret = parseFloat(editForm.return_weight) || 0;
+                  let scr = parseFloat(editForm.scrap_weight) || 0;
+                  
+                  // For melting, scrap is typically added back cleanly so Loss = Issued - Return - Scrap
+                  let liveLoss = parseFloat((iss - ret - scr).toFixed(3));
+                  let isLossNegative = liveLoss < 0;
+                  return (
+                    <div className="col-span-1">
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                        Live Loss Calculation
+                      </label>
+                      <div
+                        className={`w-full py-2.5 px-3 rounded-lg font-bold text-lg border flex items-center shadow-inner ${
+                          isLossNegative
+                            ? "bg-red-50 text-red-700 border-red-200"
+                            : "bg-gray-100 text-gray-700 border-gray-200"
+                        }`}
+                      >
+                        {liveLoss.toFixed(3)} {editForm.weight_unit}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             )}
+
+            <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
+              <label className="block text-xs font-bold text-blue-800 mb-1.5 uppercase tracking-wide">
+                Description / Notes <span className="text-blue-600/70 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <textarea
+                className="w-full bg-white border border-blue-200 py-2 px-3 text-sm rounded-lg outline-none focus:border-blue-500 min-h-20 transition-colors"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+                placeholder="View or edit notes..."
+              />
+            </div>
           </div>
+          
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md active:scale-95 transition-all mt-4"
+            disabled={
+              selectedMelt?.status === "COMPLETED" &&
+              (parseFloat(editForm.issued_weight) || 0) -
+                (parseFloat(editForm.return_weight) || 0) -
+                (parseFloat(editForm.scrap_weight) || 0) <
+                0
+            }
+            className="w-full bg-blue-600 text-white font-bold py-3.5 text-sm rounded-xl hover:bg-blue-700 shadow flex items-center justify-center gap-2 active:scale-95 transition-all mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Update Process Database
           </button>
         </form>
       </Modal>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        isDestructive={confirmModal.isDestructive}
+        confirmText={confirmModal.confirmText}
+      />
     </div>
   );
 };

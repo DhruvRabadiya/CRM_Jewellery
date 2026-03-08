@@ -23,13 +23,10 @@ export const createProcess = async (stage, payload) => {
   }
 };
 
-export const startProcess = async (stage, processId, issuedWeight) => {
+export const startProcess = async (stage, payload) => {
   try {
     const endpoint = stage.toLowerCase();
-    const response = await api.post(`/${endpoint}/start`, {
-      process_id: processId,
-      issued_weight: parseFloat(issuedWeight),
-    });
+    const response = await api.post(`/${endpoint}/start`, payload);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
@@ -79,6 +76,16 @@ export const deleteProcess = async (stage, processId) => {
   try {
     const endpoint = stage.toLowerCase();
     const response = await api.delete(`/${endpoint}/${processId}/delete`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const revertProcess = async (stage, processId) => {
+  try {
+    const endpoint = stage.toLowerCase();
+    const response = await api.post(`/${endpoint}/${processId}/revert`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
