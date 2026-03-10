@@ -2,7 +2,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Flame,
   CheckCircle,
+  Plus,
+  PlayCircle,
+  Hammer,
   ArrowDownLeft,
+  X,
+  FileText,
   Weight,
   AlertTriangle,
 } from "lucide-react";
@@ -30,6 +35,7 @@ const MeltingProcess = () => {
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedMelt, setSelectedMelt] = useState(null);
 
   // Form States
@@ -301,6 +307,11 @@ const MeltingProcess = () => {
     setIsEditModalOpen(true);
   };
 
+  const openViewModal = (melt) => {
+    setSelectedMelt(melt);
+    setIsViewModalOpen(true);
+  };
+
   // --- REAL-TIME LOSS CALCULATION ---
   const issueW = selectedMelt ? parseFloat(selectedMelt.issue_weight) || 0 : 0;
   let returnW = parseFloat(completeForm.return_weight) || 0;
@@ -368,7 +379,8 @@ const MeltingProcess = () => {
             {activeMelts.map((melt) => (
               <div
                 key={melt.id}
-                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative overflow-hidden group"
+                onClick={() => openViewModal(melt)}
+                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative overflow-hidden group cursor-pointer"
               >
                 <div
                   className={`absolute top-0 left-0 w-full h-1 ${melt.metal_type === "Gold" ? "bg-yellow-400" : "bg-gray-400"}`}
@@ -384,14 +396,6 @@ const MeltingProcess = () => {
                     >
                       {melt.metal_type} Melt
                     </h3>
-                    {melt.description && (
-                      <div
-                        className="text-xs text-indigo-600 mt-1 max-w-[180px] truncate"
-                        title={melt.description}
-                      >
-                        {melt.description}
-                      </div>
-                    )}
                   </div>
                   <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse">
                     <Flame size={12} /> Running
@@ -409,13 +413,13 @@ const MeltingProcess = () => {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => openCompleteModal(melt)}
+                    onClick={(e) => { e.stopPropagation(); openCompleteModal(melt); }}
                     className="flex-1 bg-green-50 text-green-700 font-bold py-3 rounded-xl hover:bg-green-600 hover:text-white transition-colors flex justify-center items-center gap-2"
                   >
                     <CheckCircle size={18} /> Complete Process
                   </button>
                   <button
-                    onClick={() => handleRevertMelt(melt)}
+                    onClick={(e) => { e.stopPropagation(); handleRevertMelt(melt); }}
                     className="px-4 bg-purple-50 text-purple-600 font-bold rounded-xl hover:bg-purple-100 transition-colors shadow-sm"
                     title="Revert Process"
                   >
@@ -529,7 +533,6 @@ const MeltingProcess = () => {
         </form>
       </Modal>
 
-      {/* MODAL 2: COMPLETE MELT (WITH REAL-TIME LOSS) */}
       {/* MODAL 2: COMPLETE MELT (WITH REAL-TIME LOSS) */}
       <Modal
         isOpen={isCompleteModalOpen}
@@ -690,7 +693,8 @@ const MeltingProcess = () => {
               {history.map((h) => (
                 <tr
                   key={h.id}
-                  className="hover:bg-gray-50/50 transition-colors group"
+                  onClick={() => openViewModal(h)}
+                  className="hover:bg-blue-50/50 transition-colors group cursor-pointer"
                 >
                   <td className="p-4">
                     <div className="font-bold text-gray-800">#{h.id}</div>
@@ -698,14 +702,6 @@ const MeltingProcess = () => {
                       {new Date(h.date).toLocaleDateString()}{" "}
                       {new Date(h.date).toLocaleTimeString()}
                     </div>
-                    {h.description && (
-                      <div
-                        className="text-[11px] font-normal text-indigo-600 mt-0.5 truncate max-w-[120px]"
-                        title={h.description}
-                      >
-                        {h.description}
-                      </div>
-                    )}
                   </td>
                   <td className="p-4 font-bold text-gray-700">
                     {h.metal_type}
@@ -748,19 +744,19 @@ const MeltingProcess = () => {
                   </td>
                   <td className="p-4 flex justify-end gap-2 text-sm">
                     <button
-                      onClick={() => openEditModal(h)}
+                      onClick={(e) => { e.stopPropagation(); openEditModal(h); }}
                       className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDeleteMelt(h)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteMelt(h); }}
                       className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
                     >
                       Delete
                     </button>
                     <button
-                      onClick={() => handleRevertMelt(h)}
+                      onClick={(e) => { e.stopPropagation(); handleRevertMelt(h); }}
                       className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
                       title="Revert Process Backwards"
                     >
@@ -953,6 +949,72 @@ const MeltingProcess = () => {
             Update Process Database
           </button>
         </form>
+      </Modal>
+
+      {/* VIEW MELT DETAILS MODAL */}
+      <Modal
+        isOpen={isViewModalOpen}
+        onClose={() => setIsViewModalOpen(false)}
+        title="Melting Process Details"
+        maxWidth="max-w-2xl"
+      >
+        {selectedMelt && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+               <div>
+                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Process ID</p>
+                 <h2 className="text-2xl font-black text-gray-800">#{selectedMelt.id} <span className="text-gray-400 text-lg font-bold ml-2">| {selectedMelt.metal_type}</span></h2>
+               </div>
+               <div className="text-right">
+                 <span className={`px-4 py-1.5 rounded-full text-xs font-bold border flex justify-center items-center gap-1 ${selectedMelt.status === "RUNNING" ? "bg-orange-50 text-orange-700 border-orange-200 animate-pulse" : "bg-green-50 text-green-700 border-green-200"}`}>
+                    {selectedMelt.status === "RUNNING" ? <Flame size={14}/> : <CheckCircle size={14} />} {selectedMelt.status}
+                 </span>
+                 <p className="text-xs text-gray-500 mt-2 font-medium">Started: {new Date(selectedMelt.date).toLocaleString()}</p>
+                 {selectedMelt.end_time && (
+                    <p className="text-xs text-gray-500 mt-1 font-medium">Completed: {new Date(selectedMelt.end_time).toLocaleString()}</p>
+                 )}
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
+                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Issued</p>
+                 <p className="text-2xl font-black text-gray-800">
+                    {formatWeight(selectedMelt.issue_weight, selectedMelt.unit)}
+                    {(selectedMelt.issue_pieces || 0) > 0 && <span className="text-[11px] text-gray-400 ml-2 font-bold uppercase tracking-wider">({selectedMelt.issue_pieces} pcs)</span>}
+                 </p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-xl border border-green-100 flex flex-col justify-center">
+                 <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-1">Pure Extracted</p>
+                 <p className="text-2xl font-black text-green-700">
+                    {selectedMelt.return_weight ? formatWeight(selectedMelt.return_weight, selectedMelt.unit) : "-"}
+                    {(selectedMelt.return_pieces || 0) > 0 && <span className="text-[11px] text-green-600/60 ml-2 font-bold uppercase tracking-wider">({selectedMelt.return_pieces} pcs)</span>}
+                 </p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
+                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Recoverable Scrap</p>
+                 <p className="text-xl font-black text-gray-700">
+                    {selectedMelt.scrap_weight !== null ? formatWeight(selectedMelt.scrap_weight, selectedMelt.unit) : "-"}
+                 </p>
+              </div>
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col justify-center">
+                 <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">Permanent Loss</p>
+                 <p className="text-xl font-black text-red-600">
+                    {selectedMelt.loss_weight !== null ? formatWeight(selectedMelt.loss_weight, selectedMelt.unit) : "-"}
+                 </p>
+              </div>
+            </div>
+
+            {selectedMelt.description && (
+              <div className="mt-4 bg-blue-50/50 border border-blue-100 p-5 rounded-xl text-left">
+                 <p className="text-[10px] font-bold text-blue-800 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileText size={12}/> Process Operator Notes</p>
+                 <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
+                   {selectedMelt.description}
+                 </p>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
 
       <ConfirmModal

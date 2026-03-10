@@ -561,18 +561,23 @@ const ProductionJobs = () => {
               {filteredProcesses.map((p) => (
                 <tr
                   key={`${p.stage}-${p.id}`}
-                  className="hover:bg-gray-50 border-b border-gray-50 transition-colors"
+                  onClick={() => openViewModal(p.job_number)}
+                  className="hover:bg-blue-50/50 cursor-pointer border-b border-gray-50 transition-colors"
                 >
-                  <td className="p-2 px-3">
-                    <div className="font-bold text-gray-800">
+                  <td className="p-4">
+                    <div className="font-bold text-gray-800 text-base">
                       {p.job_number}
                     </div>
-                    <div className="text-xs text-gray-500">{p.job_name}</div>
+                    {p.description && (
+                      <div className="text-xs text-gray-500 mt-1 truncate max-w-[150px]" title={p.description}>
+                        {p.description}
+                      </div>
+                    )}
                   </td>
-                  <td className="p-2 px-3 font-bold text-blue-800">
+                  <td className="p-4 font-bold text-blue-800">
                     {p.stage}
                   </td>
-                  <td className="p-2 px-3 flex flex-col items-start gap-1">
+                  <td className="p-4 flex flex-col items-start gap-1">
                     <span
                       className={`px-2 py-1 rounded-md text-xs font-bold ${p.metal_type === "Gold" ? "bg-yellow-100 text-yellow-800" : "bg-gray-200 text-gray-700"}`}
                     >
@@ -582,14 +587,14 @@ const ProductionJobs = () => {
                       {p.category}
                     </span>
                   </td>
-                  <td className="p-2 px-3">
+                  <td className="p-4">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-bold border ${p.status === "PENDING" ? "bg-orange-50 text-orange-700 border-orange-200" : p.status === "RUNNING" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"}`}
                     >
                       {p.status}
                     </span>
                   </td>
-                  <td className="p-2 px-3 text-sm font-mono text-gray-700 whitespace-nowrap">
+                  <td className="p-4 text-sm font-mono text-gray-700 whitespace-nowrap">
                     <div>
                       <span className="text-gray-400">Iss:</span>{" "}
                       {formatWeight(
@@ -610,15 +615,16 @@ const ProductionJobs = () => {
                       </>
                     )}
                   </td>
-                  <td className="p-2 px-3">
+                  <td className="p-4">
                     <div className="flex flex-col items-center gap-2">
-                      {p.status === "COMPLETED" && (
+                       {p.status === "COMPLETED" && (
                         <CheckCircle size={20} className="text-green-500" />
                       )}
+                      
                       <div className="grid grid-cols-2 gap-2">
                         {p.status === "PENDING" && (
                           <button
-                            onClick={() => openStartModal(p)}
+                            onClick={(e) => { e.stopPropagation(); openStartModal(p); }}
                             className="bg-orange-500 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <PlayCircle size={14} /> Start Process
@@ -626,7 +632,7 @@ const ProductionJobs = () => {
                         )}
                         {p.status === "RUNNING" && (
                           <button
-                            onClick={() => openCompleteModal(p)}
+                            onClick={(e) => { e.stopPropagation(); openCompleteModal(p); }}
                             className="bg-blue-600 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <ArrowRightCircle size={14} /> Complete Process
@@ -634,33 +640,33 @@ const ProductionJobs = () => {
                         )}
                         {p.status === "COMPLETED" && p.stage !== "Packing" && (
                           <button
-                            onClick={() => openNextStepModal(p)}
+                            onClick={(e) => { e.stopPropagation(); openNextStepModal(p); }}
                             className="bg-blue-100 text-blue-700 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <ArrowRightCircle size={14} /> Start Next Step
                           </button>
                         )}
                         <button
-                          onClick={() => openEditModal(p)}
+                          onClick={(e) => { e.stopPropagation(); openEditModal(p); }}
                           className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                         >
                           <Edit size={14} /> Edit
                         </button>
                         <button
-                          onClick={() => handleDeleteProcess(p)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteProcess(p); }}
                           className="bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                         >
                           <Trash2 size={14} /> Delete
                         </button>
                         <button
-                          onClick={() => handleRevertProcess(p)}
+                          onClick={(e) => { e.stopPropagation(); handleRevertProcess(p); }}
                           className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           title="Revert Step & Re-Balance Stock"
                         >
                           <ArrowDownLeft size={14} /> Revert
                         </button>
                         <button
-                          onClick={() => openViewModal(p.job_number)}
+                          onClick={(e) => { e.stopPropagation(); openViewModal(p.job_number); }}
                           className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
                         >
                           <Eye size={14} /> View
