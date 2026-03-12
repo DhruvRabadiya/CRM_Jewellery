@@ -1,10 +1,10 @@
-import axios from "axios";
+import api from "./axiosConfig";
 
-const API_URL = "http://localhost:3000/api/jobs";
+const API_URL = "/jobs";
 
 export const getFinishedGoods = async () => {
   try {
-    const response = await axios.get(`${API_URL}/finished`);
+    const response = await api.get(`${API_URL}/finished`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;
