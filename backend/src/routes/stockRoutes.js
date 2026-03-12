@@ -8,5 +8,7 @@ router.get("/loss-stats", stockController.getLossStats);
 router.get("/scrap-loss-ledger", stockController.getDetailedScrapAndLoss);
 
 router.post("/add", stockController.addStock);
+router.put("/purchases/:id", stockController.editStockPurchase);
+router.delete("/purchases/:id", stockController.deleteStockPurchase);
 
 module.exports = router;

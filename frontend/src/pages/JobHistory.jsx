@@ -65,6 +65,7 @@ const JobHistory = () => {
   const [history, setHistory] = useState([]);
   const [allProcesses, setAllProcesses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState([]);
 
   const { isAdmin } = useAuth();
 
@@ -85,6 +86,22 @@ const JobHistory = () => {
     } finally {
       setLoading(false);
     }
+
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:3000/api/auth/users", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setUsers(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch users");
+      }
+    };
+    fetchUsers();
   }, [jobNumber]);
 
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
@@ -294,6 +311,7 @@ const JobHistory = () => {
       weight_unit: isSil ? "kg" : "g",
       category: process.category || "",
       description: process.description || "",
+      employee: process.employee || "",
     });
     setIsEditModalOpen(true);
   };
@@ -315,6 +333,9 @@ const JobHistory = () => {
     };
     if (editForm.description !== undefined) {
       payload.description = editForm.description;
+    }
+    if (editForm.employee !== undefined) {
+      payload.employee = editForm.employee;
     }
 
     if (
@@ -356,8 +377,8 @@ const JobHistory = () => {
       category: process.category,
       issue_size:
         process.metal_type === "Silver"
-          ? (remainingWeight / 1000).toString()
-          : remainingWeight.toString(),
+          ? parseFloat((remainingWeight / 1000).toFixed(3)).toString()
+          : parseFloat(remainingWeight.toFixed(3)).toString(),
       issue_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
@@ -615,16 +636,13 @@ const JobHistory = () => {
                               getRemainingStockForRow(h, history, allProcesses) >
                                 0.001 && (
                                 <button
-                                  onClick={() =>
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     openNextStepModal(
                                       h,
-                                      getRemainingStockForRow(
-                                        h,
-                                        history,
-                                        allProcesses,
-                                      ),
-                                    )
-                                  }
+                                      getRemainingStockForRow(h, history, allProcesses)
+                                    );
+                                  }}
                                   className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                                 >
                                   <ArrowRightCircle size={14} /> Start Next
@@ -1173,6 +1191,7 @@ const JobHistory = () => {
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         title={`Edit Job: ${selectedProcess?.job_number} (${selectedProcess?.stage})`}
+        maxWidth="max-w-2xl"
       >
         <form
           onSubmit={handleEditProcess}
@@ -1267,6 +1286,29 @@ const JobHistory = () => {
                 }
                 placeholder="0"
               />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Assigned Employee <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <select
+                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                value={editForm.employee || ""}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    employee: e.target.value,
+                  })
+                }
+              >
+                <option value="" disabled>Select Employee</option>
+                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {(selectedProcess?.status === "COMPLETED" ||

@@ -43,7 +43,6 @@ const createPacking = async (req, res) => {
 
     const processId = await packingService.createPackingProcess(
       job_number,
-      job_name,
       metal_type,
       unit,
       weight,
@@ -72,7 +71,7 @@ const createPacking = async (req, res) => {
 
 const startPacking = async (req, res) => {
   try {
-    const { process_id, issued_weight, issue_pieces } = req.body;
+    const { process_id, issued_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issued_weight);
     const pieces = parseInt(issue_pieces) || 0;
     if (!process_id || isNaN(weight) || weight <= 0)
@@ -127,7 +126,7 @@ const startPacking = async (req, res) => {
       );
     }
 
-    await packingService.startPackingProcess(process_id, weight, pieces);
+    await packingService.startPackingProcess(process_id, weight, pieces, employee, description);
     return formatResponse(res, 200, true, "Packing process started");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

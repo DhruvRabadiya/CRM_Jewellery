@@ -208,8 +208,8 @@ const ProductionJobs = () => {
       category: process.category || sizeOptions[process.metal_type][0],
       issue_size:
         process.metal_type === "Silver"
-          ? (process.return_weight / 1000).toString()
-          : process.return_weight.toString(),
+          ? parseFloat((process.return_weight / 1000).toFixed(3)).toString()
+          : parseFloat(process.return_weight.toFixed(3)).toString(),
       issue_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
@@ -1319,6 +1319,29 @@ const ProductionJobs = () => {
                 onChange={(e) => setEditForm({ ...editForm, issue_pieces: e.target.value })}
                 placeholder="0"
               />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Assigned Employee <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+              </label>
+              <select
+                className="w-full bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                value={editForm.employee}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    employee: e.target.value,
+                  })
+                }
+              >
+                <option value="" disabled>Select Employee</option>
+                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {(selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING") ? (

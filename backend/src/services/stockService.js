@@ -105,6 +105,36 @@ const getPurchases = () => {
   });
 };
 
+const getPurchaseById = (id) => {
+  return new Promise((resolve, reject) => {
+    const query = `SELECT * FROM stock_transactions WHERE id = ?`;
+    db.get(query, [id], (err, row) => {
+      if (err) reject(err);
+      resolve(row);
+    });
+  });
+};
+
+const editPurchase = (id, weight, description) => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE stock_transactions SET weight = ?, description = ? WHERE id = ?`;
+    db.run(query, [weight, description, id], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
+const deletePurchase = (id) => {
+  return new Promise((resolve, reject) => {
+    const query = `DELETE FROM stock_transactions WHERE id = ?`;
+    db.run(query, [id], function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 const getDetailedScrapAndLoss = () => {
   return new Promise((resolve, reject) => {
     // Instead of immutable transaction logs, query the source of truth directly so edits sync retroactively.
@@ -151,5 +181,8 @@ module.exports = {
   addTotalLoss,
   getLossStats,
   getPurchases,
+  getPurchaseById,
+  editPurchase,
+  deletePurchase,
   getDetailedScrapAndLoss,
 };

@@ -72,7 +72,7 @@ const createPress = async (req, res) => {
 
 const startPress = async (req, res) => {
   try {
-    const { process_id, issued_weight, issue_pieces } = req.body;
+    const { process_id, issued_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issued_weight);
     const pieces = parseInt(issue_pieces) || 0;
     if (!process_id || isNaN(weight) || weight <= 0) {
@@ -128,7 +128,7 @@ const startPress = async (req, res) => {
       );
     }
 
-    await pressService.startPressProcess(process_id, weight, pieces);
+    await pressService.startPressProcess(process_id, weight, pieces, employee, description);
     return formatResponse(res, 200, true, "Press process started");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

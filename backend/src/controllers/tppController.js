@@ -72,7 +72,7 @@ const createTpp = async (req, res) => {
 
 const startTpp = async (req, res) => {
   try {
-    const { process_id, issued_weight, issue_pieces } = req.body;
+    const { process_id, issued_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issued_weight);
     const pieces = parseInt(issue_pieces) || 0;
     if (!process_id || isNaN(weight) || weight <= 0)
@@ -127,7 +127,7 @@ const startTpp = async (req, res) => {
       );
     }
 
-    await tppService.startTppProcess(process_id, weight, pieces);
+    await tppService.startTppProcess(process_id, weight, pieces, employee, description);
     return formatResponse(res, 200, true, "TPP process started");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

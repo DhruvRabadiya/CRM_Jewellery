@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { PlusCircle, Coins } from "lucide-react";
+import { PlusCircle, Coins, Edit2, Trash2 } from "lucide-react";
 import {
   getStockData,
   getPurchases,
   getDetailedScrapAndLoss,
+  deletePurchase,
 } from "../api/stockService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 import AddStockForm from "../components/forms/AddStockForm";
+import EditStockForm from "../components/forms/EditStockForm";
 
 const StockManagement = () => {
   const [stock, setStock] = useState(null);
@@ -17,6 +19,9 @@ const StockManagement = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, onConfirm: null });
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -56,6 +61,30 @@ const StockManagement = () => {
   const handleSuccess = () => {
     setIsModalOpen(false);
     fetchStock();
+  };
+
+  const handleDeletePurchase = async (purchase) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Stock Purchase",
+      message: `Are you sure you want to delete this purchase entry? This will permanently deduct the added weight from your opening stock.`,
+      isDestructive: true,
+      confirmText: "Yes, Delete",
+      onConfirm: async () => {
+        try {
+          await deletePurchase(purchase.id);
+          showToast("Purchase deleted successfully!", "success");
+          fetchStock();
+        } catch (error) {
+          showToast(error.message || "Failed to delete purchase", "error");
+        }
+      }
+    });
+  };
+
+  const openEditModal = (purchase) => {
+    setSelectedPurchase(purchase);
+    setIsEditModalOpen(true);
   };
 
   if (loading)
@@ -172,8 +201,9 @@ const StockManagement = () => {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
                 <th className="p-4 font-bold rounded-tl-xl w-48">Date Added</th>
-                <th className="p-4 font-bold rounded-tr-xl">Description</th>
+                <th className="p-4 font-bold">Description</th>
                 <th className="p-4 font-bold text-right">Received Weight</th>
+                <th className="p-4 font-bold text-center rounded-tr-xl">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -181,7 +211,7 @@ const StockManagement = () => {
               0 ? (
                 <tr>
                   <td
-                    colSpan="3"
+                    colSpan="4"
                     className="p-8 text-center text-gray-400 font-medium"
                   >
                     No purchase history found for {activeTab}.
@@ -211,6 +241,16 @@ const StockManagement = () => {
                           ? txn.weight.toFixed(3)
                           : (txn.weight / 1000).toFixed(3)}{" "}
                         {activeTab === "Gold" ? "g" : "kg"}
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex justify-center gap-2">
+                          <button onClick={() => openEditModal(txn)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                            <Edit2 size={16} />
+                          </button>
+                          <button onClick={() => handleDeletePurchase(txn)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -326,6 +366,54 @@ const StockManagement = () => {
           onCancel={() => setIsModalOpen(false)}
           showToast={showToast}
         />
+      </Modal>
+
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title="Edit Stock Purchase"
+      >
+        {selectedPurchase && (
+          <EditStockForm
+            purchase={selectedPurchase}
+            onSuccess={() => { setIsEditModalOpen(false); fetchStock(); }}
+            onCancel={() => setIsEditModalOpen(false)}
+            showToast={showToast}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        title={confirmModal.title}
+      >
+        <div className="space-y-6">
+          <p className="text-gray-600 leading-relaxed font-medium">
+            {confirmModal.message}
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+              className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 shadow-sm transition-all active:scale-95"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                await confirmModal.onConfirm();
+                setConfirmModal({ ...confirmModal, isOpen: false });
+              }}
+              className={`flex-1 font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95 text-white ${
+                confirmModal.isDestructive
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {confirmModal.confirmText || "Confirm"}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

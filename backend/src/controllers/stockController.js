@@ -94,10 +94,69 @@ const getDetailedScrapAndLoss = async (req, res) => {
   }
 };
 
+const editStockPurchase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { weight, description } = req.body;
+    
+    const purchase = await stockService.getPurchaseById(id);
+    if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
+    
+    const newWeight = parseFloat(weight);
+    if (isNaN(newWeight) || newWeight <= 0) {
+      return formatResponse(res, 400, false, "Invalid weight");
+    }
+
+    const diff = newWeight - purchase.weight;
+    
+    // Check if we are reducing weight and if stock permits
+    if (diff < 0) {
+      const currentStock = await stockService.getStockByMetal(purchase.metal_type);
+      if (!currentStock || currentStock.opening_stock < Math.abs(diff)) {
+        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient opening stock available.");
+      }
+    }
+
+    if (diff > 0) {
+      await stockService.updateOpeningStock(purchase.metal_type, diff, true);
+    } else if (diff < 0) {
+      await stockService.updateOpeningStock(purchase.metal_type, Math.abs(diff), false);
+    }
+
+    await stockService.editPurchase(id, newWeight, description || "");
+    return formatResponse(res, 200, true, "Purchase updated successfully");
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const deleteStockPurchase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const purchase = await stockService.getPurchaseById(id);
+    if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
+    
+    const currentStock = await stockService.getStockByMetal(purchase.metal_type);
+    if (!currentStock || currentStock.opening_stock < purchase.weight) {
+      return formatResponse(res, 400, false, "Cannot delete purchase: insufficient opening stock available to refund.");
+    }
+
+    await stockService.updateOpeningStock(purchase.metal_type, purchase.weight, false);
+    await stockService.deletePurchase(id);
+    
+    return formatResponse(res, 200, true, "Purchase deleted and stock refunded successfully");
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   getStock,
   addStock,
   getLossStats,
   getPurchases,
   getDetailedScrapAndLoss,
+  editStockPurchase,
+  deleteStockPurchase,
 };

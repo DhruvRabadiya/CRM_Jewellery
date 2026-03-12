@@ -34,10 +34,10 @@ const createPackingProcess = (
   });
 };
 
-const startPackingProcess = (processId, issued_weight, issue_pieces) => {
+const startPackingProcess = (processId, issued_weight, issue_pieces, employee, description) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE packing_processes SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, start_time = CURRENT_TIMESTAMP WHERE id = ?`;
-    db.run(query, [issued_weight, issue_pieces, processId], function (err) {
+    const query = `UPDATE packing_processes SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, employee = COALESCE(?, employee), description = COALESCE(?, description), start_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(query, [issued_weight, issue_pieces, employee, description, processId], function (err) {
       if (err) reject(err);
       resolve();
     });
@@ -53,7 +53,7 @@ const completePackingProcess = (
   description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE packing_processes SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP, description = COALESCE(?, description) WHERE id = ?`;
+    const query = `UPDATE packing_processes SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) WHERE id = ?`;
     db.run(
       query,
       [return_weight, return_pieces, scrap_weight, loss_weight, description, processId],

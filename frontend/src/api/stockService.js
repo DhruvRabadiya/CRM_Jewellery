@@ -48,3 +48,21 @@ export const getPurchases = async () => {
     throw error;
   }
 };
+
+export const editPurchase = async (id, payload) => {
+  try {
+    const response = await api.put(`/stock/purchases/${id}`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const deletePurchase = async (id) => {
+  try {
+    const response = await api.delete(`/stock/purchases/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};

@@ -29,7 +29,7 @@ const updateMeltingProcess = (
 ) => {
   return new Promise((resolve, reject) => {
     const query = `UPDATE melting_process 
-                       SET return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, status = ?, completed_at = CURRENT_TIMESTAMP, description = COALESCE(?, description) 
+                       SET return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, status = ?, completed_at = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) 
                        WHERE id = ?`;
 
     db.run(
