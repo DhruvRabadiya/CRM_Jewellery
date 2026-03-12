@@ -46,10 +46,10 @@ const createTpp = async (req, res) => {
       job_name,
       metal_type,
       unit,
-      employee,
       weight,
       pieces,
       category,
+      employee,
       description || "",
     );
 
@@ -239,6 +239,7 @@ const editTpp = async (req, res) => {
       issue_pieces,
       return_pieces,
       description,
+      employee,
     } = req.body;
     const newWeight = parseFloat(issued_weight);
 
@@ -325,6 +326,9 @@ const editTpp = async (req, res) => {
     }
     if (description !== undefined) {
       updates.description = description;
+    }
+    if (employee !== undefined) {
+      updates.employee = employee;
     }
 
     if (process.status === "COMPLETED") {
@@ -549,8 +553,26 @@ const revertTpp = async (req, res) => {
       await tppService.editTppProcessUniversal(process_id, updates);
       return formatResponse(res, 200, true, "TPP process reverted to PENDING.");
 
+    } else if (process.status === "PENDING") {
+      if (process.issue_size > 0) {
+        await stockService.updateProcessStock("press", process.metal_type, process.issue_size, true);
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issue_size,
+          `Deleted Queued TPP Job ${process.job_number}`
+        );
+      }
+      await tppService.deleteTppProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        "Pending tpp process queue removed and stock refunded.",
+      );
+
     } else {
-      return formatResponse(res, 400, false, "Only RUNNING or COMPLETED processes can be reverted.");
+      return formatResponse(res, 400, false, "Invalid status for process reversal.");
     }
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

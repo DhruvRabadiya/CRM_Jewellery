@@ -27,6 +27,7 @@ import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
+import { useAuth } from "../context/AuthContext";
 
 const sizeOptions = {
   Gold: [
@@ -64,6 +65,8 @@ const JobHistory = () => {
   const [history, setHistory] = useState([]);
   const [allProcesses, setAllProcesses] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const { isAdmin } = useAuth();
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -513,7 +516,7 @@ const JobHistory = () => {
                     Status
                   </th>
                   <th className="p-2 px-3 font-bold border-b border-gray-100">
-                    Updated Date
+                    Operator / Date
                   </th>
                   <th className="p-2 px-3 font-bold border-b border-gray-100">
                     Issue Weight
@@ -560,8 +563,11 @@ const JobHistory = () => {
                         </span>
                       </td>
                       <td className="p-4 text-gray-500 text-sm whitespace-nowrap">
-                        {new Date(h.date).toLocaleDateString()}{" "}
-                        {new Date(h.date).toLocaleTimeString()}
+                        <div className="font-bold text-blue-800 mb-0.5 flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{h.employee || "Unknown"}</div>
+                        <div className="text-xs text-gray-400 font-medium mt-1 uppercase tracking-wider">
+                          {new Date(h.date).toLocaleDateString()}{" "}
+                          {new Date(h.date).toLocaleTimeString()}
+                        </div>
                       </td>
                       <td className="p-4 font-black text-gray-700 whitespace-nowrap">
                         {formatWeight(
@@ -629,40 +635,46 @@ const JobHistory = () => {
                             </div>
                           </>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openEditModal(h); }}
-                          className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="lucide lucide-edit"
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEditModal(h); }}
+                            className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteProcess(h); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded font-bold hover:bg-red-100 transition-colors shadow-sm whitespace-nowrap"
-                          title="Delete Process Row"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRevertProcess(h); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 rounded font-bold hover:bg-purple-100 transition-colors shadow-sm whitespace-nowrap"
-                          title="Revert Job Backwards"
-                        >
-                          <ArrowDownLeft size={16} />
-                        </button>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="lucide lucide-edit"
+                            >
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </svg>
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteProcess(h); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded font-bold hover:bg-red-100 transition-colors shadow-sm whitespace-nowrap"
+                            title="Delete Process Row"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRevertProcess(h); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 rounded font-bold hover:bg-purple-100 transition-colors shadow-sm whitespace-nowrap"
+                            title="Revert Job Backwards"
+                          >
+                            <ArrowDownLeft size={16} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                 ))}
@@ -1385,6 +1397,12 @@ const JobHistory = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+                 <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">Operator</p>
+                 <p className="text-xl font-black text-blue-800">
+                    {selectedProcess.employee || "Unknown"}
+                 </p>
+              </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Issued</p>
                  <p className="text-2xl font-black text-gray-800">

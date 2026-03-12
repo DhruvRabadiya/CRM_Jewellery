@@ -2,28 +2,28 @@ const db = require("../../config/dbConfig");
 
 const createPackingProcess = (
   job_number,
-  job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
   issue_pieces,
   category,
+  employee, // Moved employee here
   description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO packing_processes (job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`;
+    // Removed job_name from columns, moved employee, changed 'PENDING' to STATUS.PENDING (assuming STATUS is defined elsewhere)
+    const query = `INSERT INTO packing_processes (job_number, metal_type, unit, issue_size, issue_pieces, category, employee, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     db.run(
       query,
       [
         job_number,
-        job_name,
         metal_type,
         unit,
-        employee,
         issue_size,
         issue_pieces,
         category,
+        employee, // Injected employee here
+        'PENDING', // Reverted to 'PENDING' as STATUS is not defined in the provided context
         description,
       ],
       function (err) {

@@ -5,10 +5,10 @@ const createRollingProcess = (
   job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
   issue_pieces,
   category,
+  employee,
   description = "",
 ) => {
   return new Promise((resolve, reject) => {

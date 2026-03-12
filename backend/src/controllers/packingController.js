@@ -46,10 +46,10 @@ const createPacking = async (req, res) => {
       job_name,
       metal_type,
       unit,
-      employee,
       weight,
       pieces,
       category,
+      employee,
       description || "",
     );
 
@@ -248,6 +248,7 @@ const editPacking = async (req, res) => {
       issue_pieces,
       return_pieces,
       description,
+      employee,
     } = req.body;
     const newWeight = parseFloat(issued_weight);
 
@@ -334,6 +335,9 @@ const editPacking = async (req, res) => {
     }
     if (description !== undefined) {
       updates.description = description;
+    }
+    if (employee !== undefined) {
+      updates.employee = employee;
     }
 
     if (process.status === "COMPLETED") {
@@ -554,8 +558,26 @@ const revertPacking = async (req, res) => {
       await packingService.editPackingProcessUniversal(process_id, updates);
       return formatResponse(res, 200, true, "Packing process reverted to PENDING.");
 
+    } else if (process.status === "PENDING") {
+      if (process.issue_size > 0) {
+        await stockService.updateProcessStock("tpp", process.metal_type, process.issue_size, true);
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issue_size,
+          `Deleted Queued Packing Job ${process.job_number}`
+        );
+      }
+      await packingService.deletePackingProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        "Pending packing process queue removed and stock refunded.",
+      );
+
     } else {
-      return formatResponse(res, 400, false, "Only RUNNING or COMPLETED processes can be reverted.");
+      return formatResponse(res, 400, false, "Invalid status for process reversal.");
     }
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

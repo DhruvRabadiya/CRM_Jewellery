@@ -5,10 +5,11 @@ const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const startMelting = async (req, res) => {
   try {
-    const { metal_type, weight_unit, issue_weight, issue_pieces, description } = req.body;
+    const { metal_type, weight_unit, issue_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issue_weight);
     const pieces = parseInt(issue_pieces) || 0;
     const unit = weight_unit || "g";
+    const assignedEmployee = employee || "Unknown";
 
     if (!metal_type || isNaN(weight) || weight <= 0) {
       return formatResponse(
@@ -30,6 +31,7 @@ const startMelting = async (req, res) => {
       unit,
       weight,
       pieces,
+      assignedEmployee,
       description || "",
     );
     await stockService.logTransaction(
@@ -170,6 +172,7 @@ const editMeltingProcess = async (req, res) => {
       issue_pieces,
       return_pieces,
       description,
+      employee,
     } = req.body;
 
     const newWeight = parseFloat(issued_weight);
@@ -242,6 +245,7 @@ const editMeltingProcess = async (req, res) => {
           : process.issue_pieces,
     };
     if (description !== undefined) updates.description = description;
+    if (employee !== undefined) updates.employee = employee;
 
     if (process.status === STATUS.COMPLETED) {
       // Handle Dhal Stock diffs (Return goes to Dhal in melting)

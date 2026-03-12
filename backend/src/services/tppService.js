@@ -5,13 +5,14 @@ const createTppProcess = (
   job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
   issue_pieces,
   category,
+  employee, // Moved employee here
   description = "",
 ) => {
   return new Promise((resolve, reject) => {
+    // Updated query to reflect the new position of employee and keep job_name
     const query = `INSERT INTO tpp_processes (job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`;
     db.run(
       query,
@@ -20,7 +21,7 @@ const createTppProcess = (
         job_name,
         metal_type,
         unit,
-        employee,
+        employee, // Updated position in the values array
         issue_size,
         issue_pieces,
         category,

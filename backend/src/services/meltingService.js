@@ -1,21 +1,19 @@
 const db = require("../../config/dbConfig");
 const { STATUS } = require("../utils/constants");
 
-const createMeltingProcess = (
-  metalType,
-  unit,
-  issueWeight,
-  issuePieces = 0,
-  description = "",
-) => {
+const createMeltingProcess = (metal_type, unit, issue_weight, pieces, employee, description) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO melting_process (metal_type, unit, issue_weight, issue_pieces, status, description) VALUES (?, ?, ?, ?, ?, ?)`;
+    const query = `
+      INSERT INTO melting_process 
+      (metal_type, unit, issue_weight, issue_pieces, employee, description, status) 
+      VALUES (?, ?, ?, ?, ?, ?, 'RUNNING')
+    `;
     db.run(
       query,
-      [metalType, unit, issueWeight, issuePieces, STATUS.RUNNING, description],
+      [metal_type, unit, issue_weight, pieces, employee, description],
       function (err) {
         if (err) reject(err);
-        resolve(this.lastID);
+        else resolve(this.lastID);
       },
     );
   });

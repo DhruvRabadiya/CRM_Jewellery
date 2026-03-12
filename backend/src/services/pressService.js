@@ -5,14 +5,15 @@ const createPressProcess = (
   job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
   issue_pieces,
   category,
+  employee, // Moved employee here
   description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO press_processes (job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`;
+    // Updated query to reflect new employee position and column
+    const query = `INSERT INTO press_processes (job_number, job_name, metal_type, unit, issue_size, issue_pieces, category, employee, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`;
     db.run(
       query,
       [
@@ -20,10 +21,10 @@ const createPressProcess = (
         job_name,
         metal_type,
         unit,
-        employee,
         issue_size,
         issue_pieces,
         category,
+        employee, // Injected employee into the array at the new position
         description,
       ],
       function (err) {

@@ -2,12 +2,13 @@ import api from "./axiosConfig";
 
 const API_URL = "/melting";
 
-export const startMelt = async (metalType, issueWeight, issuePieces = 0, description = "") => {
+export const startMelt = async (metalType, issueWeight, issuePieces = 0, employee = "Unknown", description = "") => {
   try {
     const response = await api.post(`${API_URL}/start`, {
       metal_type: metalType,
       issue_weight: parseFloat(issueWeight),
       issue_pieces: issuePieces,
+      employee,
       description,
     });
     return response.data;

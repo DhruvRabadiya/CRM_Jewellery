@@ -8,7 +8,7 @@ import {
   ArrowDownLeft,
   X,
   FileText,
-  Weight,
+  Scale,
   AlertTriangle,
 } from "lucide-react";
 import {
@@ -24,6 +24,7 @@ import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
+import { useAuth } from "../context/AuthContext";
 
 const MeltingProcess = () => {
   const [activeMelts, setActiveMelts] = useState([]);
@@ -38,6 +39,8 @@ const MeltingProcess = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedMelt, setSelectedMelt] = useState(null);
 
+  const { user, isAdmin } = useAuth();
+
   // Form States
   const [startForm, setStartForm] = useState({
     metal_type: "Gold",
@@ -45,6 +48,7 @@ const MeltingProcess = () => {
     issue_pieces: "",
     weight_unit: "g",
     description: "",
+    employee: "",
   });
   const [completeForm, setCompleteForm] = useState({
     return_weight: "",
@@ -94,8 +98,25 @@ const MeltingProcess = () => {
     }
   }, []);
 
+  const [users, setUsers] = useState([]);
+
   useEffect(() => {
     fetchMelts();
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:3000/api/auth/users", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setUsers(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch users");
+      }
+    };
+    fetchUsers();
   }, [fetchMelts]);
 
   // Handle Start Melt
@@ -123,6 +144,7 @@ const MeltingProcess = () => {
         startForm.metal_type,
         finalWeight,
         pieces,
+        startForm.employee || user?.username || "Unknown",
         startForm.description || "",
       );
       showToast("Melting Started Successfully!", "success");
@@ -133,6 +155,7 @@ const MeltingProcess = () => {
         issue_pieces: "",
         weight_unit: "g",
         description: "",
+        employee: "",
       });
       fetchMelts();
     } catch (error) {
@@ -199,7 +222,7 @@ const MeltingProcess = () => {
       scrap_weight: "",
       return_pieces: "",
       weight_unit: melt.metal_type === "Silver" ? "kg" : "g",
-      description: "",
+      description: melt.description || "",
     });
     setIsCompleteModalOpen(true);
   };
@@ -259,6 +282,9 @@ const MeltingProcess = () => {
     if (editForm.description !== undefined) {
       payload.description = editForm.description;
     }
+    if (editForm.employee !== undefined) {
+      payload.employee = editForm.employee;
+    }
 
     if (selectedMelt?.status === "COMPLETED") {
       let retW = parseFloat(editForm.return_weight) || 0;
@@ -303,6 +329,7 @@ const MeltingProcess = () => {
       return_pieces: melt.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
       description: melt.description || "",
+      employee: melt.employee || "",
     });
     setIsEditModalOpen(true);
   };
@@ -418,13 +445,15 @@ const MeltingProcess = () => {
                   >
                     <CheckCircle size={18} /> Complete Process
                   </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleRevertMelt(melt); }}
-                    className="px-4 bg-purple-50 text-purple-600 font-bold rounded-xl hover:bg-purple-100 transition-colors shadow-sm"
-                    title="Revert Process"
-                  >
-                    <ArrowDownLeft size={18} />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRevertMelt(melt); }}
+                      className="px-4 bg-purple-50 text-purple-600 font-bold rounded-xl hover:bg-purple-100 transition-colors shadow-sm"
+                      title="Revert Process"
+                    >
+                      <ArrowDownLeft size={18} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -509,6 +538,29 @@ const MeltingProcess = () => {
               />
             </div>
 
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Assigned Employee
+              </label>
+              <select
+                className="w-full bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                value={startForm.employee}
+                onChange={(e) =>
+                  setStartForm({
+                    ...startForm,
+                    employee: e.target.value,
+                  })
+                }
+              >
+                <option value="" disabled>Select Employee</option>
+                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
@@ -580,7 +632,7 @@ const MeltingProcess = () => {
               {/* Return Input */}
               <div className="col-span-1">
                 <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                  <Weight size={14} /> Pure Dhal
+                  <Scale size={14} /> Pure Dhal
                 </label>
                 <input
                   type="number"
@@ -684,6 +736,7 @@ const MeltingProcess = () => {
                 <th className="p-4 font-bold">Metal Type</th>
                 <th className="p-4 font-bold">Status</th>
                 <th className="p-4 font-bold">Iss Weight / Pcs</th>
+                <th className="p-4 font-bold">Assigned To</th>
                 <th className="p-4 font-bold">Ret Weight / Pcs</th>
                 <th className="p-4 font-bold">Scrap / Loss</th>
                 <th className="p-4 font-bold text-right">Actions</th>
@@ -721,6 +774,9 @@ const MeltingProcess = () => {
                       </span>
                     )}
                   </td>
+                  <td className="p-4 font-bold text-gray-600 bg-gray-50 rounded-lg">
+                    {h.employee || "Unknown"}
+                  </td>
                   <td className="p-4 font-bold text-green-600">
                     {h.return_weight
                       ? formatWeight(h.return_weight, h.unit)
@@ -743,25 +799,31 @@ const MeltingProcess = () => {
                     </span>
                   </td>
                   <td className="p-4 flex justify-end gap-2 text-sm">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openEditModal(h); }}
-                      className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteMelt(h); }}
-                      className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRevertMelt(h); }}
-                      className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
-                      title="Revert Process Backwards"
-                    >
-                      Revert
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEditModal(h); }}
+                        className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteMelt(h); }}
+                        className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        Delete
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRevertMelt(h); }}
+                        className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                        title="Revert Process Backwards"
+                      >
+                        Revert
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -920,6 +982,29 @@ const MeltingProcess = () => {
               </div>
             )}
 
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Assigned Employee
+              </label>
+              <select
+                className="w-full bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                value={editForm.employee || ""}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    employee: e.target.value,
+                  })
+                }
+              >
+                <option value="" disabled>Select Employee</option>
+                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
               <label className="block text-xs font-bold text-blue-800 mb-1.5 uppercase tracking-wide">
                 Description / Notes <span className="text-blue-600/70 font-normal tracking-normal">(Optional)</span>
@@ -977,6 +1062,12 @@ const MeltingProcess = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+                 <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">Operator</p>
+                 <p className="text-xl font-black text-blue-800">
+                    {selectedMelt.employee || "Unknown"}
+                 </p>
+              </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Issued</p>
                  <p className="text-2xl font-black text-gray-800">

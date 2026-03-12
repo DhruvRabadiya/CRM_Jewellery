@@ -178,7 +178,7 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // Safe migration for description column across all process tables
+  // Safe migration for description and employee columns across all process tables
   const processTables = [
     "melting_process",
     "rolling_processes",
@@ -189,18 +189,67 @@ db.serialize(() => {
 
   processTables.forEach((tableName) => {
     db.all(`PRAGMA table_info(${tableName})`, (err, columns) => {
-      if (!err && columns && !columns.some((col) => col.name === "description")) {
-        db.run(
-          `ALTER TABLE ${tableName} ADD COLUMN description TEXT DEFAULT ''`,
-          (alterErr) => {
-            if (alterErr)
-              console.error(`Error migrating description for ${tableName}:`, alterErr.message);
-            else
-              console.log(`Successfully added description column to ${tableName}`);
-          },
-        );
+      if (!err && columns) {
+          // Migrate Description
+          if (!columns.some((col) => col.name === "description")) {
+            db.run(
+              `ALTER TABLE ${tableName} ADD COLUMN description TEXT DEFAULT ''`,
+              (alterErr) => {
+                if (alterErr)
+                  console.error(`Error migrating description for ${tableName}:`, alterErr.message);
+                else
+                  console.log(`Successfully added description column to ${tableName}`);
+              },
+            );
+          }
+          // Migrate Employee Tracker
+          if (!columns.some((col) => col.name === "employee")) {
+            db.run(
+              `ALTER TABLE ${tableName} ADD COLUMN employee TEXT DEFAULT 'Unknown'`,
+              (alterErr) => {
+                if (alterErr)
+                  console.error(`Error migrating employee tracker for ${tableName}:`, alterErr.message);
+                else
+                  console.log(`Successfully added employee column to ${tableName}`);
+              },
+            );
+          }
       }
     });
+  });
+
+  // 6. USERS (Authentication & Authorization)
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT CHECK( role IN ('ADMIN', 'EMPLOYEE') ) NOT NULL DEFAULT 'EMPLOYEE',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`, (err) => {
+      if (!err) {
+         // Check if any users exist, if not seed the default ADMIN
+         db.get("SELECT COUNT(*) as count FROM users", async (err, row) => {
+             if (!err && row.count === 0) {
+                 try {
+                     const bcrypt = require("bcryptjs");
+                     const salt = await bcrypt.genSalt(10);
+                     const hashed = await bcrypt.hash("admin123", salt);
+                     
+                     db.run(`INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'ADMIN')`, ['admin', hashed], (insertErr) => {
+                         if (insertErr) {
+                             console.error("Failed to seed default admin user:", insertErr.message);
+                         } else {
+                             console.log("Successfully seeded default Admin account (username: admin)");
+                         }
+                     });
+                 } catch (hashError) {
+                     console.error("Failed to hash default admin password:", hashError.message);
+                 }
+             }
+         });
+      } else {
+          console.error("Failed to create users table:", err.message);
+      }
   });
 });
 

@@ -46,10 +46,10 @@ const createRolling = async (req, res) => {
       job_name,
       metal_type,
       unit,
-      employee,
       weight,
       pieces,
       category,
+      employee,
       description || "",
     );
 
@@ -245,6 +245,7 @@ const editRolling = async (req, res) => {
       issue_pieces,
       return_pieces,
       description,
+      employee,
     } = req.body;
     const newWeight = parseFloat(issued_weight);
 
@@ -325,6 +326,9 @@ const editRolling = async (req, res) => {
     }
     if (description !== undefined) {
       updates.description = description;
+    }
+    if (employee !== undefined) {
+      updates.employee = employee;
     }
 
     if (process.status === "COMPLETED") {
@@ -552,8 +556,26 @@ const revertRolling = async (req, res) => {
       await rollingService.editRollingProcessUniversal(process_id, updates);
       return formatResponse(res, 200, true, "Rolling process reverted to PENDING.");
 
+    } else if (process.status === "PENDING") {
+      if (process.issue_size > 0) {
+        await stockService.updateDhalStock(process.metal_type, process.issue_size, true);
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issue_size,
+          `Deleted Queued Rolling Job ${process.job_number}`
+        );
+      }
+      await rollingService.deleteRollingProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        "Pending rolling process queue removed and stock refunded.",
+      );
+
     } else {
-      return formatResponse(res, 400, false, "Only RUNNING or COMPLETED processes can be reverted.");
+      return formatResponse(res, 400, false, "Invalid status for process reversal.");
     }
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

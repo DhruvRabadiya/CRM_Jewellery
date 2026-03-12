@@ -7,34 +7,48 @@ import MeltingProcess from "./pages/MeltingProcess";
 import ProductionJobs from "./pages/ProductionJobs";
 import FinishedGoods from "./pages/FinishedGoods";
 import JobHistory from "./pages/JobHistory";
+import Login from "./pages/Login";
+import EmployeeManagement from "./pages/EmployeeManagement";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 
-// Placeholder pages for now (We will build these next)
-const Placeholder = ({ title }) => (
-  <div className="p-10 text-center text-gray-500">
-    <h2 className="text-2xl font-bold mb-2">{title}</h2>
-    <p>Module coming soon...</p>
-  </div>
-);
+// Guard wrapper to ensure user is logged in
+const ProtectedRoute = ({ children, requireAdmin }) => {
+  const { user, loading, isAdmin } = useAuth();
+  
+  if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (requireAdmin && !isAdmin) return <Navigate to="/" replace />; // Lock out employees from admin pages
+
+  return children;
+};
 
 function App() {
   return (
     <BrowserRouter>
-      <MainLayout>
+      <AuthProvider>
         <Routes>
-          {/* Dashboard is the default home page */}
-          <Route path="/" element={<Dashboard />} />
+          {/* Public Route */}
+          <Route path="/login" element={<Login />} />
 
-          {/* Routes for the pages we will build later */}
-          <Route path="/stock" element={<StockManagement />} />
-          <Route path="/melting" element={<MeltingProcess />} />
-          <Route path="/production" element={<ProductionJobs />} />
-          <Route path="/finished" element={<FinishedGoods />} />
-          <Route path="/job-history/:jobNumber" element={<JobHistory />} />
+          {/* Protected Routes inside MainLayout */}
+          <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+            
+            {/* Standard Employee/Admin Routes */}
+            <Route index element={<Dashboard />} />
+            <Route path="stock" element={<StockManagement />} />
+            <Route path="melting" element={<MeltingProcess />} />
+            <Route path="production" element={<ProductionJobs />} />
+            <Route path="finished" element={<FinishedGoods />} />
+            <Route path="job-history/:jobNumber" element={<JobHistory />} />
 
-          {/* Fallback for unknown routes */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Admin-Only Routes */}
+            <Route path="employees" element={<ProtectedRoute requireAdmin={true}><EmployeeManagement /></ProtectedRoute>} />
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Routes>
-      </MainLayout>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

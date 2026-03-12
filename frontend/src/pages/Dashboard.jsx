@@ -54,9 +54,9 @@ const Dashboard = () => {
         procRes.data.forEach((p) => {
           if (metrics[p.metal_type] && metrics[p.metal_type][p.stage]) {
             if (p.status === "PENDING")
-              metrics[p.metal_type][p.stage].pending += p.issue_size || 0;
+              metrics[p.metal_type][p.stage].pending += Number(p.issue_size) || 0;
             if (p.status === "RUNNING")
-              metrics[p.metal_type][p.stage].running += p.issued_weight || 0;
+              metrics[p.metal_type][p.stage].running += Number(p.issued_weight) || 0;
           }
         });
         setProcessMetrics(metrics);

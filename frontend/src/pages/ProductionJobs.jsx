@@ -9,7 +9,7 @@ import {
   AlertTriangle,
   Hash,
   ArrowDownLeft,
-  Weight,
+  Scale,
   Search,
   Eye,
   Trash2,
@@ -30,6 +30,7 @@ import Toast from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const sizeOptions = {
   Gold: [
@@ -79,6 +80,8 @@ const ProductionJobs = () => {
   });
   const navigate = useNavigate();
 
+  const { user, isAdmin } = useAuth();
+
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
@@ -98,6 +101,7 @@ const ProductionJobs = () => {
     job_name: "",
     weight_unit: "g",
     description: "",
+    employee: "",
   });
 
   const [startForm, setStartForm] = useState({
@@ -105,6 +109,7 @@ const ProductionJobs = () => {
     issue_pieces: "",
     weight_unit: "g",
     description: "",
+    employee: "",
   });
   const [completeForm, setCompleteForm] = useState({
     return_weight: "",
@@ -140,8 +145,25 @@ const ProductionJobs = () => {
     }
   }, []);
 
+  const [users, setUsers] = useState([]);
+
   useEffect(() => {
     fetchProcesses();
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:3000/api/auth/users", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setUsers(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch users");
+      }
+    };
+    fetchUsers();
   }, [fetchProcesses]);
 
   const openCreateModal = async () => {
@@ -160,6 +182,7 @@ const ProductionJobs = () => {
           job_name: "",
           weight_unit: "g",
           description: "",
+          employee: user?.username || "",
         }));
         setIsNextStep(false);
         setIsCreateModalOpen(true);
@@ -190,6 +213,7 @@ const ProductionJobs = () => {
       issue_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
+      employee: user?.username || "",
     });
     setIsNextStep(true);
     setIsCreateModalOpen(true);
@@ -214,7 +238,7 @@ const ProductionJobs = () => {
         job_name: createForm.job_number, // Default to job_number internally to prevent NULL
         metal_type: createForm.metal_type,
         unit: createForm.weight_unit,
-        employee: "Worker",
+        employee: createForm.employee || user?.username || "Unknown",
         issue_size: weight,
         issue_pieces: createForm.issue_pieces || 0,
         category: createForm.category,
@@ -238,7 +262,8 @@ const ProductionJobs = () => {
           : process.issue_size || "",
       issue_pieces: process.issue_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
-      description: "",
+      description: process.description || "",
+      employee: process.employee || user?.username || "",
     });
     setIsStartModalOpen(true);
   };
@@ -258,6 +283,7 @@ const ProductionJobs = () => {
         issued_weight: weight,
         issue_pieces: startForm.issue_pieces || 0,
         description: startForm.description || "",
+        employee: startForm.employee || user?.username || "Unknown",
       });
       showToast("Started!", "success");
       setIsStartModalOpen(false);
@@ -287,6 +313,7 @@ const ProductionJobs = () => {
       weight_unit: isSil ? "kg" : "g",
       category: process.category || "",
       description: process.description || "",
+      employee: process.employee || "",
     });
     setIsEditModalOpen(true);
   };
@@ -308,6 +335,9 @@ const ProductionJobs = () => {
     };
     if (editForm.description !== undefined) {
       payload.description = editForm.description;
+    }
+    if (editForm.employee !== undefined) {
+      payload.employee = editForm.employee;
     }
 
     if (
@@ -381,7 +411,7 @@ const ProductionJobs = () => {
       scrap_weight: "",
       return_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
-      description: "",
+      description: process.description || "",
     });
     setIsCompleteModalOpen(true);
   };
@@ -568,8 +598,14 @@ const ProductionJobs = () => {
                     <div className="font-bold text-gray-800 text-base">
                       {p.job_number}
                     </div>
+                    {p.employee && (
+                      <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline mr-1"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        {p.employee}
+                      </div>
+                    )}
                     {p.description && (
-                      <div className="text-xs text-gray-500 mt-1 truncate max-w-[150px]" title={p.description}>
+                      <div className="text-xs text-gray-500 mt-1.5 truncate max-w-[150px]" title={p.description}>
                         {p.description}
                       </div>
                     )}
@@ -646,25 +682,31 @@ const ProductionJobs = () => {
                             <ArrowRightCircle size={14} /> Start Next Step
                           </button>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openEditModal(p); }}
-                          className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                        >
-                          <Edit size={14} /> Edit
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteProcess(p); }}
-                          className="bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                        >
-                          <Trash2 size={14} /> Delete
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRevertProcess(p); }}
-                          className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                          title="Revert Step & Re-Balance Stock"
-                        >
-                          <ArrowDownLeft size={14} /> Revert
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEditModal(p); }}
+                            className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                          >
+                            <Edit size={14} /> Edit
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteProcess(p); }}
+                            className="bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRevertProcess(p); }}
+                            className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
+                            title="Revert Step & Re-Balance Stock"
+                          >
+                            <ArrowDownLeft size={14} /> Revert
+                          </button>
+                        )}
                         <button
                           onClick={(e) => { e.stopPropagation(); openViewModal(p.job_number); }}
                           className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
@@ -867,6 +909,29 @@ const ProductionJobs = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Assigned Employee
+              </label>
+              <select
+                className="w-full bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                value={createForm.employee}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    employee: e.target.value,
+                  })
+                }
+              >
+                <option value="" disabled>Select Employee</option>
+                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-span-1">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Issue Size (Previous Pool)
               </label>
               <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 overflow-hidden transition-colors">
@@ -974,6 +1039,29 @@ const ProductionJobs = () => {
                   <option value="kg">kg</option>
                 </select>
               </div>
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Assigned Employee
+              </label>
+              <select
+                className="w-full bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                value={startForm.employee}
+                onChange={(e) =>
+                  setStartForm({
+                    ...startForm,
+                    employee: e.target.value,
+                  })
+                }
+              >
+                <option value="" disabled>Select Employee</option>
+                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="col-span-1 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
@@ -1286,6 +1374,27 @@ const ProductionJobs = () => {
             )}
 
             <div className={`col-span-1 flex flex-col ${selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING" ? "mt-4" : ""}`}>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Assigned Employee
+              </label>
+              <select
+                className="w-full mb-3 bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                value={editForm.employee || ""}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    employee: e.target.value,
+                  })
+                }
+              >
+                <option value="" disabled>Select Employee</option>
+                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
+
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
               </label>
