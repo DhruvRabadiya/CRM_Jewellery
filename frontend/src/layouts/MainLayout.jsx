@@ -33,9 +33,9 @@ const MainLayout = () => {
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen print:h-auto print:block bg-gray-50">
       {/* SIDEBAR */}
-      <aside className={`bg-white border-r border-gray-200 flex flex-col shadow-lg z-10 transition-all duration-300 ${isSidebarOpen ? "w-64" : "w-16"}`}>
+      <aside className={`print:hidden bg-white border-r border-gray-200 flex flex-col shadow-lg z-10 transition-all duration-300 ${isSidebarOpen ? "w-64" : "w-16"}`}>
         {/* Logo Area */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-100 py-2">
           {isSidebarOpen && (
@@ -45,7 +45,7 @@ const MainLayout = () => {
           )}
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1 rounded-md text-gray-500 hover:bg-gray-100 transition-colors mx-auto flex-shrink-0"
+            className="p-1 rounded-md text-gray-500 hover:bg-gray-100 transition-colors mx-auto shrink-0"
           >
             {isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
           </button>
@@ -106,7 +106,7 @@ const MainLayout = () => {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-y-auto bg-gray-50/50 p-8">
+      <main className="flex-1 overflow-y-auto print:overflow-visible bg-gray-50/50 p-8 print:p-0 print:bg-white text-black">
         <Outlet />
       </main>
     </div>

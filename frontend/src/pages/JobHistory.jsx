@@ -12,6 +12,7 @@ import {
   Trash2,
   ArrowRightCircle,
   PlusCircle,
+  Printer,
 } from "lucide-react";
 import {
   getCombinedProcesses,
@@ -492,6 +493,7 @@ const JobHistory = () => {
 
   return (
     <div className="p-6 relative w-full">
+      <div className="print:hidden">
       {toast && (
         <Toast
           message={toast.message}
@@ -506,18 +508,26 @@ const JobHistory = () => {
         <ArrowLeft size={20} /> Back to Production Floor
       </button>
 
-      <div className="flex items-center gap-3 mb-8">
-        <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
-          <History size={28} />
+      <div className="flex justify-between items-start mb-8 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
+            <History size={28} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+              Timeline: {jobNumber}
+            </h1>
+            <p className="text-gray-500 font-medium">
+              Complete Stage Progression History
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            Timeline: {jobNumber}
-          </h1>
-          <p className="text-gray-500 font-medium">
-            Complete Stage Progression History
-          </p>
-        </div>
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-2 bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-gray-900 transition-colors shadow-sm cursor-pointer"
+        >
+          <Printer size={18} /> Print Job Sheet
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1494,6 +1504,83 @@ const JobHistory = () => {
         isDestructive={confirmModal.isDestructive}
         confirmText={confirmModal.confirmText}
       />
+      </div>
+
+      {/* PRINTABLE JOB SHEET */}
+      <div className="hidden print:block pt-4 bg-white text-black w-full text-left">
+        <div className="text-center mb-8 border-b-2 border-gray-800 pb-4">
+          <h1 className="text-4xl font-black uppercase tracking-widest mb-2">JewelCRM Production</h1>
+          <h2 className="text-2xl font-bold text-gray-700">Job Sheet: {jobNumber}</h2>
+          <p className="text-gray-500 font-bold mt-2">Printed: {new Date().toLocaleString()}</p>
+        </div>
+
+        {history.length > 0 && (
+          <div className="mb-6 grid grid-cols-2 gap-4 text-sm font-bold border border-gray-400 p-4 rounded-lg">
+            <div>Metal Type: {history[0].metal_type}</div>
+            <div>Category: {history[0].category || "N/A"}</div>
+            <div>Initial Issue Weight: {formatWeight(history[0].issued_weight || history[0].issue_size || 0, history[0].unit)}</div>
+            <div>Start Date: {new Date(history[0].date).toLocaleString()}</div>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {history.map((h, index) => (
+            <div key={`print-${h.id}`} className={`border-2 border-gray-300 rounded-lg p-5 ${index > 0 ? 'print:break-before-page mt-8' : ''}`} style={{ pageBreakInside: 'avoid' }}>
+              <div className="flex justify-between border-b border-gray-200 pb-2 mb-3">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <span className="bg-gray-800 text-white w-6 h-6 flex items-center justify-center rounded-full text-sm">
+                    {index + 1}
+                  </span>
+                  {h.stage} <span className="text-sm font-normal text-gray-500">({h.status})</span>
+                </h3>
+                <div className="text-right text-sm">
+                  <div className="font-bold">Operator: {h.employee || "Unknown"}</div>
+                  <div className="text-gray-500">{new Date(h.date).toLocaleString()}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-4 text-sm mb-4 bg-gray-50 p-3 rounded border">
+                <div>
+                  <div className="text-xs text-gray-500 uppercase font-bold mb-1">Issue Weight</div>
+                  <div className="font-black text-lg">
+                    {formatWeight(h.issued_weight || h.issue_size || 0, h.unit)}
+                    {h.issue_pieces > 0 && <span className="text-xs font-normal ml-1">({h.issue_pieces} pcs)</span>}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 uppercase font-bold mb-1">Return / Good Output</div>
+                  <div className="font-black text-lg text-green-700">
+                    {h.return_weight !== null ? formatWeight(h.return_weight, h.unit) : "-"}
+                    {h.return_pieces > 0 && <span className="text-xs font-normal ml-1">({h.return_pieces} pcs)</span>}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 uppercase font-bold mb-1">Scrap / Dust</div>
+                  <div className="font-black text-lg text-gray-700">
+                    {h.scrap_weight !== null ? formatWeight(h.scrap_weight, h.unit) : "-"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 uppercase font-bold mb-1">Loss</div>
+                  <div className="font-black text-lg text-red-600">
+                    {h.loss_weight !== null ? formatWeight(h.loss_weight, h.unit) : "-"}
+                  </div>
+                </div>
+              </div>
+              
+              {h.description && (
+                <div className="bg-yellow-50/50 p-3 rounded border border-yellow-200 mt-2">
+                  <div className="text-xs text-yellow-800 uppercase font-bold mb-1">Notes / Description</div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{h.description}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {history.length === 0 && (
+          <div className="text-center text-gray-500 py-10 font-bold">No Records Found for {jobNumber}</div>
+        )}
+      </div>
     </div>
   );
 };
