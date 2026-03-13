@@ -76,7 +76,7 @@ const ProductionJobs = () => {
     message: "",
     onConfirm: () => {},
     isDestructive: false,
-    confirmText: "Confirm"
+    confirmText: "Confirm",
   });
   const navigate = useNavigate();
 
@@ -152,9 +152,12 @@ const ProductionJobs = () => {
     const fetchUsers = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("http://localhost:3000/api/auth/users", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL || "http://localhost:3000/api"}/auth/users`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         const data = await res.json();
         if (Array.isArray(data)) {
           setUsers(data);
@@ -381,7 +384,7 @@ const ProductionJobs = () => {
         } catch (error) {
           showToast(error.message || "Failed to delete job", "error");
         }
-      }
+      },
     });
   };
 
@@ -400,7 +403,7 @@ const ProductionJobs = () => {
         } catch (error) {
           showToast(error.message || "Failed to revert job", "error");
         }
-      }
+      },
     });
   };
 
@@ -432,10 +435,6 @@ const ProductionJobs = () => {
     if (retW <= 0) {
       triggerError();
       return showToast("Return must be > 0", "error");
-    }
-    if (liveLoss < 0) {
-      triggerError();
-      return showToast("Return + Scrap exceeds Issued", "error");
     }
 
     try {
@@ -579,8 +578,8 @@ const ProductionJobs = () => {
                 <th className="p-2 px-3 font-bold border-b border-gray-100">
                   Status
                 </th>
-                <th className="p-2 px-3 font-bold border-b border-gray-100">
-                  Weights (Iss/Ret/Loss)
+                <th className="p-2 px-3 font-bold border-b border-gray-100" title="Issued / Return / Loss or Gain">
+                  Weights (Iss/Ret/L|G)
                 </th>
                 <th className="p-2 px-3 font-bold border-b border-gray-100 text-center">
                   Action
@@ -600,19 +599,34 @@ const ProductionJobs = () => {
                     </div>
                     {p.employee && (
                       <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline mr-1"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="inline mr-1"
+                        >
+                          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
                         {p.employee}
                       </div>
                     )}
                     {p.description && (
-                      <div className="text-xs text-gray-500 mt-1.5 truncate max-w-[150px]" title={p.description}>
+                      <div
+                        className="text-xs text-gray-500 mt-1.5 truncate max-w-[150px]"
+                        title={p.description}
+                      >
                         {p.description}
                       </div>
                     )}
                   </td>
-                  <td className="p-4 font-bold text-blue-800">
-                    {p.stage}
-                  </td>
+                  <td className="p-4 font-bold text-blue-800">{p.stage}</td>
                   <td className="p-4 flex flex-col items-start gap-1">
                     <span
                       className={`px-2 py-1 rounded-md text-xs font-bold ${p.metal_type === "Gold" ? "bg-yellow-100 text-yellow-800" : "bg-gray-200 text-gray-700"}`}
@@ -644,23 +658,26 @@ const ProductionJobs = () => {
                           <span className="text-gray-400">Ret:</span>{" "}
                           {formatWeight(p.return_weight || 0, p.unit)}
                         </div>
-                        <div className="text-red-500">
-                          <span className="text-gray-400">Los:</span>{" "}
-                          {formatWeight(p.loss_weight || 0, p.unit)}
+                        <div className={p.loss_weight < 0 ? "text-green-600" : "text-red-500"}>
+                          <span className="text-gray-400">{p.loss_weight < 0 ? "Gai:" : "Los:"}</span>{" "}
+                          {formatWeight(Math.abs(p.loss_weight || 0), p.unit)}
                         </div>
                       </>
                     )}
                   </td>
                   <td className="p-4">
                     <div className="flex flex-col items-center gap-2">
-                       {p.status === "COMPLETED" && (
+                      {p.status === "COMPLETED" && (
                         <CheckCircle size={20} className="text-green-500" />
                       )}
-                      
+
                       <div className="grid grid-cols-2 gap-2">
                         {p.status === "PENDING" && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); openStartModal(p); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openStartModal(p);
+                            }}
                             className="bg-orange-500 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <PlayCircle size={14} /> Start Process
@@ -668,7 +685,10 @@ const ProductionJobs = () => {
                         )}
                         {p.status === "RUNNING" && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); openCompleteModal(p); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCompleteModal(p);
+                            }}
                             className="bg-blue-600 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <ArrowRightCircle size={14} /> Complete Process
@@ -676,7 +696,10 @@ const ProductionJobs = () => {
                         )}
                         {p.status === "COMPLETED" && p.stage !== "Packing" && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); openNextStepModal(p); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openNextStepModal(p);
+                            }}
                             className="bg-blue-100 text-blue-700 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <ArrowRightCircle size={14} /> Start Next Step
@@ -684,7 +707,10 @@ const ProductionJobs = () => {
                         )}
                         {isAdmin && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); openEditModal(p); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditModal(p);
+                            }}
                             className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <Edit size={14} /> Edit
@@ -692,7 +718,10 @@ const ProductionJobs = () => {
                         )}
                         {isAdmin && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteProcess(p); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteProcess(p);
+                            }}
                             className="bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                           >
                             <Trash2 size={14} /> Delete
@@ -700,7 +729,10 @@ const ProductionJobs = () => {
                         )}
                         {isAdmin && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleRevertProcess(p); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRevertProcess(p);
+                            }}
                             className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
                             title="Revert Step & Re-Balance Stock"
                           >
@@ -708,7 +740,10 @@ const ProductionJobs = () => {
                           </button>
                         )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); openViewModal(p.job_number); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openViewModal(p.job_number);
+                          }}
                           className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
                         >
                           <Eye size={14} /> View
@@ -921,12 +956,16 @@ const ProductionJobs = () => {
                   })
                 }
               >
-                <option value="" disabled>Select Employee</option>
-                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
-                  <option key={u.id} value={u.username}>
-                    {u.username}
-                  </option>
-                ))}
+                <option value="" disabled>
+                  Select Employee
+                </option>
+                {users
+                  .filter((u) => u.role === "EMPLOYEE")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -950,7 +989,10 @@ const ProductionJobs = () => {
                   className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
                   value={createForm.weight_unit}
                   onChange={(e) =>
-                    setCreateForm({ ...createForm, weight_unit: e.target.value })
+                    setCreateForm({
+                      ...createForm,
+                      weight_unit: e.target.value,
+                    })
                   }
                 >
                   <option value="g">g</option>
@@ -961,7 +1003,10 @@ const ProductionJobs = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Issue Pieces{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <input
                 type="number"
@@ -978,7 +1023,10 @@ const ProductionJobs = () => {
 
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Description / Notes{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <textarea
                 className="w-full bg-gray-50 border border-gray-200 py-2 px-3 text-sm rounded-lg outline-none focus:bg-white focus:border-blue-500 min-h-20 transition-colors"
@@ -1024,7 +1072,10 @@ const ProductionJobs = () => {
                   className="w-full bg-transparent py-2.5 px-3 font-bold text-lg text-yellow-900 outline-none"
                   value={startForm.issued_weight}
                   onChange={(e) =>
-                    setStartForm({ ...startForm, issued_weight: e.target.value })
+                    setStartForm({
+                      ...startForm,
+                      issued_weight: e.target.value,
+                    })
                   }
                   placeholder="0.000"
                 />
@@ -1055,18 +1106,25 @@ const ProductionJobs = () => {
                   })
                 }
               >
-                <option value="" disabled>Select Employee</option>
-                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
-                  <option key={u.id} value={u.username}>
-                    {u.username}
-                  </option>
-                ))}
+                <option value="" disabled>
+                  Select Employee
+                </option>
+                {users
+                  .filter((u) => u.role === "EMPLOYEE")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                    </option>
+                  ))}
               </select>
             </div>
 
             <div className="col-span-1 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
               <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
-                Actual Piece Count <span className="text-yellow-600/70 font-normal tracking-normal">(Optional)</span>
+                Actual Piece Count{" "}
+                <span className="text-yellow-600/70 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <input
                 type="number"
@@ -1083,7 +1141,10 @@ const ProductionJobs = () => {
 
             <div className="col-span-2 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
               <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
-                Description / Notes <span className="text-yellow-600/70 font-normal tracking-normal">(Optional)</span>
+                Description / Notes{" "}
+                <span className="text-yellow-600/70 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <textarea
                 className="w-full bg-white border border-yellow-300 py-2 px-3 text-sm rounded-lg outline-none focus:border-orange-500 min-h-20 transition-colors"
@@ -1126,7 +1187,7 @@ const ProductionJobs = () => {
                 {selectedProcess?.category || "N/A"}
               </span>
             </div>
-            
+
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Weight Unit
@@ -1134,14 +1195,18 @@ const ProductionJobs = () => {
               <div className="flex bg-gray-100 p-1 rounded-lg">
                 <button
                   type="button"
-                  onClick={() => setCompleteForm({ ...completeForm, weight_unit: "g" })}
+                  onClick={() =>
+                    setCompleteForm({ ...completeForm, weight_unit: "g" })
+                  }
                   className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 >
                   Grams (g)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCompleteForm({ ...completeForm, weight_unit: "kg" })}
+                  onClick={() =>
+                    setCompleteForm({ ...completeForm, weight_unit: "kg" })
+                  }
                   className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 >
                   Kilogram (kg)
@@ -1159,11 +1224,16 @@ const ProductionJobs = () => {
                 required
                 className="w-full bg-green-50 border border-green-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
                 value={completeForm.return_weight}
-                onChange={(e) => setCompleteForm({ ...completeForm, return_weight: e.target.value })}
+                onChange={(e) =>
+                  setCompleteForm({
+                    ...completeForm,
+                    return_weight: e.target.value,
+                  })
+                }
                 placeholder="0.000"
               />
             </div>
-            
+
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
                 Scrap/Dust
@@ -1173,7 +1243,12 @@ const ProductionJobs = () => {
                 step="0.001"
                 className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
                 value={completeForm.scrap_weight}
-                onChange={(e) => setCompleteForm({ ...completeForm, scrap_weight: e.target.value })}
+                onChange={(e) =>
+                  setCompleteForm({
+                    ...completeForm,
+                    scrap_weight: e.target.value,
+                  })
+                }
                 placeholder="0.000"
               />
             </div>
@@ -1189,7 +1264,12 @@ const ProductionJobs = () => {
                   required={reqPieces}
                   className="w-full bg-purple-50 border border-purple-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
                   value={completeForm.return_pieces}
-                  onChange={(e) => setCompleteForm({ ...completeForm, return_pieces: e.target.value })}
+                  onChange={(e) =>
+                    setCompleteForm({
+                      ...completeForm,
+                      return_pieces: e.target.value,
+                    })
+                  }
                   placeholder={reqPieces ? "0" : "0 (Optional)"}
                 />
               </div>
@@ -1200,7 +1280,12 @@ const ProductionJobs = () => {
                 <textarea
                   className="w-full bg-gray-50 border border-gray-200 py-2 px-3 rounded-lg outline-none focus:border-blue-500 min-h-20 text-sm"
                   value={completeForm.description || ""}
-                  onChange={(e) => setCompleteForm({ ...completeForm, description: e.target.value })}
+                  onChange={(e) =>
+                    setCompleteForm({
+                      ...completeForm,
+                      description: e.target.value,
+                    })
+                  }
                   placeholder="Add completion notes or issues..."
                 />
               </div>
@@ -1210,20 +1295,36 @@ const ProductionJobs = () => {
               <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner h-full flex flex-col justify-center gap-1.5">
                 <div className="flex justify-between text-sm">
                   <span>Issued ({completeForm?.weight_unit || "g"}):</span>
-                  <span>{(issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}</span>
+                  <span>
+                    {(
+                      issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(3)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm text-green-400">
                   <span>- Return:</span>
-                  <span>{(retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}</span>
+                  <span>
+                    {(
+                      retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(3)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm text-yellow-400 mb-2">
                   <span>- Scrap:</span>
-                  <span>{(scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}</span>
+                  <span>
+                    {(
+                      scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(3)}
+                  </span>
                 </div>
                 <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
                   <span>Loss:</span>
-                  <span className={isLossNegative ? "text-red-500" : "text-white"}>
-                    {(liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}
+                  <span
+                    className={isLossNegative ? "text-red-500" : "text-white"}
+                  >
+                    {(
+                      liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(3)}
                   </span>
                 </div>
               </div>
@@ -1254,18 +1355,33 @@ const ProductionJobs = () => {
         >
           <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 flex gap-3 items-start">
             <div className="text-yellow-600 mt-0.5">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
             </div>
             <div>
               <p className="text-xs text-yellow-800 font-bold mb-0.5">
                 Retroactive Edit Notice
               </p>
               <p className="text-[11px] text-yellow-700 leading-tight">
-                Modifying weights perfectly re-balances pooled stock and base inventory.
+                Modifying weights perfectly re-balances pooled stock and base
+                inventory.
               </p>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
@@ -1274,7 +1390,9 @@ const ProductionJobs = () => {
               <select
                 className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-semibold outline-none"
                 value={editForm.category}
-                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, category: e.target.value })
+                }
               >
                 {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
                   <option key={c} value={c}>
@@ -1283,7 +1401,7 @@ const ProductionJobs = () => {
                 ))}
               </select>
             </div>
-            
+
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Issue Weight
@@ -1294,13 +1412,17 @@ const ProductionJobs = () => {
                   step="0.001"
                   className="w-full bg-transparent text-gray-700 py-2.5 px-3 outline-none font-bold"
                   value={editForm.issued_weight}
-                  onChange={(e) => setEditForm({ ...editForm, issued_weight: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, issued_weight: e.target.value })
+                  }
                   required
                 />
                 <select
                   className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
                   value={editForm.weight_unit}
-                  onChange={(e) => setEditForm({ ...editForm, weight_unit: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, weight_unit: e.target.value })
+                  }
                 >
                   <option value="g">g</option>
                   <option value="kg">kg</option>
@@ -1310,20 +1432,28 @@ const ProductionJobs = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Issue Pieces{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <input
                 type="number"
                 className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
                 value={editForm.issue_pieces}
-                onChange={(e) => setEditForm({ ...editForm, issue_pieces: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, issue_pieces: e.target.value })
+                }
                 placeholder="0"
               />
             </div>
 
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Assigned Employee <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Assigned Employee{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <select
                 className="w-full bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
@@ -1335,16 +1465,21 @@ const ProductionJobs = () => {
                   })
                 }
               >
-                <option value="" disabled>Select Employee</option>
-                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
-                  <option key={u.id} value={u.username}>
-                    {u.username}
-                  </option>
-                ))}
+                <option value="" disabled>
+                  Select Employee
+                </option>
+                {users
+                  .filter((u) => u.role === "EMPLOYEE")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                    </option>
+                  ))}
               </select>
             </div>
 
-            {(selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING") ? (
+            {selectedProcess?.status === "COMPLETED" ||
+            selectedProcess?.status === "RUNNING" ? (
               <>
                 <div className="col-span-1 border-l border-gray-200 pl-6 space-y-4 row-span-3">
                   <div>
@@ -1359,7 +1494,12 @@ const ProductionJobs = () => {
                       step="0.001"
                       className="w-full bg-green-50/50 border border-green-200 text-green-800 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-green-400 transition-colors"
                       value={editForm.return_weight}
-                      onChange={(e) => setEditForm({ ...editForm, return_weight: e.target.value })}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          return_weight: e.target.value,
+                        })
+                      }
                       placeholder="0.000"
                     />
                   </div>
@@ -1372,31 +1512,46 @@ const ProductionJobs = () => {
                       step="0.001"
                       className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
                       value={editForm.scrap_weight}
-                      onChange={(e) => setEditForm({ ...editForm, scrap_weight: e.target.value })}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          scrap_weight: e.target.value,
+                        })
+                      }
                       placeholder="0.000"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                      Return Pieces <span className="text-gray-400 font-normal">(Optional)</span>
+                      Return Pieces{" "}
+                      <span className="text-gray-400 font-normal">
+                        (Optional)
+                      </span>
                     </label>
                     <input
                       type="number"
                       className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
                       value={editForm.return_pieces}
-                      onChange={(e) => setEditForm({ ...editForm, return_pieces: e.target.value })}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          return_pieces: e.target.value,
+                        })
+                      }
                       placeholder="0"
                     />
                   </div>
                 </div>
               </>
             ) : (
-               <div className="col-span-1 border-l border-gray-100 pl-6 flex items-center justify-center text-sm text-gray-400 italic">
-                  <p>Job is PENDING. Output fields are locked.</p>
-               </div>
+              <div className="col-span-1 border-l border-gray-100 pl-6 flex items-center justify-center text-sm text-gray-400 italic">
+                <p>Job is PENDING. Output fields are locked.</p>
+              </div>
             )}
 
-            <div className={`col-span-1 flex flex-col ${selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING" ? "mt-4" : ""}`}>
+            <div
+              className={`col-span-1 flex flex-col ${selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING" ? "mt-4" : ""}`}
+            >
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Assigned Employee
               </label>
@@ -1410,26 +1565,35 @@ const ProductionJobs = () => {
                   })
                 }
               >
-                <option value="" disabled>Select Employee</option>
-                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
-                  <option key={u.id} value={u.username}>
-                    {u.username}
-                  </option>
-                ))}
+                <option value="" disabled>
+                  Select Employee
+                </option>
+                {users
+                  .filter((u) => u.role === "EMPLOYEE")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                    </option>
+                  ))}
               </select>
 
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Description / Notes{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <textarea
                 className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2 px-3 text-sm rounded-lg outline-none focus:border-blue-500 transition-colors flex-1 min-h-20"
                 value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
                 placeholder="View or edit notes..."
               />
             </div>
           </div>
-          
+
           <button
             type="submit"
             className="w-full bg-blue-600 text-white font-bold py-3.5 text-sm rounded-xl hover:bg-blue-700 transition-all mt-2 flex items-center justify-center gap-2"

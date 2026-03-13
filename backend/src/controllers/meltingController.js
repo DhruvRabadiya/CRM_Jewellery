@@ -78,15 +78,6 @@ const completeMelting = async (req, res) => {
 
     const lossWeight = calculateLoss(process.issue_weight, retW, scrW);
 
-    if (lossWeight < 0) {
-      return formatResponse(
-        res,
-        400,
-        false,
-        `Validation Error: Return (${retW}) + Scrap (${scrW}) cannot exceed the Original Issue Weight (${process.issue_weight}).`,
-      );
-    }
-
     await meltingService.updateMeltingProcess(
       process_id,
       retW,

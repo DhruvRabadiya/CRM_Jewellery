@@ -152,13 +152,6 @@ const completeTpp = async (req, res) => {
 
     const issW = process.issued_weight;
     const lossWeight = calculateLoss(issW, retW, scrW);
-    if (lossWeight < 0)
-      return formatResponse(
-        res,
-        400,
-        false,
-        `Return + Scrap cannot exceed Issued Weight (${issW}).`,
-      );
 
     await tppService.completeTppProcess(
       process_id,

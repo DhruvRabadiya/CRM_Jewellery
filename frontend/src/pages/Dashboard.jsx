@@ -6,6 +6,7 @@ import {
   RefreshCw,
   BarChart2,
   TrendingDown,
+  TrendingUp,
   Layers,
   Activity,
 } from "lucide-react";
@@ -72,17 +73,39 @@ const Dashboard = () => {
     fetchDashboard();
   }, [fetchDashboard]);
 
-  const calculateLossFrame = (days, metal) => {
+  const calculateLossFrame = (days, metal, metricType) => {
     const now = new Date();
     return lossStats
       .filter((s) => {
         if (s.metal_type !== metal) return false;
-        const d = new Date(s.date);
-        const diffTime = Math.abs(now - d);
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) <= days;
+        if (metricType === "loss" && s.loss_weight < 0) return false;
+        if (metricType === "gain" && s.loss_weight >= 0) return false;
+
+        if (days !== Infinity) {
+          const d = new Date(s.date);
+          const diffTime = Math.abs(now - d);
+          return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) <= days;
+        }
+        return true;
       })
-      .reduce((sum, s) => sum + s.loss_weight, 0)
+      .reduce((sum, s) => sum + Math.abs(s.loss_weight), 0)
       .toFixed(3);
+  };
+
+  const renderLossMetric = (label, value, isGain, unit = "g") => {
+    const val = parseFloat(value) || 0;
+    const Icon = label.includes("All-Time") ? Activity : (label.includes("Wk") ? BarChart2 : (isGain ? TrendingUp : TrendingDown));
+    
+    return (
+      <div className={`${isGain ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'} p-3 rounded-lg border text-center`}>
+        <p className={`text-[10px] font-bold ${isGain ? 'text-green-800' : 'text-red-800'} uppercase mb-1 flex items-center justify-center gap-1`}>
+          <Icon size={12} /> {label}
+        </p>
+        <p className={`text-lg font-black ${isGain ? 'text-green-600' : 'text-red-600'}`}>
+          {val.toFixed(3)}{unit}
+        </p>
+      </div>
+    );
   };
 
   if (loading)
@@ -211,34 +234,21 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
-          <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-3 mt-4">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Loss Analytics
           </p>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {renderLossMetric("Day Loss", calculateLossFrame(1, "Gold", "loss"), false)}
+            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Gold", "loss"), false)}
+            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Gold", "loss"), false)}
+          </div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
+            Gain Analytics
+          </p>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <TrendingDown size={12} /> Day Loss
-              </p>
-              <p className="text-lg font-black text-red-600">
-                {calculateLossFrame(1, "Gold")}g
-              </p>
-            </div>
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <BarChart2 size={12} /> Wk Loss
-              </p>
-              <p className="text-lg font-black text-red-700">
-                {calculateLossFrame(7, "Gold")}g
-              </p>
-            </div>
-            <div className="bg-red-100 p-3 rounded-lg border border-red-200 text-center">
-              <p className="text-[10px] font-bold text-red-900 uppercase mb-1 flex items-center justify-center gap-1">
-                <Activity size={12} /> All-Time
-              </p>
-              <p className="text-lg font-black text-red-800">
-                {gold.total_loss?.toFixed(3)}g
-              </p>
-            </div>
+            {renderLossMetric("Day Gain", calculateLossFrame(1, "Gold", "gain"), true)}
+            {renderLossMetric("Wk Gain", calculateLossFrame(7, "Gold", "gain"), true)}
+            {renderLossMetric("All-Time Gain", calculateLossFrame(Infinity, "Gold", "gain"), true)}
           </div>
         </div>
 
@@ -319,34 +329,21 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
-          <p className="text-xs font-bold text-red-500 uppercase tracking-widest mb-3 mt-4">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Loss Analytics
           </p>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {renderLossMetric("Day Loss", calculateLossFrame(1, "Silver", "loss"), false)}
+            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Silver", "loss"), false)}
+            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Silver", "loss"), false)}
+          </div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
+            Gain Analytics
+          </p>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <TrendingDown size={12} /> Day Loss
-              </p>
-              <p className="text-lg font-black text-red-600">
-                {calculateLossFrame(1, "Silver")}g
-              </p>
-            </div>
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <BarChart2 size={12} /> Wk Loss
-              </p>
-              <p className="text-lg font-black text-red-700">
-                {calculateLossFrame(7, "Silver")}g
-              </p>
-            </div>
-            <div className="bg-red-100 p-3 rounded-lg border border-red-200 text-center">
-              <p className="text-[10px] font-bold text-red-900 uppercase mb-1 flex items-center justify-center gap-1">
-                <Activity size={12} /> All-Time
-              </p>
-              <p className="text-lg font-black text-red-800">
-                {silver.total_loss?.toFixed(3)}g
-              </p>
-            </div>
+            {renderLossMetric("Day Gain", calculateLossFrame(1, "Silver", "gain"), true)}
+            {renderLossMetric("Wk Gain", calculateLossFrame(7, "Silver", "gain"), true)}
+            {renderLossMetric("All-Time Gain", calculateLossFrame(Infinity, "Silver", "gain"), true)}
           </div>
         </div>
       </div>

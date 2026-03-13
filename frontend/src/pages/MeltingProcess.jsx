@@ -69,7 +69,7 @@ const MeltingProcess = () => {
     message: "",
     onConfirm: () => {},
     isDestructive: false,
-    confirmText: "Confirm"
+    confirmText: "Confirm",
   });
 
   const showToast = (message, type) => {
@@ -105,9 +105,12 @@ const MeltingProcess = () => {
     const fetchUsers = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("http://localhost:3000/api/auth/users", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL || "http://localhost:3000/api"}/auth/users`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         const data = await res.json();
         if (Array.isArray(data)) {
           setUsers(data);
@@ -182,12 +185,6 @@ const MeltingProcess = () => {
       return;
     }
 
-    if (liveLoss < 0) {
-      triggerError();
-      showToast("Error: Return + Scrap exceeds Issue Weight!", "error");
-      return;
-    }
-
     try {
       // NOTE: We'll modify api/meltingService.js completeMelt to accept return_pieces,
       // but for now we call it with existing signature or assume it's updated.
@@ -231,7 +228,8 @@ const MeltingProcess = () => {
     setConfirmModal({
       isOpen: true,
       title: "Delete Melting Process",
-      message: "Are you sure you want to delete this process? Stock will be fully reversed.",
+      message:
+        "Are you sure you want to delete this process? Stock will be fully reversed.",
       isDestructive: true,
       confirmText: "Yes, Delete",
       onConfirm: async () => {
@@ -242,7 +240,7 @@ const MeltingProcess = () => {
         } catch (error) {
           showToast(error.message || "Failed to delete from DB", "error");
         }
-      }
+      },
     });
   };
 
@@ -261,7 +259,7 @@ const MeltingProcess = () => {
         } catch (error) {
           showToast(error.message || "Failed to revert melt", "error");
         }
-      }
+      },
     });
   };
 
@@ -289,16 +287,16 @@ const MeltingProcess = () => {
     if (selectedMelt?.status === "COMPLETED") {
       let retW = parseFloat(editForm.return_weight) || 0;
       let scrW = parseFloat(editForm.scrap_weight) || 0;
-      
+
       if (isKg) {
         retW *= 1000;
         scrW *= 1000;
       }
-      
+
       // Safety check: is the loss negative on grammatical scale?
       if (issueW - retW - scrW < 0) {
-         showToast("Error: Impossible weights.", "error");
-         return;
+        showToast("Error: Impossible weights.", "error");
+        return;
       }
 
       payload.return_weight = retW;
@@ -440,14 +438,20 @@ const MeltingProcess = () => {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={(e) => { e.stopPropagation(); openCompleteModal(melt); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCompleteModal(melt);
+                    }}
                     className="flex-1 bg-green-50 text-green-700 font-bold py-3 rounded-xl hover:bg-green-600 hover:text-white transition-colors flex justify-center items-center gap-2"
                   >
                     <CheckCircle size={18} /> Complete Process
                   </button>
                   {isAdmin && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleRevertMelt(melt); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRevertMelt(melt);
+                      }}
                       className="px-4 bg-purple-50 text-purple-600 font-bold rounded-xl hover:bg-purple-100 transition-colors shadow-sm"
                       title="Revert Process"
                     >
@@ -525,7 +529,10 @@ const MeltingProcess = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Issue Pieces{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <input
                 type="number"
@@ -552,18 +559,25 @@ const MeltingProcess = () => {
                   })
                 }
               >
-                <option value="" disabled>Select Employee</option>
-                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
-                  <option key={u.id} value={u.username}>
-                    {u.username}
-                  </option>
-                ))}
+                <option value="" disabled>
+                  Select Employee
+                </option>
+                {users
+                  .filter((u) => u.role === "EMPLOYEE")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                    </option>
+                  ))}
               </select>
             </div>
 
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Description / Notes <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Description / Notes{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <textarea
                 className="w-full bg-gray-50 border border-gray-200 py-2 px-3 text-sm rounded-lg outline-none focus:bg-white focus:border-orange-500 min-h-20 transition-colors"
@@ -603,7 +617,9 @@ const MeltingProcess = () => {
                   Total Issued ({completeForm?.weight_unit || "g"})
                 </span>
                 <span className="text-xl font-bold text-blue-900">
-                  {(issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}
+                  {(
+                    issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                  ).toFixed(3)}
                 </span>
               </div>
 
@@ -614,14 +630,18 @@ const MeltingProcess = () => {
                 <div className="flex bg-gray-100 p-1 rounded-lg">
                   <button
                     type="button"
-                    onClick={() => setCompleteForm({ ...completeForm, weight_unit: "g" })}
+                    onClick={() =>
+                      setCompleteForm({ ...completeForm, weight_unit: "g" })
+                    }
                     className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                   >
                     Grams (g)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCompleteForm({ ...completeForm, weight_unit: "kg" })}
+                    onClick={() =>
+                      setCompleteForm({ ...completeForm, weight_unit: "kg" })
+                    }
                     className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                   >
                     Kilogram (kg)
@@ -639,7 +659,12 @@ const MeltingProcess = () => {
                   step="0.001"
                   className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
                   value={completeForm.return_weight}
-                  onChange={(e) => setCompleteForm({ ...completeForm, return_weight: e.target.value })}
+                  onChange={(e) =>
+                    setCompleteForm({
+                      ...completeForm,
+                      return_weight: e.target.value,
+                    })
+                  }
                   placeholder={`0.000 ${completeForm.weight_unit}`}
                 />
               </div>
@@ -654,7 +679,12 @@ const MeltingProcess = () => {
                   step="0.001"
                   className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-gray-500 transition-colors text-lg font-bold"
                   value={completeForm.scrap_weight}
-                  onChange={(e) => setCompleteForm({ ...completeForm, scrap_weight: e.target.value })}
+                  onChange={(e) =>
+                    setCompleteForm({
+                      ...completeForm,
+                      scrap_weight: e.target.value,
+                    })
+                  }
                   placeholder={`0.000 ${completeForm.weight_unit}`}
                 />
               </div>
@@ -669,7 +699,12 @@ const MeltingProcess = () => {
                     type="number"
                     className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
                     value={completeForm.return_pieces}
-                    onChange={(e) => setCompleteForm({ ...completeForm, return_pieces: e.target.value })}
+                    onChange={(e) =>
+                      setCompleteForm({
+                        ...completeForm,
+                        return_pieces: e.target.value,
+                      })
+                    }
                     placeholder="0"
                   />
                 </div>
@@ -682,7 +717,12 @@ const MeltingProcess = () => {
                   <textarea
                     className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors font-bold min-h-20 text-sm"
                     value={completeForm.description}
-                    onChange={(e) => setCompleteForm({ ...completeForm, description: e.target.value })}
+                    onChange={(e) =>
+                      setCompleteForm({
+                        ...completeForm,
+                        description: e.target.value,
+                      })
+                    }
                     placeholder="Notes for completion..."
                   />
                 </div>
@@ -692,7 +732,11 @@ const MeltingProcess = () => {
               <div className="col-span-1 flex flex-col justify-end">
                 <div
                   className={`p-4 rounded-xl border flex flex-col justify-center h-full transition-colors ${
-                    isLossNegative ? "bg-red-50 border-red-200 text-red-700" : liveLoss > 0 ? "bg-orange-50 border-orange-200 text-orange-700" : "bg-gray-50 border-gray-200 text-gray-500"
+                    isLossNegative
+                      ? "bg-red-50 border-red-200 text-red-700"
+                      : liveLoss > 0
+                        ? "bg-orange-50 border-orange-200 text-orange-700"
+                        : "bg-gray-50 border-gray-200 text-gray-500"
                   }`}
                 >
                   <span className="font-bold flex items-center justify-center gap-2 mb-2">
@@ -700,7 +744,9 @@ const MeltingProcess = () => {
                     Calculated Loss:
                   </span>
                   <span className="text-3xl font-extrabold text-center">
-                    {(liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(3)}
+                    {(
+                      liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(3)}
                   </span>
                 </div>
                 {isLossNegative && (
@@ -801,7 +847,10 @@ const MeltingProcess = () => {
                   <td className="p-4 flex justify-end gap-2 text-sm">
                     {isAdmin && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); openEditModal(h); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(h);
+                        }}
                         className="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
                       >
                         Edit
@@ -809,7 +858,10 @@ const MeltingProcess = () => {
                     )}
                     {isAdmin && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteMelt(h); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMelt(h);
+                        }}
                         className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
                       >
                         Delete
@@ -817,7 +869,10 @@ const MeltingProcess = () => {
                     )}
                     {isAdmin && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleRevertMelt(h); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRevertMelt(h);
+                        }}
                         className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
                         title="Revert Process Backwards"
                       >
@@ -880,7 +935,10 @@ const MeltingProcess = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Issue Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                Issue Pieces{" "}
+                <span className="text-gray-400 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <input
                 type="number"
@@ -900,7 +958,7 @@ const MeltingProcess = () => {
                     Completion Adjustment Data
                   </p>
                 </div>
-                
+
                 <div className="col-span-1">
                   <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                     Return Weight
@@ -919,10 +977,13 @@ const MeltingProcess = () => {
                     placeholder="0.000"
                   />
                 </div>
-                
+
                 <div className="col-span-1">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                    Return Pieces <span className="text-gray-400 font-normal tracking-normal">(Optional)</span>
+                    Return Pieces{" "}
+                    <span className="text-gray-400 font-normal tracking-normal">
+                      (Optional)
+                    </span>
                   </label>
                   <input
                     type="number"
@@ -937,7 +998,7 @@ const MeltingProcess = () => {
                     placeholder="0"
                   />
                 </div>
-                
+
                 <div className="col-span-1">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                     Scrap/Dust Weight
@@ -953,12 +1014,12 @@ const MeltingProcess = () => {
                     placeholder="0.000"
                   />
                 </div>
-                
+
                 {(() => {
                   let iss = parseFloat(editForm.issued_weight) || 0;
                   let ret = parseFloat(editForm.return_weight) || 0;
                   let scr = parseFloat(editForm.scrap_weight) || 0;
-                  
+
                   // For melting, scrap is typically added back cleanly so Loss = Issued - Return - Scrap
                   let liveLoss = parseFloat((iss - ret - scr).toFixed(3));
                   let isLossNegative = liveLoss < 0;
@@ -996,18 +1057,25 @@ const MeltingProcess = () => {
                   })
                 }
               >
-                <option value="" disabled>Select Employee</option>
-                {users.filter(u => u.role === 'EMPLOYEE').map((u) => (
-                  <option key={u.id} value={u.username}>
-                    {u.username}
-                  </option>
-                ))}
+                <option value="" disabled>
+                  Select Employee
+                </option>
+                {users
+                  .filter((u) => u.role === "EMPLOYEE")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                    </option>
+                  ))}
               </select>
             </div>
 
             <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
               <label className="block text-xs font-bold text-blue-800 mb-1.5 uppercase tracking-wide">
-                Description / Notes <span className="text-blue-600/70 font-normal tracking-normal">(Optional)</span>
+                Description / Notes{" "}
+                <span className="text-blue-600/70 font-normal tracking-normal">
+                  (Optional)
+                </span>
               </label>
               <textarea
                 className="w-full bg-white border border-blue-200 py-2 px-3 text-sm rounded-lg outline-none focus:border-blue-500 min-h-20 transition-colors"
@@ -1019,7 +1087,7 @@ const MeltingProcess = () => {
               />
             </div>
           </div>
-          
+
           <button
             type="submit"
             disabled={
@@ -1046,62 +1114,110 @@ const MeltingProcess = () => {
         {selectedMelt && (
           <div className="space-y-6">
             <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-               <div>
-                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Process ID</p>
-                 <h2 className="text-2xl font-black text-gray-800">#{selectedMelt.id} <span className="text-gray-400 text-lg font-bold ml-2">| {selectedMelt.metal_type}</span></h2>
-               </div>
-               <div className="text-right">
-                 <span className={`px-4 py-1.5 rounded-full text-xs font-bold border flex justify-center items-center gap-1 ${selectedMelt.status === "RUNNING" ? "bg-orange-50 text-orange-700 border-orange-200 animate-pulse" : "bg-green-50 text-green-700 border-green-200"}`}>
-                    {selectedMelt.status === "RUNNING" ? <Flame size={14}/> : <CheckCircle size={14} />} {selectedMelt.status}
-                 </span>
-                 <p className="text-xs text-gray-500 mt-2 font-medium">Started: {new Date(selectedMelt.date).toLocaleString()}</p>
-                 {selectedMelt.end_time && (
-                    <p className="text-xs text-gray-500 mt-1 font-medium">Completed: {new Date(selectedMelt.end_time).toLocaleString()}</p>
-                 )}
-               </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
+                  Process ID
+                </p>
+                <h2 className="text-2xl font-black text-gray-800">
+                  #{selectedMelt.id}{" "}
+                  <span className="text-gray-400 text-lg font-bold ml-2">
+                    | {selectedMelt.metal_type}
+                  </span>
+                </h2>
+              </div>
+              <div className="text-right">
+                <span
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold border flex justify-center items-center gap-1 ${selectedMelt.status === "RUNNING" ? "bg-orange-50 text-orange-700 border-orange-200 animate-pulse" : "bg-green-50 text-green-700 border-green-200"}`}
+                >
+                  {selectedMelt.status === "RUNNING" ? (
+                    <Flame size={14} />
+                  ) : (
+                    <CheckCircle size={14} />
+                  )}{" "}
+                  {selectedMelt.status}
+                </span>
+                <p className="text-xs text-gray-500 mt-2 font-medium">
+                  Started: {new Date(selectedMelt.date).toLocaleString()}
+                </p>
+                {selectedMelt.end_time && (
+                  <p className="text-xs text-gray-500 mt-1 font-medium">
+                    Completed:{" "}
+                    {new Date(selectedMelt.end_time).toLocaleString()}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
-                 <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">Operator</p>
-                 <p className="text-xl font-black text-blue-800">
-                    {selectedMelt.employee || "Unknown"}
-                 </p>
+                <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">
+                  Operator
+                </p>
+                <p className="text-xl font-black text-blue-800">
+                  {selectedMelt.employee || "Unknown"}
+                </p>
               </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
-                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Issued</p>
-                 <p className="text-2xl font-black text-gray-800">
-                    {formatWeight(selectedMelt.issue_weight, selectedMelt.unit)}
-                    {(selectedMelt.issue_pieces || 0) > 0 && <span className="text-[11px] text-gray-400 ml-2 font-bold uppercase tracking-wider">({selectedMelt.issue_pieces} pcs)</span>}
-                 </p>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                  Total Issued
+                </p>
+                <p className="text-2xl font-black text-gray-800">
+                  {formatWeight(selectedMelt.issue_weight, selectedMelt.unit)}
+                  {(selectedMelt.issue_pieces || 0) > 0 && (
+                    <span className="text-[11px] text-gray-400 ml-2 font-bold uppercase tracking-wider">
+                      ({selectedMelt.issue_pieces} pcs)
+                    </span>
+                  )}
+                </p>
               </div>
               <div className="bg-green-50 p-4 rounded-xl border border-green-100 flex flex-col justify-center">
-                 <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-1">Pure Extracted</p>
-                 <p className="text-2xl font-black text-green-700">
-                    {selectedMelt.return_weight ? formatWeight(selectedMelt.return_weight, selectedMelt.unit) : "-"}
-                    {(selectedMelt.return_pieces || 0) > 0 && <span className="text-[11px] text-green-600/60 ml-2 font-bold uppercase tracking-wider">({selectedMelt.return_pieces} pcs)</span>}
-                 </p>
+                <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-1">
+                  Pure Extracted
+                </p>
+                <p className="text-2xl font-black text-green-700">
+                  {selectedMelt.return_weight
+                    ? formatWeight(
+                        selectedMelt.return_weight,
+                        selectedMelt.unit,
+                      )
+                    : "-"}
+                  {(selectedMelt.return_pieces || 0) > 0 && (
+                    <span className="text-[11px] text-green-600/60 ml-2 font-bold uppercase tracking-wider">
+                      ({selectedMelt.return_pieces} pcs)
+                    </span>
+                  )}
+                </p>
               </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
-                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Recoverable Scrap</p>
-                 <p className="text-xl font-black text-gray-700">
-                    {selectedMelt.scrap_weight !== null ? formatWeight(selectedMelt.scrap_weight, selectedMelt.unit) : "-"}
-                 </p>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                  Recoverable Scrap
+                </p>
+                <p className="text-xl font-black text-gray-700">
+                  {selectedMelt.scrap_weight !== null
+                    ? formatWeight(selectedMelt.scrap_weight, selectedMelt.unit)
+                    : "-"}
+                </p>
               </div>
               <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col justify-center">
-                 <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">Permanent Loss</p>
-                 <p className="text-xl font-black text-red-600">
-                    {selectedMelt.loss_weight !== null ? formatWeight(selectedMelt.loss_weight, selectedMelt.unit) : "-"}
-                 </p>
+                <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">
+                  Permanent Loss
+                </p>
+                <p className="text-xl font-black text-red-600">
+                  {selectedMelt.loss_weight !== null
+                    ? formatWeight(selectedMelt.loss_weight, selectedMelt.unit)
+                    : "-"}
+                </p>
               </div>
             </div>
 
             {selectedMelt.description && (
               <div className="mt-4 bg-blue-50/50 border border-blue-100 p-5 rounded-xl text-left">
-                 <p className="text-[10px] font-bold text-blue-800 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileText size={12}/> Process Operator Notes</p>
-                 <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
-                   {selectedMelt.description}
-                 </p>
+                <p className="text-[10px] font-bold text-blue-800 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <FileText size={12} /> Process Operator Notes
+                </p>
+                <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
+                  {selectedMelt.description}
+                </p>
               </div>
             )}
           </div>

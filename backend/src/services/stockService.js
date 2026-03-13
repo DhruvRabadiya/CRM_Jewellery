@@ -78,15 +78,15 @@ const addTotalLoss = (metalType, lossWeight) => {
 const getLossStats = () => {
   return new Promise((resolve, reject) => {
     const query = `
-      SELECT 'Melting' as source, metal_type, loss_weight, completed_at as date FROM melting_process WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT 'Melting' as source, metal_type, loss_weight, completed_at as date FROM melting_process WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT 'Rolling' as source, metal_type, loss_weight, end_time as date FROM rolling_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT 'Rolling' as source, metal_type, loss_weight, end_time as date FROM rolling_processes WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT 'Press' as source, metal_type, loss_weight, end_time as date FROM press_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT 'Press' as source, metal_type, loss_weight, end_time as date FROM press_processes WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT 'TPP' as source, metal_type, loss_weight, end_time as date FROM tpp_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT 'TPP' as source, metal_type, loss_weight, end_time as date FROM tpp_processes WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT 'Packing' as source, metal_type, loss_weight, end_time as date FROM packing_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT 'Packing' as source, metal_type, loss_weight, end_time as date FROM packing_processes WHERE status = 'COMPLETED' AND loss_weight != 0
     `;
     db.all(query, [], (err, rows) => {
       if (err) reject(err);
@@ -152,16 +152,16 @@ const getDetailedScrapAndLoss = () => {
       
       UNION ALL
       
-      -- Losses
-      SELECT completed_at as date, metal_type, 'LOSS' as category, 'Loss from Melting #' || id as source, loss_weight as weight FROM melting_process WHERE status = 'COMPLETED' AND loss_weight > 0
+      -- Losses & Gains
+      SELECT completed_at as date, metal_type, CASE WHEN loss_weight < 0 THEN 'GAIN' ELSE 'LOSS' END as category, CASE WHEN loss_weight < 0 THEN 'Gain from Melting #' ELSE 'Loss from Melting #' END || id as source, loss_weight as weight FROM melting_process WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT end_time as date, metal_type, 'LOSS' as category, 'Loss from Rolling ' || job_number as source, loss_weight as weight FROM rolling_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT end_time as date, metal_type, CASE WHEN loss_weight < 0 THEN 'GAIN' ELSE 'LOSS' END as category, CASE WHEN loss_weight < 0 THEN 'Gain from Rolling ' ELSE 'Loss from Rolling ' END || job_number as source, loss_weight as weight FROM rolling_processes WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT end_time as date, metal_type, 'LOSS' as category, 'Loss from Press ' || job_number as source, loss_weight as weight FROM press_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT end_time as date, metal_type, CASE WHEN loss_weight < 0 THEN 'GAIN' ELSE 'LOSS' END as category, CASE WHEN loss_weight < 0 THEN 'Gain from Press ' ELSE 'Loss from Press ' END || job_number as source, loss_weight as weight FROM press_processes WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT end_time as date, metal_type, 'LOSS' as category, 'Loss from TPP ' || job_number as source, loss_weight as weight FROM tpp_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT end_time as date, metal_type, CASE WHEN loss_weight < 0 THEN 'GAIN' ELSE 'LOSS' END as category, CASE WHEN loss_weight < 0 THEN 'Gain from TPP ' ELSE 'Loss from TPP ' END || job_number as source, loss_weight as weight FROM tpp_processes WHERE status = 'COMPLETED' AND loss_weight != 0
       UNION ALL
-      SELECT end_time as date, metal_type, 'LOSS' as category, 'Loss from Packing ' || job_number as source, loss_weight as weight FROM packing_processes WHERE status = 'COMPLETED' AND loss_weight > 0
+      SELECT end_time as date, metal_type, CASE WHEN loss_weight < 0 THEN 'GAIN' ELSE 'LOSS' END as category, CASE WHEN loss_weight < 0 THEN 'Gain from Packing ' ELSE 'Loss from Packing ' END || job_number as source, loss_weight as weight FROM packing_processes WHERE status = 'COMPLETED' AND loss_weight != 0
       
       ORDER BY date DESC
     `;
