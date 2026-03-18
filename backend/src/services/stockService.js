@@ -67,7 +67,7 @@ const logTransaction = (metalType, type, weight, description) => {
 
 const addTotalLoss = (metalType, lossWeight) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE stock_master SET total_loss = total_loss + ? WHERE metal_type = ?`;
+    const query = `UPDATE stock_master SET total_loss = MAX(total_loss + ?, 0) WHERE metal_type = ?`;
     db.run(query, [lossWeight, metalType], function (err) {
       if (err) reject(err);
       resolve(this.changes);

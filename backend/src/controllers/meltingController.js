@@ -197,15 +197,6 @@ const editMeltingProcess = async (req, res) => {
           : process.return_pieces;
 
       newLossWeight = calculateLoss(newWeight, newRetWeight, newScrWeight);
-
-      if (newLossWeight < 0) {
-        return formatResponse(
-          res,
-          400,
-          false,
-          "Update makes Return + Scrap exceed Issue limit.",
-        );
-      }
     }
 
     if (weightDiff > 0) {
@@ -271,8 +262,8 @@ const editMeltingProcess = async (req, res) => {
         );
       }
 
-      // Sync the exact ledger Loss differences. addTotalLoss inherently handles negatives for reducing loss!
-      const oldLoss = process.loss_weight;
+      // Sync the exact gain/loss ledger — revert old and apply new
+      const oldLoss = process.loss_weight || 0;
       const lossWeightDiff = newLossWeight - oldLoss;
       if (lossWeightDiff !== 0) {
         await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
@@ -334,7 +325,7 @@ const deleteMeltingProcess = async (req, res) => {
     }
 
     // 3. Revert Loss Weight
-    if (process.loss_weight > 0) {
+    if (process.loss_weight !== 0) {
       await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
     }
 
@@ -404,7 +395,7 @@ const revertMeltingProcess = async (req, res) => {
         await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);
       }
 
-      if (process.loss_weight > 0) {
+      if (process.loss_weight !== 0) {
         await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
       }
 

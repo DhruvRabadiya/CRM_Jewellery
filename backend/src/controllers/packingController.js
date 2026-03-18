@@ -200,7 +200,7 @@ const completePacking = async (req, res) => {
       );
     }
 
-    if (lossWeight > 0)
+    if (lossWeight !== 0)
       await stockService.addTotalLoss(process.metal_type, lossWeight);
 
     return formatResponse(
@@ -274,14 +274,6 @@ const editPacking = async (req, res) => {
           : process.return_pieces;
 
       newLossWeight = calculateLoss(newWeight, newRetWeight, newScrWeight);
-      if (newLossWeight < 0) {
-        return formatResponse(
-          res,
-          400,
-          false,
-          "Update makes Return + Scrap exceed Issue limit.",
-        );
-      }
     }
 
     if (delta > 0) {
@@ -374,8 +366,8 @@ const editPacking = async (req, res) => {
         );
       }
 
-      // Sync exact Total Loss ledger differences
-      const oldLoss = process.loss_weight;
+      // Sync exact gain/loss ledger differences
+      const oldLoss = process.loss_weight || 0;
       const lossWeightDiff = newLossWeight - oldLoss;
       if (lossWeightDiff !== 0) {
         await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
@@ -452,8 +444,8 @@ const deletePacking = async (req, res) => {
         );
       }
 
-      // 3. Revert Loss Weight
-      if (process.loss_weight > 0) {
+      // 3. Revert Loss/Gain Weight
+      if (process.loss_weight !== 0) {
         await stockService.addTotalLoss(
           process.metal_type,
           -process.loss_weight,
@@ -510,7 +502,7 @@ const revertPacking = async (req, res) => {
         await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);
       }
       
-      if (process.loss_weight > 0) {
+      if (process.loss_weight !== 0) {
         await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
       }
 

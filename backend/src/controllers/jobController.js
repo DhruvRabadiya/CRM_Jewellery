@@ -100,7 +100,7 @@ const completeStep = async (req, res) => {
       );
     }
 
-    if (lossWeight > 0) {
+    if (lossWeight !== 0) {
       await stockService.addTotalLoss(job.metal_type, lossWeight);
     }
 

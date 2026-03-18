@@ -7,7 +7,6 @@ import {
   BarChart2,
   TrendingDown,
   TrendingUp,
-  Layers,
   Activity,
 } from "lucide-react";
 import Modal from "../components/Modal";
@@ -73,14 +72,11 @@ const Dashboard = () => {
     fetchDashboard();
   }, [fetchDashboard]);
 
-  const calculateLossFrame = (days, metal, metricType) => {
+  const calculateLossFrame = (days, metal) => {
     const now = new Date();
     return lossStats
       .filter((s) => {
         if (s.metal_type !== metal) return false;
-        if (metricType === "loss" && s.loss_weight < 0) return false;
-        if (metricType === "gain" && s.loss_weight >= 0) return false;
-
         if (days !== Infinity) {
           const d = new Date(s.date);
           const diffTime = Math.abs(now - d);
@@ -88,7 +84,7 @@ const Dashboard = () => {
         }
         return true;
       })
-      .reduce((sum, s) => sum + Math.abs(s.loss_weight), 0)
+      .reduce((sum, s) => sum + s.loss_weight, 0)
       .toFixed(3);
   };
 
@@ -237,18 +233,10 @@ const Dashboard = () => {
           <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Loss Analytics
           </p>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {renderLossMetric("Day Loss", calculateLossFrame(1, "Gold", "loss"), false)}
-            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Gold", "loss"), false)}
-            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Gold", "loss"), false)}
-          </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
-            Gain Analytics
-          </p>
           <div className="grid grid-cols-3 gap-3">
-            {renderLossMetric("Day Gain", calculateLossFrame(1, "Gold", "gain"), true)}
-            {renderLossMetric("Wk Gain", calculateLossFrame(7, "Gold", "gain"), true)}
-            {renderLossMetric("All-Time Gain", calculateLossFrame(Infinity, "Gold", "gain"), true)}
+            {renderLossMetric("Day Loss", calculateLossFrame(1, "Gold"), false)}
+            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Gold"), false)}
+            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Gold"), false)}
           </div>
         </div>
 
@@ -332,18 +320,10 @@ const Dashboard = () => {
           <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Loss Analytics
           </p>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {renderLossMetric("Day Loss", calculateLossFrame(1, "Silver", "loss"), false)}
-            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Silver", "loss"), false)}
-            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Silver", "loss"), false)}
-          </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
-            Gain Analytics
-          </p>
           <div className="grid grid-cols-3 gap-3">
-            {renderLossMetric("Day Gain", calculateLossFrame(1, "Silver", "gain"), true)}
-            {renderLossMetric("Wk Gain", calculateLossFrame(7, "Silver", "gain"), true)}
-            {renderLossMetric("All-Time Gain", calculateLossFrame(Infinity, "Silver", "gain"), true)}
+            {renderLossMetric("Day Loss", calculateLossFrame(1, "Silver"), false)}
+            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Silver"), false)}
+            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Silver"), false)}
           </div>
         </div>
       </div>

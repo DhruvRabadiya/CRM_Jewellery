@@ -52,6 +52,9 @@ db.serialize(() => {
     }
   });
 
+  // Fix any negative total_loss values (clamp to 0)
+  db.run(`UPDATE stock_master SET total_loss = 0 WHERE total_loss < 0`);
+
   // 2. STOCK TRANSACTIONS (Ledger for Audit)
   db.run(`CREATE TABLE IF NOT EXISTS stock_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

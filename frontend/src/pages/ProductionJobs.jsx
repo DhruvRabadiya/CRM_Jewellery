@@ -1318,12 +1318,13 @@ const ProductionJobs = () => {
                   </span>
                 </div>
                 <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
-                  <span>Loss:</span>
+                  <span>{isLossNegative ? "Gain:" : "Loss:"}</span>
                   <span
-                    className={isLossNegative ? "text-red-500" : "text-white"}
+                    className={isLossNegative ? "text-green-400" : "text-white"}
                   >
+                    {isLossNegative ? "+" : ""}
                     {(
-                      liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                      Math.abs(liveLoss) / (completeForm?.weight_unit === "kg" ? 1000 : 1)
                     ).toFixed(3)}
                   </span>
                 </div>
@@ -1333,8 +1334,7 @@ const ProductionJobs = () => {
 
           <button
             type="submit"
-            disabled={isLossNegative}
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition-colors"
           >
             Complete Process
           </button>
