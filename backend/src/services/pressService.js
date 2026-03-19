@@ -5,15 +5,28 @@ const createPressProcess = (
   job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
+  issue_pieces,
   category,
+  employee, // Moved employee here
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO press_processes (job_number, job_name, metal_type, unit, employee, issue_size, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
+    // Updated query to reflect new employee position and column
+    const query = `INSERT INTO press_processes (job_number, job_name, metal_type, unit, issue_size, issue_pieces, category, employee, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`;
     db.run(
       query,
-      [job_number, job_name, metal_type, unit, employee, issue_size, category],
+      [
+        job_number,
+        job_name,
+        metal_type,
+        unit,
+        issue_size,
+        issue_pieces,
+        category,
+        employee, // Injected employee into the array at the new position
+        description,
+      ],
       function (err) {
         if (err) reject(err);
         resolve(this.lastID);
@@ -22,10 +35,10 @@ const createPressProcess = (
   });
 };
 
-const startPressProcess = (processId, issued_weight) => {
+const startPressProcess = (processId, issued_weight, issue_pieces, employee, description) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE press_processes SET status = 'RUNNING', issued_weight = ?, start_time = CURRENT_TIMESTAMP WHERE id = ?`;
-    db.run(query, [issued_weight, processId], function (err) {
+    const query = `UPDATE press_processes SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, employee = COALESCE(?, employee), description = COALESCE(?, description), start_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(query, [issued_weight, issue_pieces, employee, description, processId], function (err) {
       if (err) reject(err);
       resolve();
     });
@@ -35,14 +48,16 @@ const startPressProcess = (processId, issued_weight) => {
 const completePressProcess = (
   processId,
   return_weight,
+  return_pieces,
   scrap_weight,
   loss_weight,
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE press_processes SET status = 'COMPLETED', return_weight = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    const query = `UPDATE press_processes SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) WHERE id = ?`;
     db.run(
       query,
-      [return_weight, scrap_weight, loss_weight, processId],
+      [return_weight, return_pieces, scrap_weight, loss_weight, description, processId],
       function (err) {
         if (err) reject(err);
         resolve();
@@ -91,6 +106,24 @@ const deletePressProcessById = (id) => {
   });
 };
 
+const editPressProcessUniversal = (processId, updates) => {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+    values.push(processId);
+
+    const query = `UPDATE press_processes SET ${fields.join(", ")} WHERE id = ?`;
+    db.run(query, values, function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createPressProcess,
   startPressProcess,
@@ -99,4 +132,5 @@ module.exports = {
   getAllPressProcesses,
   updatePressIssuedWeight,
   deletePressProcessById,
+  editPressProcessUniversal,
 };

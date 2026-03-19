@@ -12,9 +12,12 @@ const createTpp = async (req, res) => {
       unit,
       employee,
       issue_size,
+      issue_pieces,
       category,
+      description,
     } = req.body;
     const weight = parseFloat(issue_size);
+    const pieces = parseInt(issue_pieces) || 0;
 
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(
@@ -43,9 +46,11 @@ const createTpp = async (req, res) => {
       job_name,
       metal_type,
       unit,
-      employee,
       weight,
+      pieces,
       category,
+      employee,
+      description || "",
     );
 
     // DEDUCT IMMEDIATELY UPON CREATION
@@ -67,8 +72,9 @@ const createTpp = async (req, res) => {
 
 const startTpp = async (req, res) => {
   try {
-    const { process_id, issued_weight } = req.body;
+    const { process_id, issued_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issued_weight);
+    const pieces = parseInt(issue_pieces) || 0;
     if (!process_id || isNaN(weight) || weight <= 0)
       return formatResponse(res, 400, false, "Invalid issued weight.");
 
@@ -121,7 +127,7 @@ const startTpp = async (req, res) => {
       );
     }
 
-    await tppService.startTppProcess(process_id, weight);
+    await tppService.startTppProcess(process_id, weight, pieces, employee, description);
     return formatResponse(res, 200, true, "TPP process started");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
@@ -130,8 +136,9 @@ const startTpp = async (req, res) => {
 
 const completeTpp = async (req, res) => {
   try {
-    const { process_id, return_weight, scrap_weight } = req.body;
+    const { process_id, return_weight, return_pieces, scrap_weight, description } = req.body;
     const retW = parseFloat(return_weight) || 0;
+    const retP = parseInt(return_pieces) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
 
     if (!process_id || retW < 0 || scrW < 0)
@@ -145,34 +152,58 @@ const completeTpp = async (req, res) => {
 
     const issW = process.issued_weight;
     const lossWeight = calculateLoss(issW, retW, scrW);
-    if (lossWeight < 0)
-      return formatResponse(
-        res,
-        400,
-        false,
-        `Return + Scrap cannot exceed Issued Weight (${issW}).`,
-      );
 
-    await tppService.completeTppProcess(process_id, retW, scrW, lossWeight);
-    await stockService.updateProcessStock(
-      "tpp",
-      process.metal_type,
+    await tppService.completeTppProcess(
+      process_id,
       retW,
-      true,
+      retP,
+      scrW,
+      lossWeight,
+      description !== undefined ? description : null,
     );
-
-    if (scrW > 0) {
-      await stockService.updateOpeningStock(process.metal_type, scrW, true);
-      await stockService.logTransaction(
+    // Math diff to prevent double counting if weights were previously updated in RUNNING edit
+    const retWeightDiff = retW - (process.return_weight || 0);
+    if (retWeightDiff > 0) {
+      await stockService.updateProcessStock(
+        "tpp",
         process.metal_type,
-        TRANSACTION_TYPES.SCRAP_RETURN,
-        scrW,
-        `Scrap from TPP ${process.job_number}`,
+        retWeightDiff,
+        true,
+      );
+    } else if (retWeightDiff < 0) {
+      await stockService.updateProcessStock(
+        "tpp",
+        process.metal_type,
+        Math.abs(retWeightDiff),
+        false,
       );
     }
 
-    if (lossWeight > 0)
-      await stockService.addTotalLoss(process.metal_type, lossWeight);
+    const scrWeightDiff = scrW - (process.scrap_weight || 0);
+    if (scrWeightDiff > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        scrWeightDiff,
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "SCRAP_RETURN",
+        scrWeightDiff,
+        `Scrap from TPP ${process.job_number}`,
+      );
+    } else if (scrWeightDiff < 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        Math.abs(scrWeightDiff),
+        false,
+      );
+    }
+
+    const lossWeightDiff = lossWeight - (process.loss_weight || 0);
+    if (lossWeightDiff !== 0) {
+      await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
+    }
 
     return formatResponse(res, 200, true, "TPP completed", {
       loss: lossWeight,
@@ -194,7 +225,15 @@ const getAllTpp = async (req, res) => {
 const editTpp = async (req, res) => {
   try {
     const process_id = req.params.id;
-    const { issued_weight } = req.body;
+    const {
+      issued_weight,
+      return_weight,
+      scrap_weight,
+      issue_pieces,
+      return_pieces,
+      description,
+      employee,
+    } = req.body;
     const newWeight = parseFloat(issued_weight);
 
     if (!process_id || isNaN(newWeight) || newWeight <= 0) {
@@ -203,17 +242,31 @@ const editTpp = async (req, res) => {
 
     const process = await tppService.getTppProcessById(process_id);
     if (!process) return formatResponse(res, 404, false, "Process not found.");
-    if (process.status !== "RUNNING") {
-      return formatResponse(
-        res,
-        400,
-        false,
-        "Only RUNNING processes can be edited.",
-      );
-    }
 
-    const oldWeight = process.issued_weight;
+    const oldWeight = process.issue_size || process.issued_weight || 0;
     const delta = newWeight - oldWeight;
+
+    let newRetWeight = process.return_weight;
+    let newScrWeight = process.scrap_weight;
+    let newPieces = process.return_pieces;
+    let newLossWeight = process.loss_weight;
+
+    if (process.status === "COMPLETED") {
+      newRetWeight =
+        return_weight !== undefined
+          ? parseFloat(return_weight) || 0
+          : process.return_weight;
+      newScrWeight =
+        scrap_weight !== undefined
+          ? parseFloat(scrap_weight) || 0
+          : process.scrap_weight;
+      newPieces =
+        return_pieces !== undefined
+          ? parseInt(return_pieces) || 0
+          : process.return_pieces;
+
+      newLossWeight = calculateLoss(newWeight, newRetWeight, newScrWeight);
+    }
 
     if (delta > 0) {
       const currentStock = await stockService.getStockByMetal(
@@ -236,12 +289,6 @@ const editTpp = async (req, res) => {
         delta,
         false,
       );
-      await stockService.logTransaction(
-        process.metal_type,
-        "ADJUSTMENT",
-        delta,
-        `Increased issued weight for TPP Job ${process.job_number}`,
-      );
     } else if (delta < 0) {
       await stockService.updateProcessStock(
         "press",
@@ -249,15 +296,77 @@ const editTpp = async (req, res) => {
         Math.abs(delta),
         true,
       );
-      await stockService.logTransaction(
-        process.metal_type,
-        "ADJUSTMENT",
-        Math.abs(delta),
-        `Decreased/Refunded issued weight for TPP Job ${process.job_number}`,
-      );
     }
 
-    await tppService.updateTppIssuedWeight(process_id, newWeight);
+    let updates = {
+      issued_weight: newWeight,
+      issue_size: newWeight,
+      issue_pieces:
+        issue_pieces !== undefined
+          ? parseInt(issue_pieces) || 0
+          : process.issue_pieces,
+    };
+    if (req.body.category !== undefined) {
+      updates.category = req.body.category;
+    }
+    if (description !== undefined) {
+      updates.description = description;
+    }
+    if (employee !== undefined) {
+      updates.employee = employee;
+    }
+
+    if (process.status === "COMPLETED") {
+      // Sync Return Weight -> tpp_stock
+      const retWeightDiff = newRetWeight - process.return_weight;
+      if (retWeightDiff > 0) {
+        await stockService.updateProcessStock(
+          "tpp",
+          process.metal_type,
+          retWeightDiff,
+          true,
+        );
+      } else if (retWeightDiff < 0) {
+        await stockService.updateProcessStock(
+          "tpp",
+          process.metal_type,
+          Math.abs(retWeightDiff),
+          false,
+        );
+      }
+
+      // Sync Scrap Weight -> opening_stock
+      const scrWeightDiff = newScrWeight - process.scrap_weight;
+      if (scrWeightDiff > 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          scrWeightDiff,
+          true,
+        );
+      } else if (scrWeightDiff < 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          Math.abs(scrWeightDiff),
+          false,
+        );
+      }
+
+      // Sync exact Total Loss ledger differences
+      const oldLoss = process.loss_weight || 0;
+      const lossWeightDiff = newLossWeight - oldLoss;
+      if (lossWeightDiff !== 0) {
+        await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
+      }
+
+      updates.return_weight = newRetWeight;
+      updates.scrap_weight = newScrWeight;
+      updates.loss_weight = newLossWeight;
+      if (return_pieces !== undefined)
+        updates.return_pieces = parseInt(return_pieces) || 0;
+    }
+
+    await tppService.editTppProcessUniversal(process_id, updates);
+
     return formatResponse(res, 200, true, "TPP process updated successfully.");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
@@ -296,8 +405,51 @@ const deleteTpp = async (req, res) => {
       );
     }
 
-    // RUNNING Deletion
-    if (process.status === "RUNNING") {
+    // RUNNING or COMPLETED Deletion
+    if (process.status === "RUNNING" || process.status === "COMPLETED") {
+      // 1. Validate and Revert Return Weight from TPP Pool
+      if (process.return_weight > 0) {
+        const currentStock = await stockService.getStockByMetal(
+          process.metal_type,
+        );
+        if (
+          !currentStock ||
+          Math.round(currentStock.tpp_stock * 1000) <
+            Math.round(process.return_weight * 1000)
+        ) {
+          return formatResponse(
+            res,
+            400,
+            false,
+            "Cannot delete: Downstream processes have already consumed this metal from the TPP Stock pool.",
+          );
+        }
+        await stockService.updateProcessStock(
+          "tpp",
+          process.metal_type,
+          process.return_weight,
+          false,
+        );
+      }
+
+      // 2. Revert Scrap Weight from Opening Stock
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          process.scrap_weight,
+          false,
+        );
+      }
+
+      // 3. Revert Loss Weight
+      if (process.loss_weight !== 0) {
+        await stockService.addTotalLoss(
+          process.metal_type,
+          -process.loss_weight,
+        );
+      }
+
+      // 4. Refund Issued Weight to Press Pool
       if (process.issued_weight > 0) {
         await stockService.updateProcessStock(
           "press",
@@ -309,7 +461,91 @@ const deleteTpp = async (req, res) => {
           process.metal_type,
           "REVERSAL",
           process.issued_weight,
-          `Deleted Running TPP Job ${process.job_number}`,
+          `Deleted ${process.status} TPP Job ${process.job_number} (Full Reversal)`,
+        );
+      }
+
+      await tppService.deleteTppProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        `${process.status.charAt(0) + process.status.slice(1).toLowerCase()} TPP process deleted and stock refunded.`,
+      );
+    }
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const revertTpp = async (req, res) => {
+  try {
+    const process_id = req.params.id;
+    const process = await tppService.getTppProcessById(process_id);
+
+    if (!process) return formatResponse(res, 404, false, "Process not found.");
+
+    if (process.status === "COMPLETED") {
+      if (process.return_weight > 0) {
+        const currentStock = await stockService.getStockByMetal(process.metal_type);
+        if (!currentStock || Math.round(currentStock.tpp_stock * 1000) < Math.round(process.return_weight * 1000)) {
+           return formatResponse(res, 400, false, "Cannot revert: Downstream has consumed stock from the TPP pool.");
+        }
+        await stockService.updateProcessStock("tpp", process.metal_type, process.return_weight, false);
+      }
+      
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);
+      }
+      
+      if (process.loss_weight !== 0) {
+        await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
+      }
+
+      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted TPP Job ${process.job_number} to RUNNING`);
+
+      const updates = {
+        status: "RUNNING",
+        return_weight: 0,
+        return_pieces: 0,
+        scrap_weight: 0,
+        loss_weight: 0,
+        end_time: null,
+      };
+      await tppService.editTppProcessUniversal(process_id, updates);
+      return formatResponse(res, 200, true, "TPP process reverted to RUNNING.");
+
+    } else if (process.status === "RUNNING") {
+      const delta = process.issued_weight - process.issue_size;
+      
+      if (delta > 0) {
+         await stockService.updateProcessStock("press", process.metal_type, delta, true);
+      } else if (delta < 0) {
+         const currentStock = await stockService.getStockByMetal(process.metal_type);
+         if (!currentStock || Math.round(currentStock.press_stock * 1000) < Math.round(Math.abs(delta) * 1000)) {
+            return formatResponse(res, 400, false, "Cannot revert: Insufficient Press stock to restore PENDING issue_size.");
+         }
+         await stockService.updateProcessStock("press", process.metal_type, Math.abs(delta), false);
+      }
+
+      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted TPP Job ${process.job_number} to PENDING`);
+
+      const updates = {
+        status: "PENDING",
+        issued_weight: 0,
+        start_time: null,
+      };
+      await tppService.editTppProcessUniversal(process_id, updates);
+      return formatResponse(res, 200, true, "TPP process reverted to PENDING.");
+
+    } else if (process.status === "PENDING") {
+      if (process.issue_size > 0) {
+        await stockService.updateProcessStock("press", process.metal_type, process.issue_size, true);
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issue_size,
+          `Deleted Queued TPP Job ${process.job_number}`
         );
       }
       await tppService.deleteTppProcessById(process_id);
@@ -317,74 +553,12 @@ const deleteTpp = async (req, res) => {
         res,
         200,
         true,
-        "Running TPP process deleted and stock refunded.",
+        "Pending tpp process queue removed and stock refunded.",
       );
-    }
 
-    if (process.status !== "COMPLETED") {
-      return formatResponse(res, 400, false, "Invalid status for deletion.");
+    } else {
+      return formatResponse(res, 400, false, "Invalid status for process reversal.");
     }
-
-    // COMPLETED Deletion Validation
-    const currentStock = await stockService.getStockByMetal(process.metal_type);
-    if (
-      !currentStock ||
-      Math.round(currentStock.tpp_stock * 1000) <
-        Math.round(process.return_weight * 1000)
-    ) {
-      return formatResponse(
-        res,
-        400,
-        false,
-        "Cannot delete: Downstream processes have already consumed this metal from the TPP Stock pool.",
-      );
-    }
-
-    // 1. Revert Return Weight from TPP Pool
-    if (process.return_weight > 0) {
-      await stockService.updateProcessStock(
-        "tpp",
-        process.metal_type,
-        process.return_weight,
-        false,
-      );
-    }
-    // 2. Revert Scrap Weight from Opening Stock
-    if (process.scrap_weight > 0) {
-      await stockService.updateOpeningStock(
-        process.metal_type,
-        process.scrap_weight,
-        false,
-      );
-    }
-    // 3. Revert Loss Weight
-    if (process.loss_weight > 0) {
-      await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
-    }
-    // 4. Refund Issued Weight to Press Pool
-    if (process.issued_weight > 0) {
-      await stockService.updateProcessStock(
-        "press",
-        process.metal_type,
-        process.issued_weight,
-        true,
-      );
-    }
-
-    await stockService.logTransaction(
-      process.metal_type,
-      "REVERSAL",
-      process.issued_weight,
-      `Deleted Completed TPP Job ${process.job_number} (Full Reversal)`,
-    );
-
-    await tppService.deleteTppProcessById(process_id);
-    return formatResponse(
-      res,
-      200,
-      true,
-      "TPP process deleted and stock reversed.",
-    );
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }
@@ -397,4 +571,5 @@ module.exports = {
   getAllTpp,
   editTpp,
   deleteTpp,
+  revertTpp,
 };

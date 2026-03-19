@@ -12,9 +12,12 @@ const createPacking = async (req, res) => {
       unit,
       employee,
       issue_size,
+      issue_pieces,
       category,
+      description,
     } = req.body;
     const weight = parseFloat(issue_size);
+    const pieces = parseInt(issue_pieces) || 0;
 
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(
@@ -40,12 +43,13 @@ const createPacking = async (req, res) => {
 
     const processId = await packingService.createPackingProcess(
       job_number,
-      job_name,
       metal_type,
       unit,
-      employee,
       weight,
+      pieces,
       category,
+      employee,
+      description || "",
     );
 
     // DEDUCT IMMEDIATELY UPON CREATION
@@ -67,8 +71,9 @@ const createPacking = async (req, res) => {
 
 const startPacking = async (req, res) => {
   try {
-    const { process_id, issued_weight } = req.body;
+    const { process_id, issued_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issued_weight);
+    const pieces = parseInt(issue_pieces) || 0;
     if (!process_id || isNaN(weight) || weight <= 0)
       return formatResponse(res, 400, false, "Invalid issued weight.");
 
@@ -121,7 +126,7 @@ const startPacking = async (req, res) => {
       );
     }
 
-    await packingService.startPackingProcess(process_id, weight);
+    await packingService.startPackingProcess(process_id, weight, pieces, employee, description);
     return formatResponse(res, 200, true, "Packing process started");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
@@ -130,10 +135,11 @@ const startPacking = async (req, res) => {
 
 const completePacking = async (req, res) => {
   try {
-    const { process_id, return_weight, scrap_weight, return_pieces } = req.body;
+    const { process_id, return_weight, scrap_weight, return_pieces, description } = req.body;
     const retW = parseFloat(return_weight) || 0;
+    const retP = parseInt(return_pieces) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
-    const pieces = parseInt(return_pieces) || 0;
+    const pieces = retP; // Packing currently expects just `pieces` for Finished Goods creation.
 
     if (!process_id || retW < 0 || scrW < 0)
       return formatResponse(res, 400, false, "Invalid weights.");
@@ -147,40 +153,54 @@ const completePacking = async (req, res) => {
 
     const issW = process.issued_weight;
     const lossWeight = calculateLoss(issW, retW, scrW);
-    if (lossWeight < 0)
-      return formatResponse(
-        res,
-        400,
-        false,
-        `Return + Scrap cannot exceed Issued Weight (${issW}).`,
-      );
 
     await packingService.completePackingProcess(
       process_id,
       retW,
+      retP,
       scrW,
       lossWeight,
+      description !== undefined ? description : null,
     );
 
-    // Packing is final. It creates Finished Goods.
+    // Remove old finished goods if it was retroactively added while RUNNING
+    const oldRetW = process.return_weight || 0;
+    if (oldRetW > 0) {
+      await packingService.removeFinishedGoods(
+        process.metal_type,
+        process.category,
+        oldRetW,
+      );
+    }
     await packingService.addFinishedGoods(
       process.metal_type,
       process.category,
-      pieces,
+      retP,
       retW,
     );
 
-    if (scrW > 0) {
-      await stockService.updateOpeningStock(process.metal_type, scrW, true);
+    const scrWeightDiff = scrW - (process.scrap_weight || 0);
+    if (scrWeightDiff > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        scrWeightDiff,
+        true,
+      );
       await stockService.logTransaction(
         process.metal_type,
-        TRANSACTION_TYPES.SCRAP_RETURN,
-        scrW,
+        "SCRAP_RETURN",
+        scrWeightDiff,
         `Scrap from Packing ${process.job_number}`,
+      );
+    } else if (scrWeightDiff < 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        Math.abs(scrWeightDiff),
+        false,
       );
     }
 
-    if (lossWeight > 0)
+    if (lossWeight !== 0)
       await stockService.addTotalLoss(process.metal_type, lossWeight);
 
     return formatResponse(
@@ -213,7 +233,15 @@ const getAllPacking = async (req, res) => {
 const editPacking = async (req, res) => {
   try {
     const process_id = req.params.id;
-    const { issued_weight } = req.body;
+    const {
+      issued_weight,
+      return_weight,
+      scrap_weight,
+      issue_pieces,
+      return_pieces,
+      description,
+      employee,
+    } = req.body;
     const newWeight = parseFloat(issued_weight);
 
     if (!process_id || isNaN(newWeight) || newWeight <= 0) {
@@ -222,17 +250,31 @@ const editPacking = async (req, res) => {
 
     const process = await packingService.getPackingProcessById(process_id);
     if (!process) return formatResponse(res, 404, false, "Process not found.");
-    if (process.status !== "RUNNING") {
-      return formatResponse(
-        res,
-        400,
-        false,
-        "Only RUNNING processes can be edited.",
-      );
-    }
 
-    const oldWeight = process.issued_weight;
+    const oldWeight = process.issue_size || process.issued_weight || 0;
     const delta = newWeight - oldWeight;
+
+    let newRetWeight = process.return_weight;
+    let newScrWeight = process.scrap_weight;
+    let newPieces = process.return_pieces;
+    let newLossWeight = process.loss_weight;
+
+    if (process.status === "COMPLETED") {
+      newRetWeight =
+        return_weight !== undefined
+          ? parseFloat(return_weight) || 0
+          : process.return_weight;
+      newScrWeight =
+        scrap_weight !== undefined
+          ? parseFloat(scrap_weight) || 0
+          : process.scrap_weight;
+      newPieces =
+        return_pieces !== undefined
+          ? parseInt(return_pieces) || 0
+          : process.return_pieces;
+
+      newLossWeight = calculateLoss(newWeight, newRetWeight, newScrWeight);
+    }
 
     if (delta > 0) {
       const currentStock = await stockService.getStockByMetal(
@@ -255,12 +297,6 @@ const editPacking = async (req, res) => {
         delta,
         false,
       );
-      await stockService.logTransaction(
-        process.metal_type,
-        "ADJUSTMENT",
-        delta,
-        `Increased issued weight for Packing Job ${process.job_number}`,
-      );
     } else if (delta < 0) {
       await stockService.updateProcessStock(
         "tpp",
@@ -268,15 +304,83 @@ const editPacking = async (req, res) => {
         Math.abs(delta),
         true,
       );
-      await stockService.logTransaction(
-        process.metal_type,
-        "ADJUSTMENT",
-        Math.abs(delta),
-        `Decreased/Refunded issued weight for Packing Job ${process.job_number}`,
-      );
     }
 
-    await packingService.updatePackingIssuedWeight(process_id, newWeight);
+    let updates = {
+      issued_weight: newWeight,
+      issue_size: newWeight,
+      issue_pieces:
+        issue_pieces !== undefined
+          ? parseInt(issue_pieces) || 0
+          : process.issue_pieces,
+    };
+    if (req.body.category !== undefined) {
+      updates.category = req.body.category;
+    }
+    if (description !== undefined) {
+      updates.description = description;
+    }
+    if (employee !== undefined) {
+      updates.employee = employee;
+    }
+
+    if (process.status === "COMPLETED") {
+      // Re-create the Finished Goods Record if Return Weight or Return Pieces or Category changed
+      if (
+        newRetWeight !== process.return_weight ||
+        newPieces !== process.return_pieces ||
+        req.body.category !== undefined
+      ) {
+        if ((process.return_weight || 0) > 0) {
+          // Delete the heuristic old row
+          await packingService.removeFinishedGoods(
+            process.metal_type,
+            process.category,
+            process.return_weight,
+          );
+        }
+        if (newRetWeight > 0) {
+          // Add new finished goods
+          await packingService.addFinishedGoods(
+            process.metal_type,
+            updates.category || process.category,
+            newPieces,
+            newRetWeight,
+          );
+        }
+      }
+
+      // Sync Scrap Weight -> opening_stock
+      const scrWeightDiff = newScrWeight - process.scrap_weight;
+      if (scrWeightDiff > 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          scrWeightDiff,
+          true,
+        );
+      } else if (scrWeightDiff < 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          Math.abs(scrWeightDiff),
+          false,
+        );
+      }
+
+      // Sync exact gain/loss ledger differences
+      const oldLoss = process.loss_weight || 0;
+      const lossWeightDiff = newLossWeight - oldLoss;
+      if (lossWeightDiff !== 0) {
+        await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
+      }
+
+      updates.return_weight = newRetWeight;
+      updates.scrap_weight = newScrWeight;
+      updates.loss_weight = newLossWeight;
+      updates.return_pieces = newPieces;
+    }
+
+    await packingService.editPackingProcessUniversal(process_id, updates);
+
     return formatResponse(
       res,
       200,
@@ -320,8 +424,35 @@ const deletePacking = async (req, res) => {
       );
     }
 
-    // RUNNING Deletion
-    if (process.status === "RUNNING") {
+    // RUNNING or COMPLETED Deletion
+    if (process.status === "RUNNING" || process.status === "COMPLETED") {
+      // 1. Revert Output from Finished Goods pool
+      if (process.return_weight > 0) {
+        await packingService.removeFinishedGoods(
+          process.metal_type,
+          process.category,
+          process.return_weight,
+        );
+      }
+
+      // 2. Revert Scrap Weight from Opening Stock
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(
+          process.metal_type,
+          process.scrap_weight,
+          false,
+        );
+      }
+
+      // 3. Revert Loss/Gain Weight
+      if (process.loss_weight !== 0) {
+        await stockService.addTotalLoss(
+          process.metal_type,
+          -process.loss_weight,
+        );
+      }
+
+      // 4. Refund Issued Weight to TPP Pool
       if (process.issued_weight > 0) {
         await stockService.updateProcessStock(
           "tpp",
@@ -333,7 +464,92 @@ const deletePacking = async (req, res) => {
           process.metal_type,
           "REVERSAL",
           process.issued_weight,
-          `Deleted Running Packing Job ${process.job_number}`,
+          `Deleted ${process.status} Packing Job ${process.job_number} (Full Reversal)`,
+        );
+      }
+
+      await packingService.deletePackingProcessById(process_id);
+      return formatResponse(
+        res,
+        200,
+        true,
+        `${process.status.charAt(0) + process.status.slice(1).toLowerCase()} packing process deleted and stock refunded.`,
+      );
+    }
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const revertPacking = async (req, res) => {
+  try {
+    const process_id = req.params.id;
+    const process = await packingService.getPackingProcessById(process_id);
+
+    if (!process) return formatResponse(res, 404, false, "Process not found.");
+
+    if (process.status === "COMPLETED") {
+      if (process.return_weight > 0) {
+        // Packing outputs directly to Finished Goods. We remove it from there.
+        await packingService.removeFinishedGoods(
+          process.metal_type,
+          process.category,
+          process.return_weight,
+        );
+      }
+      
+      if (process.scrap_weight > 0) {
+        await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);
+      }
+      
+      if (process.loss_weight !== 0) {
+        await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
+      }
+
+      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted Packing Job ${process.job_number} to RUNNING`);
+
+      const updates = {
+        status: "RUNNING",
+        return_weight: 0,
+        return_pieces: 0,
+        scrap_weight: 0,
+        loss_weight: 0,
+        end_time: null,
+      };
+      await packingService.editPackingProcessUniversal(process_id, updates);
+      return formatResponse(res, 200, true, "Packing process reverted to RUNNING.");
+
+    } else if (process.status === "RUNNING") {
+      const delta = process.issued_weight - process.issue_size;
+      
+      if (delta > 0) {
+         await stockService.updateProcessStock("tpp", process.metal_type, delta, true);
+      } else if (delta < 0) {
+         const currentStock = await stockService.getStockByMetal(process.metal_type);
+         if (!currentStock || Math.round(currentStock.tpp_stock * 1000) < Math.round(Math.abs(delta) * 1000)) {
+            return formatResponse(res, 400, false, "Cannot revert: Insufficient TPP stock to restore PENDING issue_size.");
+         }
+         await stockService.updateProcessStock("tpp", process.metal_type, Math.abs(delta), false);
+      }
+
+      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Packing Job ${process.job_number} to PENDING`);
+
+      const updates = {
+        status: "PENDING",
+        issued_weight: 0,
+        start_time: null,
+      };
+      await packingService.editPackingProcessUniversal(process_id, updates);
+      return formatResponse(res, 200, true, "Packing process reverted to PENDING.");
+
+    } else if (process.status === "PENDING") {
+      if (process.issue_size > 0) {
+        await stockService.updateProcessStock("tpp", process.metal_type, process.issue_size, true);
+        await stockService.logTransaction(
+          process.metal_type,
+          "REVERSAL",
+          process.issue_size,
+          `Deleted Queued Packing Job ${process.job_number}`
         );
       }
       await packingService.deletePackingProcessById(process_id);
@@ -341,58 +557,12 @@ const deletePacking = async (req, res) => {
         res,
         200,
         true,
-        "Running packing process deleted and stock refunded.",
+        "Pending packing process queue removed and stock refunded.",
       );
-    }
 
-    if (process.status !== "COMPLETED") {
-      return formatResponse(res, 400, false, "Invalid status for deletion.");
+    } else {
+      return formatResponse(res, 400, false, "Invalid status for process reversal.");
     }
-
-    // 1. Revert Output from Finished Goods pool
-    if (process.return_weight > 0) {
-      await packingService.removeFinishedGoods(
-        process.metal_type,
-        process.category,
-        process.return_weight,
-      );
-    }
-    // 2. Revert Scrap Weight from Opening Stock
-    if (process.scrap_weight > 0) {
-      await stockService.updateOpeningStock(
-        process.metal_type,
-        process.scrap_weight,
-        false,
-      );
-    }
-    // 3. Revert Loss Weight
-    if (process.loss_weight > 0) {
-      await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
-    }
-    // 4. Refund Issued Weight to TPP Pool
-    if (process.issued_weight > 0) {
-      await stockService.updateProcessStock(
-        "tpp",
-        process.metal_type,
-        process.issued_weight,
-        true,
-      );
-    }
-
-    await stockService.logTransaction(
-      process.metal_type,
-      "REVERSAL",
-      process.issued_weight,
-      `Deleted Completed Packing Job ${process.job_number} (Full Reversal)`,
-    );
-
-    await packingService.deletePackingProcessById(process_id);
-    return formatResponse(
-      res,
-      200,
-      true,
-      "Packing process deleted and stock reversed.",
-    );
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }
@@ -405,4 +575,5 @@ module.exports = {
   getAllPacking,
   editPacking,
   deletePacking,
+  revertPacking,
 };

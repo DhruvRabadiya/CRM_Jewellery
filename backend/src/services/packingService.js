@@ -2,18 +2,30 @@ const db = require("../../config/dbConfig");
 
 const createPackingProcess = (
   job_number,
-  job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
+  issue_pieces,
   category,
+  employee, // Moved employee here
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO packing_processes (job_number, job_name, metal_type, unit, employee, issue_size, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
+    // Removed job_name from columns, moved employee, changed 'PENDING' to STATUS.PENDING (assuming STATUS is defined elsewhere)
+    const query = `INSERT INTO packing_processes (job_number, metal_type, unit, issue_size, issue_pieces, category, employee, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     db.run(
       query,
-      [job_number, job_name, metal_type, unit, employee, issue_size, category],
+      [
+        job_number,
+        metal_type,
+        unit,
+        issue_size,
+        issue_pieces,
+        category,
+        employee, // Injected employee here
+        'PENDING', // Reverted to 'PENDING' as STATUS is not defined in the provided context
+        description,
+      ],
       function (err) {
         if (err) reject(err);
         resolve(this.lastID);
@@ -22,10 +34,10 @@ const createPackingProcess = (
   });
 };
 
-const startPackingProcess = (processId, issued_weight) => {
+const startPackingProcess = (processId, issued_weight, issue_pieces, employee, description) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE packing_processes SET status = 'RUNNING', issued_weight = ?, start_time = CURRENT_TIMESTAMP WHERE id = ?`;
-    db.run(query, [issued_weight, processId], function (err) {
+    const query = `UPDATE packing_processes SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, employee = COALESCE(?, employee), description = COALESCE(?, description), start_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(query, [issued_weight, issue_pieces, employee, description, processId], function (err) {
       if (err) reject(err);
       resolve();
     });
@@ -35,14 +47,16 @@ const startPackingProcess = (processId, issued_weight) => {
 const completePackingProcess = (
   processId,
   return_weight,
+  return_pieces,
   scrap_weight,
   loss_weight,
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE packing_processes SET status = 'COMPLETED', return_weight = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    const query = `UPDATE packing_processes SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) WHERE id = ?`;
     db.run(
       query,
-      [return_weight, scrap_weight, loss_weight, processId],
+      [return_weight, return_pieces, scrap_weight, loss_weight, description, processId],
       function (err) {
         if (err) reject(err);
         resolve();
@@ -119,6 +133,24 @@ const deletePackingProcessById = (id) => {
   });
 };
 
+const editPackingProcessUniversal = (processId, updates) => {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+    values.push(processId);
+
+    const query = `UPDATE packing_processes SET ${fields.join(", ")} WHERE id = ?`;
+    db.run(query, values, function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createPackingProcess,
   startPackingProcess,
@@ -129,4 +161,5 @@ module.exports = {
   removeFinishedGoods,
   updatePackingIssuedWeight,
   deletePackingProcessById,
+  editPackingProcessUniversal,
 };

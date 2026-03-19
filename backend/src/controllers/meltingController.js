@@ -5,8 +5,11 @@ const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const startMelting = async (req, res) => {
   try {
-    const { metal_type, issue_weight } = req.body;
+    const { metal_type, weight_unit, issue_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issue_weight);
+    const pieces = parseInt(issue_pieces) || 0;
+    const unit = weight_unit || "g";
+    const assignedEmployee = employee || "Unknown";
 
     if (!metal_type || isNaN(weight) || weight <= 0) {
       return formatResponse(
@@ -22,11 +25,14 @@ const startMelting = async (req, res) => {
       return formatResponse(res, 400, false, MESSAGES.INSUFFICIENT_STOCK);
     }
 
-
     await stockService.updateOpeningStock(metal_type, weight, false);
     const processId = await meltingService.createMeltingProcess(
       metal_type,
+      unit,
       weight,
+      pieces,
+      assignedEmployee,
+      description || "",
     );
     await stockService.logTransaction(
       metal_type,
@@ -47,15 +53,13 @@ const startMelting = async (req, res) => {
   }
 };
 
-
 const completeMelting = async (req, res) => {
   try {
-    const { process_id, return_weight, scrap_weight } = req.body;
-
+    const { process_id, return_weight, return_pieces, scrap_weight, description } = req.body;
 
     const retW = parseFloat(return_weight) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
-
+    const retPieces = parseInt(return_pieces) || 0;
 
     if (!process_id || retW < 0 || scrW < 0) {
       return formatResponse(
@@ -66,7 +70,6 @@ const completeMelting = async (req, res) => {
       );
     }
 
-
     const process = await meltingService.getMeltingProcessById(process_id);
     if (!process)
       return formatResponse(res, 404, false, MESSAGES.JOB_NOT_FOUND);
@@ -75,37 +78,54 @@ const completeMelting = async (req, res) => {
 
     const lossWeight = calculateLoss(process.issue_weight, retW, scrW);
 
-
-    if (lossWeight < 0) {
-      return formatResponse(
-        res,
-        400,
-        false,
-        `Validation Error: Return (${retW}) + Scrap (${scrW}) cannot exceed the Original Issue Weight (${process.issue_weight}).`,
-      );
-    }
-
-
     await meltingService.updateMeltingProcess(
       process_id,
       retW,
+      retPieces,
       scrW,
       lossWeight,
+      description !== undefined ? description : null,
     );
-    await stockService.updateDhalStock(process.metal_type, retW, true);
-
-    if (scrW > 0) {
-      await stockService.updateOpeningStock(process.metal_type, scrW, true);
-      await stockService.logTransaction(
+    // Math diff to prevent double counting if weights were previously updated in RUNNING edit
+    const retWeightDiff = retW - (process.return_weight || 0);
+    if (retWeightDiff > 0) {
+      await stockService.updateDhalStock(
         process.metal_type,
-        TRANSACTION_TYPES.SCRAP_RETURN,
-        scrW,
-        `Scrap from Melt #${process_id}`,
+        retWeightDiff,
+        true,
+      );
+    } else if (retWeightDiff < 0) {
+      await stockService.updateDhalStock(
+        process.metal_type,
+        Math.abs(retWeightDiff),
+        false,
       );
     }
 
-    if (lossWeight > 0) {
-      await stockService.addTotalLoss(process.metal_type, lossWeight);
+    const scrWeightDiff = scrW - (process.scrap_weight || 0);
+    if (scrWeightDiff > 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        scrWeightDiff,
+        true,
+      );
+      await stockService.logTransaction(
+        process.metal_type,
+        "SCRAP_RETURN",
+        scrWeightDiff,
+        `Scrap from Melt #${process_id}`,
+      );
+    } else if (scrWeightDiff < 0) {
+      await stockService.updateOpeningStock(
+        process.metal_type,
+        Math.abs(scrWeightDiff),
+        false,
+      );
+    }
+
+    const lossWeightDiff = lossWeight - (process.loss_weight || 0);
+    if (lossWeightDiff !== 0) {
+      await stockService.addTotalLoss(process.metal_type, lossWeightDiff);
     }
 
     await stockService.logTransaction(
@@ -123,7 +143,6 @@ const completeMelting = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
-
 
 const getRunningMelts = async (req, res) => {
   try {

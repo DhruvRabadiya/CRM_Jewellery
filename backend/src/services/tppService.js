@@ -5,15 +5,28 @@ const createTppProcess = (
   job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
+  issue_pieces,
   category,
+  employee, // Moved employee here
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO tpp_processes (job_number, job_name, metal_type, unit, employee, issue_size, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
+    // Updated query to reflect the new position of employee and keep job_name
+    const query = `INSERT INTO tpp_processes (job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`;
     db.run(
       query,
-      [job_number, job_name, metal_type, unit, employee, issue_size, category],
+      [
+        job_number,
+        job_name,
+        metal_type,
+        unit,
+        employee, // Updated position in the values array
+        issue_size,
+        issue_pieces,
+        category,
+        description,
+      ],
       function (err) {
         if (err) reject(err);
         resolve(this.lastID);
@@ -22,10 +35,10 @@ const createTppProcess = (
   });
 };
 
-const startTppProcess = (processId, issued_weight) => {
+const startTppProcess = (processId, issued_weight, issue_pieces, employee, description) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE tpp_processes SET status = 'RUNNING', issued_weight = ?, start_time = CURRENT_TIMESTAMP WHERE id = ?`;
-    db.run(query, [issued_weight, processId], function (err) {
+    const query = `UPDATE tpp_processes SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, employee = COALESCE(?, employee), description = COALESCE(?, description), start_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(query, [issued_weight, issue_pieces, employee, description, processId], function (err) {
       if (err) reject(err);
       resolve();
     });
@@ -35,14 +48,16 @@ const startTppProcess = (processId, issued_weight) => {
 const completeTppProcess = (
   processId,
   return_weight,
+  return_pieces,
   scrap_weight,
   loss_weight,
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE tpp_processes SET status = 'COMPLETED', return_weight = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    const query = `UPDATE tpp_processes SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) WHERE id = ?`;
     db.run(
       query,
-      [return_weight, scrap_weight, loss_weight, processId],
+      [return_weight, return_pieces, scrap_weight, loss_weight, description, processId],
       function (err) {
         if (err) reject(err);
         resolve();
@@ -91,6 +106,24 @@ const deleteTppProcessById = (id) => {
   });
 };
 
+const editTppProcessUniversal = (processId, updates) => {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+    values.push(processId);
+
+    const query = `UPDATE tpp_processes SET ${fields.join(", ")} WHERE id = ?`;
+    db.run(query, values, function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createTppProcess,
   startTppProcess,
@@ -99,4 +132,5 @@ module.exports = {
   getAllTppProcesses,
   updateTppIssuedWeight,
   deleteTppProcessById,
+  editTppProcessUniversal,
 };

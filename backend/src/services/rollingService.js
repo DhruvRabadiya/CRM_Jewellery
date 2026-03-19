@@ -5,15 +5,27 @@ const createRollingProcess = (
   job_name,
   metal_type,
   unit,
-  employee,
   issue_size,
+  issue_pieces,
   category,
+  employee,
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO rolling_processes (job_number, job_name, metal_type, unit, employee, issue_size, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
+    const query = `INSERT INTO rolling_processes (job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`;
     db.run(
       query,
-      [job_number, job_name, metal_type, unit, employee, issue_size, category],
+      [
+        job_number,
+        job_name,
+        metal_type,
+        unit,
+        employee,
+        issue_size,
+        issue_pieces,
+        category,
+        description,
+      ],
       function (err) {
         if (err) reject(err);
         resolve(this.lastID);
@@ -22,10 +34,10 @@ const createRollingProcess = (
   });
 };
 
-const startRollingProcess = (processId, issued_weight) => {
+const startRollingProcess = (processId, issued_weight, issue_pieces, employee, description) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE rolling_processes SET status = 'RUNNING', issued_weight = ?, start_time = CURRENT_TIMESTAMP WHERE id = ?`;
-    db.run(query, [issued_weight, processId], function (err) {
+    const query = `UPDATE rolling_processes SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, employee = COALESCE(?, employee), description = COALESCE(?, description), start_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(query, [issued_weight, issue_pieces, employee, description, processId], function (err) {
       if (err) reject(err);
       resolve();
     });
@@ -35,14 +47,16 @@ const startRollingProcess = (processId, issued_weight) => {
 const completeRollingProcess = (
   processId,
   return_weight,
+  return_pieces,
   scrap_weight,
   loss_weight,
+  description = "",
 ) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE rolling_processes SET status = 'COMPLETED', return_weight = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    const query = `UPDATE rolling_processes SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) WHERE id = ?`;
     db.run(
       query,
-      [return_weight, scrap_weight, loss_weight, processId],
+      [return_weight, return_pieces, scrap_weight, loss_weight, description, processId],
       function (err) {
         if (err) reject(err);
         resolve();
@@ -91,12 +105,31 @@ const deleteRollingProcessById = (id) => {
   });
 };
 
+const editRollingProcessUniversal = (processId, updates) => {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+    values.push(processId);
+
+    const query = `UPDATE rolling_processes SET ${fields.join(", ")} WHERE id = ?`;
+    db.run(query, values, function (err) {
+      if (err) reject(err);
+      resolve(this.changes);
+    });
+  });
+};
+
 module.exports = {
   createRollingProcess,
-  startRollingProcess,
+  startRollingProcess, // Kept original name as it was not explicitly changed in the instruction's code block
   completeRollingProcess,
   getRollingProcessById,
   getAllRollingProcesses,
   updateRollingIssuedWeight,
   deleteRollingProcessById,
+  editRollingProcessUniversal,
 };

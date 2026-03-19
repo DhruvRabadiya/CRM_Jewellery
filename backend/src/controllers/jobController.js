@@ -80,15 +80,6 @@ const completeStep = async (req, res) => {
 
     const lossWeight = calculateLoss(issW, retW, scrW);
 
-    if (lossWeight < 0) {
-      return formatResponse(
-        res,
-        400,
-        false,
-        `Validation Error: Step Return (${retW}) + Scrap (${scrW}) cannot exceed the Input Weight (${issW}).`,
-      );
-    }
-
     await jobService.logJobStep(
       job_id,
       step_name,
@@ -109,7 +100,7 @@ const completeStep = async (req, res) => {
       );
     }
 
-    if (lossWeight > 0) {
+    if (lossWeight !== 0) {
       await stockService.addTotalLoss(job.metal_type, lossWeight);
     }
 

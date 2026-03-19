@@ -7,6 +7,7 @@ router.post("/create", packingController.createPacking);
 router.post("/start", packingController.startPacking);
 router.post("/complete", packingController.completePacking);
 router.put("/:id/edit", packingController.editPacking);
+router.post("/:id/revert", packingController.revertPacking);
 router.delete("/:id/delete", packingController.deletePacking);
 
 module.exports = router;

@@ -44,7 +44,7 @@ function startBackend() {
     const dbPath = path.join(app.getPath("userData"), "jewelry.db");
 
     backendProcess = fork(backendPath, [], {
-      env: { ...process.env, NODE_ENV: "production", DB_PATH: dbPath },
+      env: { ...process.env, NODE_ENV: "production", DB_PATH: dbPath, PORT: "3000" },
     });
 
     backendProcess.on("error", (err) => {

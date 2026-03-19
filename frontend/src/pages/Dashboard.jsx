@@ -6,7 +6,7 @@ import {
   RefreshCw,
   BarChart2,
   TrendingDown,
-  Layers,
+  TrendingUp,
   Activity,
 } from "lucide-react";
 import Modal from "../components/Modal";
@@ -54,9 +54,9 @@ const Dashboard = () => {
         procRes.data.forEach((p) => {
           if (metrics[p.metal_type] && metrics[p.metal_type][p.stage]) {
             if (p.status === "PENDING")
-              metrics[p.metal_type][p.stage].pending += p.issue_size || 0;
+              metrics[p.metal_type][p.stage].pending += Number(p.issue_size) || 0;
             if (p.status === "RUNNING")
-              metrics[p.metal_type][p.stage].running += p.issued_weight || 0;
+              metrics[p.metal_type][p.stage].running += Number(p.issued_weight) || 0;
           }
         });
         setProcessMetrics(metrics);
@@ -77,12 +77,31 @@ const Dashboard = () => {
     return lossStats
       .filter((s) => {
         if (s.metal_type !== metal) return false;
-        const d = new Date(s.date);
-        const diffTime = Math.abs(now - d);
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) <= days;
+        if (days !== Infinity) {
+          const d = new Date(s.date);
+          const diffTime = Math.abs(now - d);
+          return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) <= days;
+        }
+        return true;
       })
       .reduce((sum, s) => sum + s.loss_weight, 0)
       .toFixed(3);
+  };
+
+  const renderLossMetric = (label, value, isGain, unit = "g") => {
+    const val = parseFloat(value) || 0;
+    const Icon = label.includes("All-Time") ? Activity : (label.includes("Wk") ? BarChart2 : (isGain ? TrendingUp : TrendingDown));
+    
+    return (
+      <div className={`${isGain ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'} p-3 rounded-lg border text-center`}>
+        <p className={`text-[10px] font-bold ${isGain ? 'text-green-800' : 'text-red-800'} uppercase mb-1 flex items-center justify-center gap-1`}>
+          <Icon size={12} /> {label}
+        </p>
+        <p className={`text-lg font-black ${isGain ? 'text-green-600' : 'text-red-600'}`}>
+          {val.toFixed(3)}{unit}
+        </p>
+      </div>
+    );
   };
 
   if (loading)
@@ -211,34 +230,13 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
-          <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-3 mt-4">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Loss Analytics
           </p>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <TrendingDown size={12} /> Day Loss
-              </p>
-              <p className="text-lg font-black text-red-600">
-                {calculateLossFrame(1, "Gold")}g
-              </p>
-            </div>
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <BarChart2 size={12} /> Wk Loss
-              </p>
-              <p className="text-lg font-black text-red-700">
-                {calculateLossFrame(7, "Gold")}g
-              </p>
-            </div>
-            <div className="bg-red-100 p-3 rounded-lg border border-red-200 text-center">
-              <p className="text-[10px] font-bold text-red-900 uppercase mb-1 flex items-center justify-center gap-1">
-                <Activity size={12} /> All-Time
-              </p>
-              <p className="text-lg font-black text-red-800">
-                {gold.total_loss?.toFixed(3)}g
-              </p>
-            </div>
+            {renderLossMetric("Day Loss", calculateLossFrame(1, "Gold"), false)}
+            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Gold"), false)}
+            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Gold"), false)}
           </div>
         </div>
 
@@ -319,34 +317,13 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
-          <p className="text-xs font-bold text-red-500 uppercase tracking-widest mb-3 mt-4">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Loss Analytics
           </p>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <TrendingDown size={12} /> Day Loss
-              </p>
-              <p className="text-lg font-black text-red-600">
-                {calculateLossFrame(1, "Silver")}g
-              </p>
-            </div>
-            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-              <p className="text-[10px] font-bold text-red-800 uppercase mb-1 flex items-center justify-center gap-1">
-                <BarChart2 size={12} /> Wk Loss
-              </p>
-              <p className="text-lg font-black text-red-700">
-                {calculateLossFrame(7, "Silver")}g
-              </p>
-            </div>
-            <div className="bg-red-100 p-3 rounded-lg border border-red-200 text-center">
-              <p className="text-[10px] font-bold text-red-900 uppercase mb-1 flex items-center justify-center gap-1">
-                <Activity size={12} /> All-Time
-              </p>
-              <p className="text-lg font-black text-red-800">
-                {silver.total_loss?.toFixed(3)}g
-              </p>
-            </div>
+            {renderLossMetric("Day Loss", calculateLossFrame(1, "Silver"), false)}
+            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Silver"), false)}
+            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Silver"), false)}
           </div>
         </div>
       </div>
