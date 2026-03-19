@@ -1254,11 +1254,11 @@ const JobHistory = () => {
                 </span>
               </div>
               <div className="border-t border-gray-600 pt-3 flex justify-between font-bold">
-                <span>Loss:</span>
+                <span>{liveLoss < 0 ? 'Gain:' : 'Loss:'}</span>
                 <span
-                  className={isLossNegative ? "text-red-500" : "text-white"}
+                  className={liveLoss < 0 ? "text-green-400" : liveLoss > 0 ? "text-red-400" : "text-white"}
                 >
-                  {(
+                  {liveLoss < 0 ? '+' : ''}{Math.abs(
                     liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
                   ).toFixed(3)}
                 </span>
@@ -1266,8 +1266,7 @@ const JobHistory = () => {
             </div>
             <button
               type="submit"
-              disabled={isLossNegative}
-              className="w-full mt-4 bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
+              className="w-full mt-4 bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700"
             >
               Complete Process
             </button>

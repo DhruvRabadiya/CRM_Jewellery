@@ -200,7 +200,7 @@ const completePacking = async (req, res) => {
       );
     }
 
-    if (lossWeight > 0)
+    if (lossWeight !== 0)
       await stockService.addTotalLoss(process.metal_type, lossWeight);
 
     return formatResponse(

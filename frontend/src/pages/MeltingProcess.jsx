@@ -732,35 +732,28 @@ const MeltingProcess = () => {
               <div className="col-span-1 flex flex-col justify-end">
                 <div
                   className={`p-4 rounded-xl border flex flex-col justify-center h-full transition-colors ${
-                    isLossNegative
-                      ? "bg-red-50 border-red-200 text-red-700"
+                    liveLoss < 0
+                      ? "bg-green-50 border-green-200 text-green-700"
                       : liveLoss > 0
                         ? "bg-orange-50 border-orange-200 text-orange-700"
                         : "bg-gray-50 border-gray-200 text-gray-500"
                   }`}
                 >
                   <span className="font-bold flex items-center justify-center gap-2 mb-2">
-                    {isLossNegative ? <AlertTriangle size={18} /> : null}
-                    Calculated Loss:
+                    {liveLoss < 0 ? 'Calculated Gain:' : 'Calculated Loss:'}
                   </span>
                   <span className="text-3xl font-extrabold text-center">
-                    {(
+                    {liveLoss < 0 ? '+' : ''}{Math.abs(
                       liveLoss / (completeForm?.weight_unit === "kg" ? 1000 : 1)
                     ).toFixed(3)}
                   </span>
                 </div>
-                {isLossNegative && (
-                  <p className="text-red-500 text-xs text-center font-bold mt-2">
-                    Error: Return + Scrap cannot be larger than Issued Weight!
-                  </p>
-                )}
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={isLossNegative} // Disable button if math is physically impossible
-              className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl hover:bg-green-700 shadow-md active:scale-95 transition-all flex justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl hover:bg-green-700 shadow-md active:scale-95 transition-all flex justify-center gap-2"
             >
               <CheckCircle size={20} /> Save to Inventory
             </button>
@@ -1022,20 +1015,19 @@ const MeltingProcess = () => {
 
                   // For melting, scrap is typically added back cleanly so Loss = Issued - Return - Scrap
                   let liveLoss = parseFloat((iss - ret - scr).toFixed(3));
-                  let isLossNegative = liveLoss < 0;
                   return (
                     <div className="col-span-1">
                       <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                        Live Loss Calculation
+                        {liveLoss < 0 ? 'Live Gain Calculation' : 'Live Loss Calculation'}
                       </label>
                       <div
                         className={`w-full py-2.5 px-3 rounded-lg font-bold text-lg border flex items-center shadow-inner ${
-                          isLossNegative
-                            ? "bg-red-50 text-red-700 border-red-200"
+                          liveLoss < 0
+                            ? "bg-green-50 text-green-700 border-green-200"
                             : "bg-gray-100 text-gray-700 border-gray-200"
                         }`}
                       >
-                        {liveLoss.toFixed(3)} {editForm.weight_unit}
+                        {liveLoss < 0 ? '+' : ''}{Math.abs(liveLoss).toFixed(3)} {editForm.weight_unit}
                       </div>
                     </div>
                   );
