@@ -116,6 +116,9 @@ const Dashboard = () => {
   const gold = stock.gold || {};
   const silver = stock.silver || {};
 
+  const goldInProcess = Object.values(processMetrics.Gold).reduce((sum, s) => sum + s.running, 0);
+  const silverInProcess = Object.values(processMetrics.Silver).reduce((sum, s) => sum + s.running, 0);
+
   return (
     <div className="p-6 relative max-w-7xl mx-auto">
       {toast && (
@@ -163,7 +166,7 @@ const Dashboard = () => {
               Gold Reserves, Pools & Analytics
             </h2>
           </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-yellow-200/50">
               <p className="text-xs font-bold text-yellow-700 uppercase">
                 Opening Stock
@@ -178,6 +181,14 @@ const Dashboard = () => {
               </p>
               <p className="text-2xl font-black text-green-700">
                 {gold.dhal_stock?.toFixed(3)}g
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
+              <p className="text-xs font-bold text-blue-800 uppercase">
+                In Process
+              </p>
+              <p className="text-2xl font-black text-blue-700">
+                {goldInProcess.toFixed(3)}g
               </p>
             </div>
           </div>
@@ -248,7 +259,7 @@ const Dashboard = () => {
               Silver Reserves, Pools & Analytics
             </h2>
           </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200/50">
               <p className="text-xs font-bold text-gray-500 uppercase">
                 Opening Stock
@@ -263,6 +274,14 @@ const Dashboard = () => {
               </p>
               <p className="text-2xl font-black text-green-700">
                 {(silver.dhal_stock / 1000)?.toFixed(3)}kg
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
+              <p className="text-xs font-bold text-blue-800 uppercase">
+                In Process
+              </p>
+              <p className="text-2xl font-black text-blue-700">
+                {(silverInProcess / 1000).toFixed(3)}kg
               </p>
             </div>
           </div>
