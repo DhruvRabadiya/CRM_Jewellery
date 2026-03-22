@@ -319,10 +319,15 @@ const MeltingProcess = () => {
     const isSil = melt.metal_type === "Silver";
     const div = isSil ? 1000 : 1;
     setEditForm({
-      issued_weight: melt.issue_weight / div,
+      issued_weight: parseFloat((melt.issue_weight / div).toFixed(10)),
       return_weight:
-        melt.return_weight !== null ? melt.return_weight / div : "",
-      scrap_weight: melt.scrap_weight !== null ? melt.scrap_weight / div : "",
+        melt.return_weight !== null
+          ? parseFloat((melt.return_weight / div).toFixed(10))
+          : "",
+      scrap_weight:
+        melt.scrap_weight !== null
+          ? parseFloat((melt.scrap_weight / div).toFixed(10))
+          : "",
       issue_pieces: melt.issue_pieces || "",
       return_pieces: melt.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
@@ -348,7 +353,7 @@ const MeltingProcess = () => {
   }
 
   // Calculate and format strictly to 3 decimals to avoid JS floating point bugs
-  const liveLoss = parseFloat((issueW - (returnW + scrapW)).toFixed(3));
+  const liveLoss = parseFloat((issueW - (returnW + scrapW)).toFixed(10));
   const isLossNegative = liveLoss < 0;
 
   if (loading)
@@ -617,9 +622,11 @@ const MeltingProcess = () => {
                   Total Issued ({completeForm?.weight_unit || "g"})
                 </span>
                 <span className="text-xl font-bold text-blue-900">
-                  {(
-                    issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                  ).toFixed(3)}
+                  {parseFloat(
+                    (
+                      issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(10),
+                  )}
                 </span>
               </div>
 
@@ -744,9 +751,12 @@ const MeltingProcess = () => {
                   </span>
                   <span className="text-3xl font-extrabold text-center">
                     {isLossNegative ? "+" : ""}
-                    {(
-                      Math.abs(liveLoss) / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(3)}
+                    {parseFloat(
+                      (
+                        Math.abs(liveLoss) /
+                        (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                      ).toFixed(10),
+                    )}
                   </span>
                 </div>
               </div>
@@ -1015,7 +1025,7 @@ const MeltingProcess = () => {
                   let scr = parseFloat(editForm.scrap_weight) || 0;
 
                   // For melting, scrap is typically added back cleanly so Loss = Issued - Return - Scrap
-                  let liveLoss = parseFloat((iss - ret - scr).toFixed(3));
+                  let liveLoss = parseFloat((iss - ret - scr).toFixed(10));
                   let isLossNeg = liveLoss < 0;
                   return (
                     <div className="col-span-1">
@@ -1029,7 +1039,8 @@ const MeltingProcess = () => {
                             : "bg-gray-100 text-gray-700 border-gray-200"
                         }`}
                       >
-                        {liveLoss.toFixed(3)} {editForm.weight_unit}
+                        {liveLoss.toFixed(10).replace(/\.?0+$/, "")}{" "}
+                        {editForm.weight_unit}
                       </div>
                     </div>
                   );

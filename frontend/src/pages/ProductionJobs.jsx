@@ -211,8 +211,8 @@ const ProductionJobs = () => {
       category: process.category || sizeOptions[process.metal_type][0],
       issue_size:
         process.metal_type === "Silver"
-          ? parseFloat((process.return_weight / 1000).toFixed(3)).toString()
-          : parseFloat(process.return_weight.toFixed(3)).toString(),
+          ? parseFloat((process.return_weight / 1000).toFixed(10)).toString()
+          : parseFloat(process.return_weight.toFixed(10)).toString(),
       issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
@@ -261,7 +261,7 @@ const ProductionJobs = () => {
     setStartForm({
       issued_weight:
         process.metal_type === "Silver"
-          ? process.issue_size / 1000
+          ? parseFloat((process.issue_size / 1000).toFixed(10)).toString()
           : process.issue_size || "",
       issue_pieces: process.issue_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
@@ -302,14 +302,16 @@ const ProductionJobs = () => {
     const isSil = process.metal_type === "Silver";
     const div = isSil ? 1000 : 1;
     setEditForm({
-      issued_weight: process.issued_weight ? process.issued_weight / div : "",
+      issued_weight: process.issued_weight
+        ? parseFloat((process.issued_weight / div).toFixed(10)).toString()
+        : "",
       return_weight:
         process.return_weight !== null && process.return_weight !== undefined
-          ? process.return_weight / div
+          ? parseFloat((process.return_weight / div).toFixed(10)).toString()
           : "",
       scrap_weight:
         process.scrap_weight !== null && process.scrap_weight !== undefined
-          ? process.scrap_weight / div
+          ? parseFloat((process.scrap_weight / div).toFixed(10)).toString()
           : "",
       issue_pieces: process.issue_pieces || "",
       return_pieces: process.return_pieces || "",
@@ -499,7 +501,7 @@ const ProductionJobs = () => {
     retVal *= 1000;
     scrVal *= 1000;
   }
-  const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(3));
+  const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(10));
   const isLossNegative = liveLoss < 0;
 
   const getAvailableJobNumbers = () => {
@@ -1296,25 +1298,31 @@ const ProductionJobs = () => {
                 <div className="flex justify-between text-sm">
                   <span>Issued ({completeForm?.weight_unit || "g"}):</span>
                   <span>
-                    {(
-                      issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(3)}
+                    {parseFloat(
+                      (
+                        issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                      ).toFixed(10),
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm text-green-400">
                   <span>- Return:</span>
                   <span>
-                    {(
-                      retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(3)}
+                    {parseFloat(
+                      (
+                        retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                      ).toFixed(10),
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm text-yellow-400 mb-2">
                   <span>- Scrap:</span>
                   <span>
-                    {(
-                      scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(3)}
+                    {parseFloat(
+                      (
+                        scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                      ).toFixed(10),
+                    )}
                   </span>
                 </div>
                 <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
@@ -1323,9 +1331,12 @@ const ProductionJobs = () => {
                     className={isLossNegative ? "text-green-400" : "text-white"}
                   >
                     {isLossNegative ? "+" : ""}
-                    {(
-                      Math.abs(liveLoss) / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(3)}
+                    {parseFloat(
+                      (
+                        Math.abs(liveLoss) /
+                        (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                      ).toFixed(10),
+                    )}
                   </span>
                 </div>
               </div>

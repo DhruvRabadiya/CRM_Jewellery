@@ -10,11 +10,11 @@ export const formatWeight = (weightInGrams, unit = "g") => {
   const grams = parseFloat(weightInGrams) || 0;
 
   if (unit === "kg") {
-    // Convert to kg and show 3 decimal places
+    // Convert to kg with high precision but no trailing noise
     const kg = grams / 1000;
-    return `${kg.toFixed(3)} kg`;
+    return `${parseFloat(kg.toFixed(10))} kg`;
   }
 
-  // Default to grams with 2 decimal places
-  return `${grams.toFixed(2)} g`;
+  // Grams with high precision but no trailing noise
+  return `${parseFloat(grams.toFixed(10))} g`;
 };

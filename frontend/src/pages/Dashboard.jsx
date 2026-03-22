@@ -85,7 +85,7 @@ const Dashboard = () => {
         return true;
       })
       .reduce((sum, s) => sum + s.loss_weight, 0)
-      .toFixed(3);
+      .toFixed(10);
   };
 
   const renderLossMetric = (label, value, isGain, unit = "g") => {
@@ -98,7 +98,7 @@ const Dashboard = () => {
           <Icon size={12} /> {label}
         </p>
         <p className={`text-lg font-black ${isGain ? 'text-green-600' : 'text-red-600'}`}>
-          {val.toFixed(3)}{unit}
+          {parseFloat(val.toFixed(10))}{unit}
         </p>
       </div>
     );
@@ -172,7 +172,7 @@ const Dashboard = () => {
                 Opening Stock
               </p>
               <p className="text-xl font-black text-gray-800">
-                {gold.opening_stock?.toFixed(3)}g
+                {parseFloat((gold.opening_stock || 0).toFixed(10))}g
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-yellow-300">
@@ -180,7 +180,7 @@ const Dashboard = () => {
                 Pure Dhal (Active)
               </p>
               <p className="text-2xl font-black text-green-700">
-                {gold.dhal_stock?.toFixed(3)}g
+                {parseFloat((gold.dhal_stock || 0).toFixed(10))}g
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
@@ -188,7 +188,7 @@ const Dashboard = () => {
                 In Process
               </p>
               <p className="text-2xl font-black text-blue-700">
-                {goldInProcess.toFixed(3)}g
+                {parseFloat(goldInProcess.toFixed(10))}g
               </p>
             </div>
           </div>
@@ -214,8 +214,9 @@ const Dashboard = () => {
                     Pending
                   </p>
                   <p className="font-black text-gray-800 text-sm">
-                    {processMetrics.Gold[s.stage]?.pending.toFixed(3) ||
-                      "0.000"}
+                    {parseFloat(
+                      (processMetrics.Gold[s.stage]?.pending || 0).toFixed(10),
+                    )}
                     g
                   </p>
                 </div>
@@ -224,8 +225,9 @@ const Dashboard = () => {
                     Running
                   </p>
                   <p className="font-black text-blue-800 text-sm">
-                    {processMetrics.Gold[s.stage]?.running.toFixed(3) ||
-                      "0.000"}
+                    {parseFloat(
+                      (processMetrics.Gold[s.stage]?.running || 0).toFixed(10),
+                    )}
                     g
                   </p>
                 </div>
@@ -234,7 +236,9 @@ const Dashboard = () => {
                     {s.key ? "Pool (Completed)" : "Completed"}
                   </p>
                   <p className="font-black text-green-700 text-sm">
-                    {s.key ? (gold[s.key] || 0)?.toFixed(3) : "N/A"}
+                    {s.key
+                      ? parseFloat((gold[s.key] || 0).toFixed(10))
+                      : "N/A"}
                     {s.key ? "g" : ""}
                   </p>
                 </div>
@@ -265,7 +269,7 @@ const Dashboard = () => {
                 Opening Stock
               </p>
               <p className="text-xl font-black text-gray-700">
-                {(silver.opening_stock / 1000)?.toFixed(3)}kg
+                {parseFloat((silver.opening_stock / 1000).toFixed(10))}kg
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-300">
@@ -273,7 +277,7 @@ const Dashboard = () => {
                 Pure Dhal (Active)
               </p>
               <p className="text-2xl font-black text-green-700">
-                {(silver.dhal_stock / 1000)?.toFixed(3)}kg
+                {parseFloat((silver.dhal_stock / 1000).toFixed(10))}kg
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
@@ -281,7 +285,7 @@ const Dashboard = () => {
                 In Process
               </p>
               <p className="text-2xl font-black text-blue-700">
-                {(silverInProcess / 1000).toFixed(3)}kg
+                {parseFloat((silverInProcess / 1000).toFixed(10))}kg
               </p>
             </div>
           </div>
@@ -307,9 +311,11 @@ const Dashboard = () => {
                     Pending
                   </p>
                   <p className="font-black text-gray-700 text-sm">
-                    {(processMetrics.Silver[s.stage]?.pending / 1000).toFixed(
-                      3,
-                    ) || "0.000"}
+                    {parseFloat(
+                      (
+                        (processMetrics.Silver[s.stage]?.pending || 0) / 1000
+                      ).toFixed(10),
+                    ) || "0"}
                     kg
                   </p>
                 </div>
@@ -318,9 +324,11 @@ const Dashboard = () => {
                     Running
                   </p>
                   <p className="font-black text-blue-800 text-sm">
-                    {(processMetrics.Silver[s.stage]?.running / 1000).toFixed(
-                      3,
-                    ) || "0.000"}
+                    {parseFloat(
+                      (
+                        (processMetrics.Silver[s.stage]?.running || 0) / 1000
+                      ).toFixed(10),
+                    ) || "0"}
                     kg
                   </p>
                 </div>
@@ -329,7 +337,9 @@ const Dashboard = () => {
                     {s.key ? "Pool (Completed)" : "Completed"}
                   </p>
                   <p className="font-black text-green-700 text-sm">
-                    {s.key ? (silver[s.key] / 1000 || 0)?.toFixed(3) : "N/A"}
+                    {s.key
+                      ? parseFloat((silver[s.key] / 1000 || 0).toFixed(10))
+                      : "N/A"}
                     {s.key ? "kg" : ""}
                   </p>
                 </div>

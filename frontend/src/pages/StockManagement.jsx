@@ -131,7 +131,7 @@ const StockManagement = () => {
                 GOLD INVENTORY
               </p>
               <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-yellow-600 transition-colors">
-                {stock.gold?.opening_stock?.toFixed(2) || "0.00"}{" "}
+                {parseFloat((stock.gold?.opening_stock || 0).toFixed(10))}{" "}
                 <span className="text-xl font-medium text-gray-400">g</span>
               </h2>
             </div>
@@ -142,7 +142,7 @@ const StockManagement = () => {
           <div className="mt-8 pt-4 border-t border-gray-50 flex justify-between">
             <span className="text-gray-500 font-medium">Pure Dhal</span>
             <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-bold">
-              {stock.gold?.dhal_stock?.toFixed(2)} g
+              {parseFloat((stock.gold?.dhal_stock || 0).toFixed(10))} g
             </span>
           </div>
         </div>
@@ -166,7 +166,8 @@ const StockManagement = () => {
           <div className="mt-8 pt-4 border-t border-gray-50 flex justify-between">
             <span className="text-gray-500 font-medium">Pure Dhal</span>
             <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm font-bold">
-              {(stock.silver?.dhal_stock / 1000)?.toFixed(3)} kg
+              {parseFloat((stock.silver?.dhal_stock / 1000 || 0).toFixed(10))}{" "}
+              kg
             </span>
           </div>
         </div>
@@ -238,8 +239,8 @@ const StockManagement = () => {
                       <td className="p-4 text-sm font-black text-green-600 text-right">
                         +
                         {activeTab === "Gold"
-                          ? txn.weight.toFixed(3)
-                          : (txn.weight / 1000).toFixed(3)}{" "}
+                          ? parseFloat((txn.weight || 0).toFixed(10))
+                          : parseFloat((txn.weight / 1000 || 0).toFixed(10))}{" "}
                         {activeTab === "Gold" ? "g" : "kg"}
                       </td>
                       <td className="p-4 text-center">
@@ -344,8 +345,8 @@ const StockManagement = () => {
                       <td className="p-4 text-sm font-black text-right text-red-600">
                         -
                         {activeTab === "Gold"
-                          ? txn.weight?.toFixed(3)
-                          : (txn.weight / 1000)?.toFixed(3)}{" "}
+                          ? parseFloat((txn.weight || 0).toFixed(10))
+                          : parseFloat((txn.weight / 1000 || 0).toFixed(10))}{" "}
                         {activeTab === "Gold" ? "g" : "kg"}
                       </td>
                     </tr>

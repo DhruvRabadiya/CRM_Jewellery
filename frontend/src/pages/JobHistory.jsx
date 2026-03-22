@@ -173,7 +173,7 @@ const JobHistory = () => {
     setStartForm({
       issued_weight:
         process.metal_type === "Silver"
-          ? process.issue_size / 1000
+          ? parseFloat((process.issue_size / 1000).toFixed(10)).toString()
           : process.issue_size || "",
       issue_pieces: process.issue_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
@@ -297,14 +297,16 @@ const JobHistory = () => {
     const isSil = process.metal_type === "Silver";
     const div = isSil ? 1000 : 1;
     setEditForm({
-      issued_weight: process.issued_weight ? process.issued_weight / div : "",
+      issued_weight: process.issued_weight
+        ? parseFloat((process.issued_weight / div).toFixed(10)).toString()
+        : "",
       return_weight:
         process.return_weight !== null && process.return_weight !== undefined
-          ? process.return_weight / div
+          ? parseFloat((process.return_weight / div).toFixed(10)).toString()
           : "",
       scrap_weight:
         process.scrap_weight !== null && process.scrap_weight !== undefined
-          ? process.scrap_weight / div
+          ? parseFloat((process.scrap_weight / div).toFixed(10)).toString()
           : "",
       issue_pieces: process.issue_pieces || "",
       return_pieces: process.return_pieces || "",
@@ -377,8 +379,8 @@ const JobHistory = () => {
       category: process.category,
       issue_size:
         process.metal_type === "Silver"
-          ? parseFloat((remainingWeight / 1000).toFixed(3)).toString()
-          : parseFloat(remainingWeight.toFixed(3)).toString(),
+          ? parseFloat((remainingWeight / 1000).toFixed(10)).toString()
+          : parseFloat(remainingWeight.toFixed(10)).toString(),
       issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
@@ -432,7 +434,7 @@ const JobHistory = () => {
     retVal *= 1000;
     scrVal *= 1000;
   }
-  const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(3));
+  const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(10));
   const isLossNegative = liveLoss < 0;
 
   const getRemainingStockForRow = (row, historyItems, allItems) => {
@@ -480,7 +482,7 @@ const JobHistory = () => {
     }
 
     const targetRow = stageReturns.find((r) => r.id === row.id);
-    return targetRow ? parseFloat(targetRow.remaining.toFixed(3)) : 0;
+    return targetRow ? parseFloat(targetRow.remaining.toFixed(10)) : 0;
   };
 
   if (loading)
@@ -611,7 +613,7 @@ const JobHistory = () => {
                         </div>
                         {h.description && (
                           <div
-                            className="text-[10px] text-gray-400 font-normal mt-1 italic max-w-[150px] truncate"
+                            className="text-[10px] text-gray-400 font-normal mt-1 italic max-w-37.5 truncate"
                             title={h.description}
                           >
                             {h.description}
@@ -1272,25 +1274,31 @@ const JobHistory = () => {
               <div className="flex justify-between text-sm mb-1">
                 <span>Issued ({completeForm?.weight_unit || "g"}):</span>
                 <span>
-                  {(
-                    issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                  ).toFixed(3)}
+                  {parseFloat(
+                    (
+                      issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(10),
+                  )}
                 </span>
               </div>
               <div className="flex justify-between text-sm mb-1 text-green-400">
                 <span>- Return:</span>
                 <span>
-                  {(
-                    retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                  ).toFixed(3)}
+                  {parseFloat(
+                    (
+                      retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(10),
+                  )}
                 </span>
               </div>
               <div className="flex justify-between text-sm mb-3 text-yellow-400">
                 <span>- Scrap:</span>
                 <span>
-                  {(
-                    scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                  ).toFixed(3)}
+                  {parseFloat(
+                    (
+                      scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(10),
+                  )}
                 </span>
               </div>
               <div className="border-t border-gray-600 pt-3 flex justify-between font-bold">
@@ -1299,9 +1307,12 @@ const JobHistory = () => {
                   className={isLossNegative ? "text-green-400" : "text-white"}
                 >
                   {isLossNegative ? "+" : ""}
-                  {(
-                    Math.abs(liveLoss) / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                  ).toFixed(3)}
+                  {parseFloat(
+                    (
+                      Math.abs(liveLoss) /
+                      (completeForm?.weight_unit === "kg" ? 1000 : 1)
+                    ).toFixed(10),
+                  )}
                 </span>
               </div>
             </div>
