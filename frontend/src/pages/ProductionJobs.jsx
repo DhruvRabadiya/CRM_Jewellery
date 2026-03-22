@@ -213,7 +213,7 @@ const ProductionJobs = () => {
         process.metal_type === "Silver"
           ? parseFloat((process.return_weight / 1000).toFixed(3)).toString()
           : parseFloat(process.return_weight.toFixed(3)).toString(),
-      issue_pieces: "",
+      issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
       employee: user?.username || "",

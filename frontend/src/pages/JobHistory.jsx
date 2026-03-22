@@ -379,7 +379,7 @@ const JobHistory = () => {
         process.metal_type === "Silver"
           ? parseFloat((remainingWeight / 1000).toFixed(3)).toString()
           : parseFloat(remainingWeight.toFixed(3)).toString(),
-      issue_pieces: "",
+      issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
     });
