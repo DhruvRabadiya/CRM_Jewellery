@@ -602,11 +602,21 @@ const JobHistory = () => {
                       onClick={() => openViewModal(h)}
                       className="hover:bg-blue-50/40 transition-colors border-b border-gray-50 cursor-pointer group"
                     >
-                      <td className="p-4 font-bold text-gray-800 flex items-center gap-2">
-                        <span className="bg-gray-200 text-gray-700 w-6 h-6 flex items-center justify-center rounded-full text-xs group-hover:bg-blue-200 group-hover:text-blue-800 transition-colors">
-                          {index + 1}
-                        </span>
-                        {h.stage}
+                      <td className="p-4 font-bold text-gray-800">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-gray-200 text-gray-700 w-6 h-6 flex items-center justify-center rounded-full text-xs group-hover:bg-blue-200 group-hover:text-blue-800 transition-colors">
+                            {index + 1}
+                          </span>
+                          {h.stage}
+                        </div>
+                        {h.description && (
+                          <div
+                            className="text-[10px] text-gray-400 font-normal mt-1 italic max-w-[150px] truncate"
+                            title={h.description}
+                          >
+                            {h.description}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4">
                         <span
