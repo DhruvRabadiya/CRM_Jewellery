@@ -664,7 +664,7 @@ const MeltingProcess = () => {
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
+                  className="w-full bg-green-50 border-2 border-green-200 text-gray-800 py-2.5 px-3 rounded-lg outline-none vivid-focus-green transition-all text-xl font-bold"
                   value={completeForm.return_weight}
                   onChange={(e) =>
                     setCompleteForm({
@@ -684,7 +684,7 @@ const MeltingProcess = () => {
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-gray-500 transition-colors text-lg font-bold"
+                  className="w-full bg-yellow-50/50 border-2 border-yellow-200 text-gray-800 py-2.5 px-3 rounded-lg outline-none vivid-focus-yellow transition-all text-xl font-bold"
                   value={completeForm.scrap_weight}
                   onChange={(e) =>
                     setCompleteForm({
@@ -704,7 +704,7 @@ const MeltingProcess = () => {
                   </label>
                   <input
                     type="number"
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors text-lg font-bold"
+                    className="w-full bg-purple-50 border-2 border-purple-200 text-gray-800 py-2.5 px-3 rounded-lg outline-none vivid-focus-purple transition-all text-xl font-bold"
                     value={completeForm.return_pieces}
                     onChange={(e) =>
                       setCompleteForm({
@@ -722,7 +722,7 @@ const MeltingProcess = () => {
                     Description / Notes (Optional)
                   </label>
                   <textarea
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none focus:bg-white focus:border-green-500 transition-colors font-bold min-h-20 text-sm"
+                    className="w-full bg-gray-50 border-2 border-blue-200 text-gray-800 py-2.5 px-3 rounded-lg outline-none vivid-focus-blue transition-all font-bold min-h-20 text-sm"
                     value={completeForm.description}
                     onChange={(e) =>
                       setCompleteForm({
@@ -797,7 +797,7 @@ const MeltingProcess = () => {
                 <tr
                   key={h.id}
                   onClick={() => openViewModal(h)}
-                  className="hover:bg-blue-50/50 transition-colors group cursor-pointer"
+                  className="hover:bg-blue-50/80 transition-all cursor-pointer group/row border-b border-gray-100"
                 >
                   <td className="p-4">
                     <div className="font-bold text-gray-800">#{h.id}</div>

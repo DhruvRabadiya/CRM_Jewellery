@@ -115,57 +115,59 @@ const StockManagement = () => {
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all"
+          className="flex items-center gap-2 bg-blue-600 text-white px-8 py-3.5 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all hover:ring-4 hover:ring-blue-500/20 font-black"
         >
-          <PlusCircle size={20} />{" "}
-          <span className="font-semibold">Add New Stock</span>
+          <PlusCircle size={22} />{" "}
+          <span className="font-bold">Add New Stock</span>
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Gold Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 hover:border-yellow-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group cursor-default">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-yellow-600 font-bold text-sm tracking-wide mb-2">
-                GOLD INVENTORY
+              <p className="text-yellow-600 font-black text-sm tracking-wide mb-2 uppercase">
+                Gold Inventory
               </p>
               <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-yellow-600 transition-colors">
                 {parseFloat((stock.gold?.opening_stock || 0).toFixed(10))}{" "}
                 <span className="text-xl font-medium text-gray-400">g</span>
               </h2>
             </div>
-            <div className="p-4 bg-yellow-50 rounded-2xl text-yellow-500">
+            <div className="p-4 bg-yellow-50 rounded-2xl text-yellow-500 group-hover:bg-yellow-100 transition-colors">
               <Coins size={32} />
             </div>
           </div>
-          <div className="mt-8 pt-4 border-t border-gray-50 flex justify-between">
-            <span className="text-gray-500 font-medium">Pure Dhal</span>
-            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-bold">
+          <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
+            <span className="text-gray-500 font-bold">Pure Dhal</span>
+            <span className="bg-yellow-100 text-yellow-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-yellow-200">
               {parseFloat((stock.gold?.dhal_stock || 0).toFixed(10))} g
             </span>
           </div>
         </div>
 
         {/* Silver Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 hover:border-blue-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group cursor-default">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-500 font-bold text-sm tracking-wide mb-2">
-                SILVER INVENTORY
+              <p className="text-gray-500 font-black text-sm tracking-wide mb-2 uppercase">
+                Silver Inventory
               </p>
-              <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-gray-600 transition-colors">
-                {(stock.silver?.opening_stock / 1000)?.toFixed(3) || "0.000"}{" "}
+              <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-blue-600 transition-colors">
+                {parseFloat(
+                  (stock.silver?.opening_stock / 1000 || 0).toFixed(10),
+                )}{" "}
                 <span className="text-xl font-medium text-gray-400">kg</span>
               </h2>
             </div>
-            <div className="p-4 bg-gray-50 rounded-2xl text-gray-400">
+            <div className="p-4 bg-gray-50 rounded-2xl text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
               <Coins size={32} />
             </div>
           </div>
-          <div className="mt-8 pt-4 border-t border-gray-50 flex justify-between">
-            <span className="text-gray-500 font-medium">Pure Dhal</span>
-            <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm font-bold">
+          <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
+            <span className="text-gray-500 font-bold">Pure Dhal</span>
+            <span className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-gray-200">
               {parseFloat((stock.silver?.dhal_stock / 1000 || 0).toFixed(10))}{" "}
               kg
             </span>
@@ -224,7 +226,7 @@ const StockManagement = () => {
                   .map((txn, index) => (
                     <tr
                       key={txn.id || index}
-                      className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors"
+                      className="border-b border-gray-100 hover:bg-blue-50/80 transition-all cursor-pointer group/row"
                     >
                       <td className="p-4 text-sm font-semibold text-gray-700">
                         {new Date(txn.date).toLocaleDateString()}{" "}
@@ -319,7 +321,7 @@ const StockManagement = () => {
                   .map((txn, index) => (
                     <tr
                       key={index}
-                      className="border-b border-gray-50 hover:bg-red-50/30 transition-colors"
+                      className="border-b border-red-50 hover:bg-red-50/80 transition-all cursor-pointer group/row"
                     >
                       <td className="p-4 text-sm font-semibold text-gray-700">
                         {new Date(txn.date).toLocaleDateString()}{" "}

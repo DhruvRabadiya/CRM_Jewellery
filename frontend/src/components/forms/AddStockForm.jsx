@@ -51,7 +51,7 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
         </label>
         <div className="relative">
           <select
-            className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none cursor-pointer"
+            className="w-full bg-blue-50/50 border-2 border-blue-200 text-blue-900 py-3 px-4 rounded-lg outline-none cursor-pointer vivid-focus-blue transition-all font-bold"
             value={formData.metal_type}
             onChange={(e) =>
               setFormData({ ...formData, metal_type: e.target.value })
@@ -71,7 +71,7 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
         <label className="block text-sm font-bold text-gray-700 mb-2">
           Weight
         </label>
-        <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+        <div className="flex bg-white border-2 border-gray-200 rounded-lg focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/20 transition-all overflow-hidden group">
           <input
             type="number"
             step="0.001"
@@ -100,7 +100,7 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
           Description
         </label>
         <textarea
-          className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none resize-none"
+          className="w-full bg-gray-50 border-2 border-gray-200 text-gray-700 py-3 px-4 rounded-lg outline-none resize-none vivid-focus-blue transition-all font-medium"
           rows="3"
           value={formData.description}
           onChange={(e) =>

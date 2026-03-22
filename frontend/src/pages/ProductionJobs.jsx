@@ -593,7 +593,7 @@ const ProductionJobs = () => {
                 <tr
                   key={`${p.stage}-${p.id}`}
                   onClick={() => openViewModal(p.job_number)}
-                  className="hover:bg-blue-50/50 cursor-pointer border-b border-gray-50 transition-colors"
+                  className="hover:bg-blue-50/80 transition-all cursor-pointer group/row border-b border-gray-100"
                 >
                   <td className="p-4">
                     <div className="font-bold text-gray-800 text-base">
@@ -1099,7 +1099,7 @@ const ProductionJobs = () => {
                 Assigned Employee
               </label>
               <select
-                className="w-full bg-blue-50/50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                className="w-full bg-blue-50/50 border-2 border-blue-200 py-2.5 px-3 rounded-lg font-bold text-blue-900 outline-none vivid-focus-blue transition-all cursor-pointer"
                 value={startForm.employee}
                 onChange={(e) =>
                   setStartForm({
@@ -1132,7 +1132,7 @@ const ProductionJobs = () => {
                 type="number"
                 step="1"
                 min="0"
-                className="w-full bg-white border border-yellow-300 py-2.5 px-3 rounded-lg font-bold text-lg text-yellow-900 outline-none focus:border-orange-500 transition-colors"
+                className="w-full bg-white border-2 border-yellow-300 py-2.5 px-3 rounded-lg font-bold text-lg text-yellow-900 outline-none vivid-focus-orange transition-all"
                 value={startForm.issue_pieces}
                 onChange={(e) =>
                   setStartForm({ ...startForm, issue_pieces: e.target.value })
@@ -1149,7 +1149,7 @@ const ProductionJobs = () => {
                 </span>
               </label>
               <textarea
-                className="w-full bg-white border border-yellow-300 py-2 px-3 text-sm rounded-lg outline-none focus:border-orange-500 min-h-20 transition-colors"
+                className="w-full bg-white border-2 border-yellow-300 py-2 px-3 text-sm rounded-lg outline-none vivid-focus-orange min-h-20 transition-all font-medium"
                 value={startForm.description}
                 onChange={(e) =>
                   setStartForm({ ...startForm, description: e.target.value })
@@ -1224,7 +1224,7 @@ const ProductionJobs = () => {
                 type="number"
                 step="0.001"
                 required
-                className="w-full bg-green-50 border border-green-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
+                className="w-full bg-green-50 border-2 border-green-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none vivid-focus-green transition-all"
                 value={completeForm.return_weight}
                 onChange={(e) =>
                   setCompleteForm({
@@ -1243,7 +1243,7 @@ const ProductionJobs = () => {
               <input
                 type="number"
                 step="0.001"
-                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
+                className="w-full bg-yellow-50/50 border-2 border-yellow-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none vivid-focus-yellow transition-all"
                 value={completeForm.scrap_weight}
                 onChange={(e) =>
                   setCompleteForm({
@@ -1264,7 +1264,7 @@ const ProductionJobs = () => {
                   type="number"
                   step="1"
                   required={reqPieces}
-                  className="w-full bg-purple-50 border border-purple-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none"
+                  className="w-full bg-purple-50 border-2 border-purple-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none vivid-focus-purple transition-all"
                   value={completeForm.return_pieces}
                   onChange={(e) =>
                     setCompleteForm({
@@ -1280,7 +1280,7 @@ const ProductionJobs = () => {
                   Description / Notes (Optional)
                 </label>
                 <textarea
-                  className="w-full bg-gray-50 border border-gray-200 py-2 px-3 rounded-lg outline-none focus:border-blue-500 min-h-20 text-sm"
+                  className="w-full bg-gray-50 border-2 border-blue-200 py-2.5 px-3 rounded-lg outline-none vivid-focus-blue min-h-20 text-sm transition-all font-medium"
                   value={completeForm.description || ""}
                   onChange={(e) =>
                     setCompleteForm({

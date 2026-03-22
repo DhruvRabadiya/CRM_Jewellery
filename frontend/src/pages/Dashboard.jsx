@@ -141,16 +141,16 @@ const Dashboard = () => {
         <div className="flex gap-3">
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all"
+            className="flex items-center gap-2 bg-blue-600 text-white font-black px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all hover:ring-4 hover:ring-blue-500/20"
           >
-            <ArrowUpCircle size={18} /> New Purchase
+            <ArrowUpCircle size={20} /> New Purchase
           </button>
           <button
             onClick={() => {
               setLoading(true);
               fetchDashboard();
             }}
-            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-xl hover:bg-gray-50 shadow-sm active:scale-95 transition-all"
+            className="flex items-center gap-2 bg-white border-2 border-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-xl hover:bg-gray-50 hover:border-blue-400 shadow-sm active:scale-95 transition-all"
           >
             <RefreshCw size={18} /> Refresh
           </button>
@@ -159,7 +159,7 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8 mt-4">
         {/* GOLD POOLS */}
-        <div className="bg-linear-to-br from-yellow-50 to-orange-50 p-6 rounded-3xl shadow-sm border border-yellow-100">
+        <div className="bg-linear-to-br from-yellow-50 to-orange-50 p-6 rounded-3xl shadow-sm border-2 border-yellow-100 hover:border-yellow-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-yellow-400 w-3 h-8 rounded-full"></div>
             <h2 className="text-xl font-black text-yellow-900 tracking-tight">
@@ -204,7 +204,7 @@ const Dashboard = () => {
             ].map((s) => (
               <div
                 key={s.stage}
-                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border border-yellow-200/50"
+                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-yellow-200/50 hover:border-yellow-400 hover:bg-white transition-all cursor-default"
               >
                 <div className="flex items-center justify-start pl-2 font-bold text-yellow-900 text-sm">
                   {s.stage}
@@ -256,7 +256,7 @@ const Dashboard = () => {
         </div>
 
         {/* SILVER POOLS */}
-        <div className="bg-linear-to-br from-gray-50 to-slate-100 p-6 rounded-3xl shadow-sm border border-gray-200">
+        <div className="bg-linear-to-br from-gray-50 to-slate-100 p-6 rounded-3xl shadow-sm border-2 border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-gray-400 w-3 h-8 rounded-full"></div>
             <h2 className="text-xl font-black text-gray-800 tracking-tight">
@@ -301,7 +301,7 @@ const Dashboard = () => {
             ].map((s) => (
               <div
                 key={s.stage}
-                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border border-gray-200/50"
+                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-gray-200/50 hover:border-blue-400 hover:bg-white transition-all cursor-default"
               >
                 <div className="flex items-center justify-start pl-2 font-bold text-gray-800 text-sm">
                   {s.stage}

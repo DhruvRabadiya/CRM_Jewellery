@@ -4,17 +4,56 @@ body {
   background-color: #f3f4f6;
   color: #1f2937;
 }
+
 button {
   cursor: pointer;
+  @apply transition-all duration-200;
 }
+
+button:hover {
+  @apply scale-[1.02] shadow-md;
+}
+
 .card {
-  @apply bg-white p-6 rounded-lg shadow-md;
+  @apply bg-white p-6 rounded-lg shadow-md transition-all duration-300;
+}
+
+.card:hover {
+  @apply -translate-y-1 shadow-xl border-blue-400/30;
 }
 
 .btn-primary {
-  @apply bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition;
+  @apply bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-all font-bold active:scale-95;
 }
 
 .input-field {
-  @apply w-full border border-gray-300 p-2 rounded mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none;
+  @apply w-full border border-gray-300 p-2.5 rounded-xl mt-1 
+         focus:ring-2 focus:ring-blue-500 focus:border-blue-500 
+         focus:outline-none transition-all hover:border-gray-400
+         bg-gray-50 focus:bg-white;
+}
+
+/* Vivid Highlight Classes */
+.hover-highlight-row {
+  @apply hover:bg-blue-50/80 transition-colors duration-150;
+}
+
+.vivid-focus-blue {
+  @apply focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-blue-50/30;
+}
+
+.vivid-focus-green {
+  @apply focus:ring-4 focus:ring-green-500/20 focus:border-green-500 focus:bg-green-50/30;
+}
+
+.vivid-focus-purple {
+  @apply focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 focus:bg-purple-50/30;
+}
+
+.vivid-focus-yellow {
+  @apply focus:ring-4 focus:ring-yellow-500/20 focus:border-yellow-500 focus:bg-yellow-50/30;
+}
+
+.vivid-focus-orange {
+  @apply focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 focus:bg-orange-50/30;
 }

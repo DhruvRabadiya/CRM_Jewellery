@@ -602,7 +602,7 @@ const JobHistory = () => {
                     <tr
                       key={`${h.stage}-${h.id}`}
                       onClick={() => openViewModal(h)}
-                      className="hover:bg-blue-50/40 transition-colors border-b border-gray-50 cursor-pointer group"
+                      className="hover:bg-blue-50/80 transition-all cursor-pointer group/row border-b border-gray-100"
                     >
                       <td className="p-4 font-bold text-gray-800">
                         <div className="flex items-center gap-2">
@@ -1203,7 +1203,7 @@ const JobHistory = () => {
                   type="number"
                   step="0.001"
                   required
-                  className="w-full bg-green-50 border border-green-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
+                  className="w-full bg-green-50 border-2 border-green-200 py-3 px-4 rounded-lg font-bold text-xl outline-none vivid-focus-green transition-all"
                   value={completeForm.return_weight}
                   onChange={(e) =>
                     setCompleteForm({
@@ -1221,7 +1221,7 @@ const JobHistory = () => {
                 <input
                   type="number"
                   step="0.001"
-                  className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
+                  className="w-full bg-yellow-50/50 border-2 border-yellow-200 py-3 px-4 rounded-lg font-bold text-xl outline-none vivid-focus-yellow transition-all"
                   value={completeForm.scrap_weight}
                   onChange={(e) =>
                     setCompleteForm({
@@ -1242,7 +1242,7 @@ const JobHistory = () => {
                   type="number"
                   step="1"
                   required={reqPieces}
-                  className="w-full bg-purple-50 border border-purple-200 py-3 px-4 rounded-lg font-bold text-lg outline-none"
+                  className="w-full bg-purple-50 border-2 border-purple-200 py-3 px-4 rounded-lg font-bold text-xl outline-none vivid-focus-purple transition-all"
                   value={completeForm.return_pieces}
                   onChange={(e) =>
                     setCompleteForm({
@@ -1258,7 +1258,7 @@ const JobHistory = () => {
                   Description / Notes (Optional)
                 </label>
                 <textarea
-                  className="w-full bg-gray-50 border border-gray-200 py-3 px-4 rounded-lg outline-none focus:border-blue-500 min-h-20"
+                  className="w-full bg-gray-50 border-2 border-blue-200 py-3 px-4 rounded-lg outline-none vivid-focus-blue min-h-20 transition-all font-medium"
                   value={completeForm.description}
                   onChange={(e) =>
                     setCompleteForm({
