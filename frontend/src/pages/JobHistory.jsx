@@ -521,12 +521,42 @@ const JobHistory = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-gray-900 transition-colors shadow-sm cursor-pointer"
-          >
-            <Printer size={18} /> Print Job Sheet
-          </button>
+
+          <div className="flex items-center gap-6">
+            {history.length > 0 && (
+              <div className="flex gap-4">
+                <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-xs text-right">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                    Net Job {history.reduce((sum, h) => sum + (h.loss_weight || 0), 0) < 0 ? "Gain" : "Loss"}
+                  </p>
+                  {(() => {
+                    const totalLoss = history.reduce((sum, h) => sum + (h.loss_weight || 0), 0);
+                    const isGain = totalLoss < 0;
+                    const unit = history[0]?.unit || (history[0]?.metal_type === "Silver" ? "kg" : "g");
+                    return (
+                      <p className={`text-xl font-black ${isGain ? "text-green-600" : totalLoss > 0 ? "text-red-600" : "text-gray-400"}`}>
+                        {isGain ? "+" : ""}{formatWeight(Math.abs(totalLoss), unit)}
+                      </p>
+                    );
+                  })()}
+                </div>
+                <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-xs text-right">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                    Total Scrap
+                  </p>
+                  <p className="text-xl font-black text-amber-600">
+                    {formatWeight(history.reduce((sum, h) => sum + (h.scrap_weight || 0), 0), history[0]?.unit || (history[0]?.metal_type === "Silver" ? "kg" : "g"))}
+                  </p>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-gray-900 transition-colors shadow-sm cursor-pointer"
+            >
+              <Printer size={18} /> Print Job Sheet
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
