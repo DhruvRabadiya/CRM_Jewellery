@@ -32,10 +32,10 @@ import { useAuth } from "../context/AuthContext";
 
 const sizeOptions = {
   Gold: [
-    "0.05",
-    "0.1 gm",
-    "0.200",
-    "0.5 gm",
+    "0.05gm",
+    "0.100gm",
+    "0.250gm",
+    "0.500gm",
     "1 gm",
     "2 gm",
     "5 gm",
@@ -43,6 +43,7 @@ const sizeOptions = {
     "20 gm",
     "25 gm",
     "50 gm",
+    "100 gm",
   ],
   Silver: [
     "1g -Bar",
@@ -57,6 +58,8 @@ const sizeOptions = {
     "50g -C|B",
     "100g -C|B",
     "200g -Bar",
+    "250 gm",
+    "500 gm",
   ],
 };
 
