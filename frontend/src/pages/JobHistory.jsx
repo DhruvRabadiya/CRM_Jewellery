@@ -44,6 +44,7 @@ const sizeOptions = {
     "25 gm",
     "50 gm",
     "100 gm",
+    "Other",
   ],
   Silver: [
     "1g -Bar",
@@ -60,6 +61,7 @@ const sizeOptions = {
     "200g -Bar",
     "250 gm",
     "500 gm",
+    "Other",
   ],
 };
 
@@ -146,6 +148,8 @@ const JobHistory = () => {
     issued_weight: "",
     weight_unit: "g",
     description: "",
+    category: "",
+    customCategory: "",
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -154,7 +158,8 @@ const JobHistory = () => {
     stage: "Rolling",
     job_number: "",
     metal_type: "Gold",
-    category: "N/A",
+    category: sizeOptions["Gold"][0],
+    customCategory: "",
     issue_size: "",
     issue_pieces: "",
     weight_unit: "g",
@@ -232,6 +237,9 @@ const JobHistory = () => {
       retW *= 1000;
       scrW *= 1000;
     }
+
+    retW = parseFloat(retW.toFixed(8));
+    scrW = parseFloat(scrW.toFixed(8));
 
     const liveLoss = issW - retW - scrW;
 
@@ -314,7 +322,8 @@ const JobHistory = () => {
       issue_pieces: process.issue_pieces || "",
       return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
-      category: process.category || "",
+      category: sizeOptions[process.metal_type].includes(process.category) ? process.category : (process.category ? "Other" : ""),
+      customCategory: sizeOptions[process.metal_type].includes(process.category) ? "" : (process.category || ""),
       description: process.description || "",
       employee: process.employee || "",
     });
@@ -324,17 +333,13 @@ const JobHistory = () => {
   const handleEditProcess = async (e) => {
     e.preventDefault();
     let issueW = parseFloat(editForm.issued_weight);
-    if (!issueW || issueW <= 0) {
-      triggerError();
-      return showToast("Invalid issued weight", "error");
-    }
-    const isKg = editForm.weight_unit === "kg";
-    if (isKg) issueW *= 1000;
+    if (editForm.weight_unit === "kg") issueW *= 1000;
+    issueW = parseFloat(issueW.toFixed(8));
 
     let payload = {
       issued_weight: issueW,
-      issue_pieces: editForm.issue_pieces,
-      category: editForm.category,
+      issue_pieces: parseInt(editForm.issue_pieces) || 0,
+      category: editForm.category === "Other" ? editForm.customCategory : editForm.category,
     };
     if (editForm.description !== undefined) {
       payload.description = editForm.description;
@@ -353,9 +358,9 @@ const JobHistory = () => {
         retW *= 1000;
         scrW *= 1000;
       }
-      payload.return_weight = retW;
-      payload.scrap_weight = scrW;
-      payload.return_pieces = editForm.return_pieces;
+      payload.return_weight = parseFloat(retW.toFixed(8));
+      payload.scrap_weight = parseFloat(scrW.toFixed(8));
+      payload.return_pieces = parseInt(editForm.return_pieces) || 0;
     }
 
     try {
@@ -379,7 +384,8 @@ const JobHistory = () => {
       stage: nextStage,
       job_number: process.job_number,
       metal_type: process.metal_type,
-      category: process.category,
+      category: sizeOptions[process.metal_type].includes(process.category) ? process.category : (process.category ? "Other" : ""),
+      customCategory: sizeOptions[process.metal_type].includes(process.category) ? "" : (process.category || ""),
       issue_size:
         process.metal_type === "Silver"
           ? parseFloat((remainingWeight / 1000).toFixed(10)).toString()
@@ -401,6 +407,7 @@ const JobHistory = () => {
     e.preventDefault();
     let size = parseFloat(createForm.issue_size);
     if (createForm.weight_unit === "kg") size *= 1000;
+    size = parseFloat(size.toFixed(8));
 
     if (!size || size <= 0) {
       triggerError();
@@ -409,6 +416,7 @@ const JobHistory = () => {
     try {
       await createProcess(createForm.stage, {
         ...createForm,
+        category: createForm.category === "Other" ? createForm.customCategory : createForm.category,
         issue_size: size,
         issue_pieces: parseInt(createForm.issue_pieces) || 0,
         description: createForm.description || "",
@@ -974,6 +982,26 @@ const JobHistory = () => {
                 </select>
               </div>
 
+              {createForm.category === "Other" && (
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-blue-700 mb-1.5 uppercase tracking-wide">
+                    Custom Category Name
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full bg-blue-50 border-2 border-blue-200 text-blue-900 py-2.5 px-3 rounded-lg outline-none font-bold placeholder:text-blue-300 focus:border-blue-500 transition-all"
+                    value={createForm.customCategory}
+                    onChange={(e) =>
+                      setCreateForm({
+                        ...createForm,
+                        customCategory: e.target.value,
+                      })
+                    }
+                    placeholder="Enter custom category..."
+                  />
+                </div>
+              )}
+
               <div className="col-span-1">
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Issue Size (Previous Pool)
@@ -1385,6 +1413,26 @@ const JobHistory = () => {
                   ))}
                 </select>
               </div>
+
+              {editForm.category === "Other" && (
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-blue-700 mb-1.5 uppercase tracking-wide">
+                    Custom Category Name
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full bg-blue-50 border-2 border-blue-200 text-blue-900 py-2.5 px-3 rounded-lg outline-none font-bold placeholder:text-blue-300 focus:border-blue-500 transition-all"
+                    value={editForm.customCategory}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        customCategory: e.target.value,
+                      })
+                    }
+                    placeholder="Enter custom category..."
+                  />
+                </div>
+              )}
               <div className="col-span-1">
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
                   New Issue Weight
