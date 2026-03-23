@@ -386,7 +386,7 @@ const JobHistory = () => {
           : parseFloat(remainingWeight.toFixed(10)).toString(),
       issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
-      description: "",
+      description: process.description || "",
     });
     setIsNextStep(true);
     setIsCreateModalOpen(true);

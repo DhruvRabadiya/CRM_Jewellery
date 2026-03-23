@@ -789,6 +789,7 @@ const MeltingProcess = () => {
                 <th className="p-4 font-bold">Assigned To</th>
                 <th className="p-4 font-bold">Ret Weight / Pcs</th>
                 <th className="p-4 font-bold">Scrap / Loss</th>
+                <th className="p-4 font-bold">Description</th>
                 <th className="p-4 font-bold text-right">Actions</th>
               </tr>
             </thead>
@@ -848,6 +849,9 @@ const MeltingProcess = () => {
                         : "-"}
                     </span>
                   </td>
+                  <td className="p-4 text-xs text-gray-500 italic max-w-xs truncate" title={h.description}>
+                    {h.description || "-"}
+                  </td>
                   <td className="p-4 flex justify-end gap-2 text-sm">
                     {isAdmin && (
                       <button
@@ -888,7 +892,7 @@ const MeltingProcess = () => {
               ))}
               {history.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-gray-400">
+                  <td colSpan="8" className="p-8 text-center text-gray-400">
                     No melting history found.
                   </td>
                 </tr>

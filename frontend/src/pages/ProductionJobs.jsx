@@ -92,6 +92,7 @@ const ProductionJobs = () => {
   const [isNextStep, setIsNextStep] = useState(false);
 
   const [selectedProcess, setSelectedProcess] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: "job_number", direction: "asc" });
 
   const [createForm, setCreateForm] = useState({
     stage: "Rolling",
@@ -218,7 +219,7 @@ const ProductionJobs = () => {
           : parseFloat(process.return_weight.toFixed(10)).toString(),
       issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
-      description: "",
+      description: process.description || "",
       employee: user?.username || "",
     });
     setIsNextStep(true);
@@ -480,9 +481,24 @@ const ProductionJobs = () => {
       }
     });
 
-    return Object.values(jobMap).sort(
-      (a, b) => new Date(b.date) - new Date(a.date),
-    );
+    return Object.values(jobMap).sort((a, b) => {
+      const valA = a[sortConfig.key] || "";
+      const valB = b[sortConfig.key] || "";
+
+      if (sortConfig.key === "job_number") {
+        return sortConfig.direction === "asc"
+          ? valA.localeCompare(valB, undefined, { numeric: true })
+          : valB.localeCompare(valA, undefined, { numeric: true });
+      }
+
+      if (sortConfig.key === "date") {
+        return sortConfig.direction === "asc"
+          ? new Date(valA) - new Date(valB)
+          : new Date(valB) - new Date(valA);
+      }
+
+      return 0;
+    });
   };
 
   const latestProcesses = getLatestProcesses(processes);
@@ -545,13 +561,72 @@ const ProductionJobs = () => {
           </h1>
           <p className="text-gray-500 mt-1">Unified Process Table & Tracking</p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all"
-        >
-          <PlusCircle size={20} />{" "}
-          <span className="font-semibold">Create Process Job</span>
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex bg-gray-100 p-1 rounded-xl items-center border border-gray-200">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-3">
+              Sort Job:
+            </span>
+            <button
+              onClick={() =>
+                setSortConfig({
+                  key: "job_number",
+                  direction: sortConfig.direction === "asc" ? "desc" : "asc",
+                })
+              }
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                sortConfig.key === "job_number"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {sortConfig.direction === "asc" ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m3 16 4 4 4-4" />
+                  <path d="M7 20V4" />
+                  <path d="M11 4h10" />
+                  <path d="M11 8h7" />
+                  <path d="M11 12h4" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m3 8 4-4 4 4" />
+                  <path d="M7 4v16" />
+                  <path d="M11 12h4" />
+                  <path d="M11 16h7" />
+                  <path d="M11 20h10" />
+                </svg>
+              )}
+              Job {sortConfig.direction.toUpperCase()}
+            </button>
+          </div>
+          <button
+            onClick={openCreateModal}
+            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all"
+          >
+            <PlusCircle size={20} />{" "}
+            <span className="font-semibold">Create Process Job</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
