@@ -638,7 +638,7 @@ const JobHistory = () => {
                         </span>
                       </td>
                       <td className="p-4 text-gray-500 text-sm whitespace-nowrap">
-                        <div className="font-bold text-blue-800 mb-0.5 flex items-center gap-1.5">
+                        {/* <div className="font-bold text-blue-800 mb-0.5 flex items-center gap-1.5">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             width="12"
@@ -654,7 +654,7 @@ const JobHistory = () => {
                             <circle cx="12" cy="7" r="4" />
                           </svg>
                           {h.employee || "Unknown"}
-                        </div>
+                        </div> */}
                         <div className="text-xs text-gray-400 font-medium mt-1 uppercase tracking-wider">
                           {new Date(h.date).toLocaleDateString()}{" "}
                           {new Date(h.date).toLocaleTimeString()}
@@ -1432,7 +1432,7 @@ const JobHistory = () => {
                 />
               </div>
 
-              <div className="col-span-2">
+              {/* <div className="col-span-2">
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Assigned Employee{" "}
                   <span className="text-gray-400 font-normal tracking-normal">
@@ -1460,7 +1460,7 @@ const JobHistory = () => {
                       </option>
                     ))}
                 </select>
-              </div>
+              </div> */}
 
               {(selectedProcess?.status === "COMPLETED" ||
                 selectedProcess?.status === "RUNNING") && (
@@ -1626,14 +1626,14 @@ const JobHistory = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+                {/* <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
                   <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">
                     Operator
                   </p>
                   <p className="text-xl font-black text-blue-800">
                     {selectedProcess.employee || "Unknown"}
                   </p>
-                </div>
+                </div> */}
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
                     Total Issued
@@ -1770,9 +1770,9 @@ const JobHistory = () => {
                   </span>
                 </h3>
                 <div className="text-right text-sm">
-                  <div className="font-bold">
+                  {/* <div className="font-bold">
                     Operator: {h.employee || "Unknown"}
-                  </div>
+                  </div> */}
                   <div className="text-gray-500">
                     {new Date(h.date).toLocaleString()}
                   </div>

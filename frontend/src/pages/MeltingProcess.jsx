@@ -550,7 +550,7 @@ const MeltingProcess = () => {
               />
             </div>
 
-            <div className="col-span-1">
+            {/* <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Assigned Employee
               </label>
@@ -575,7 +575,7 @@ const MeltingProcess = () => {
                     </option>
                   ))}
               </select>
-            </div>
+            </div> */}
 
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
@@ -786,7 +786,7 @@ const MeltingProcess = () => {
                 <th className="p-4 font-bold">Metal Type</th>
                 <th className="p-4 font-bold">Status</th>
                 <th className="p-4 font-bold">Iss Weight / Pcs</th>
-                <th className="p-4 font-bold">Assigned To</th>
+                {/* <th className="p-4 font-bold">Assigned To</th> */}
                 <th className="p-4 font-bold">Ret Weight / Pcs</th>
                 <th className="p-4 font-bold">Scrap / Loss</th>
                 <th className="p-4 font-bold">Description</th>
@@ -825,9 +825,9 @@ const MeltingProcess = () => {
                       </span>
                     )}
                   </td>
-                  <td className="p-4 font-bold text-gray-600 bg-gray-50 rounded-lg">
+                  {/* <td className="p-4 font-bold text-gray-600 bg-gray-50 rounded-lg">
                     {h.employee || "Unknown"}
-                  </td>
+                  </td> */}
                   <td className="p-4 font-bold text-green-600">
                     {h.return_weight
                       ? formatWeight(h.return_weight, h.unit)
@@ -1052,7 +1052,7 @@ const MeltingProcess = () => {
               </div>
             )}
 
-            <div className="col-span-2">
+            {/* <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Assigned Employee
               </label>
@@ -1077,7 +1077,7 @@ const MeltingProcess = () => {
                     </option>
                   ))}
               </select>
-            </div>
+            </div> */}
 
             <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
               <label className="block text-xs font-bold text-blue-800 mb-1.5 uppercase tracking-wide">
@@ -1152,14 +1152,14 @@ const MeltingProcess = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+              {/* <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
                 <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">
                   Operator
                 </p>
                 <p className="text-xl font-black text-blue-800">
                   {selectedMelt.employee || "Unknown"}
                 </p>
-              </div>
+              </div> */}
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col justify-center">
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
                   Total Issued

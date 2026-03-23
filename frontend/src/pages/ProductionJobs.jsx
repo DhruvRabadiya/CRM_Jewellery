@@ -677,7 +677,7 @@ const ProductionJobs = () => {
                     <div className="font-bold text-gray-800 text-base">
                       {p.job_number}
                     </div>
-                    {p.employee && (
+                    {/* {p.employee && (
                       <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -696,7 +696,7 @@ const ProductionJobs = () => {
                         </svg>
                         {p.employee}
                       </div>
-                    )}
+                    )} */}
                     {p.description && (
                       <div
                         className="text-xs text-gray-500 mt-1.5 truncate max-w-[150px]"
@@ -1022,7 +1022,7 @@ const ProductionJobs = () => {
               </select>
             </div>
 
-            <div className="col-span-1">
+            {/* <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Assigned Employee
               </label>
@@ -1047,7 +1047,7 @@ const ProductionJobs = () => {
                     </option>
                   ))}
               </select>
-            </div>
+            </div> */}
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
@@ -1172,7 +1172,7 @@ const ProductionJobs = () => {
               </div>
             </div>
 
-            <div className="col-span-2">
+            {/* <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Assigned Employee
               </label>
@@ -1197,7 +1197,7 @@ const ProductionJobs = () => {
                     </option>
                   ))}
               </select>
-            </div>
+            </div> */}
 
             <div className="col-span-1 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
               <label className="block text-xs font-bold text-yellow-800 mb-1.5 uppercase tracking-wide">
@@ -1537,7 +1537,7 @@ const ProductionJobs = () => {
               />
             </div>
 
-            <div className="col-span-2">
+            {/* <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Assigned Employee{" "}
                 <span className="text-gray-400 font-normal tracking-normal">
@@ -1565,7 +1565,7 @@ const ProductionJobs = () => {
                     </option>
                   ))}
               </select>
-            </div>
+            </div> */}
 
             {selectedProcess?.status === "COMPLETED" ||
             selectedProcess?.status === "RUNNING" ? (
@@ -1641,7 +1641,7 @@ const ProductionJobs = () => {
             <div
               className={`col-span-1 flex flex-col ${selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING" ? "mt-4" : ""}`}
             >
-              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+              {/* <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Assigned Employee
               </label>
               <select
@@ -1664,7 +1664,7 @@ const ProductionJobs = () => {
                       {u.username}
                     </option>
                   ))}
-              </select>
+              </select> */}
 
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Description / Notes{" "}
