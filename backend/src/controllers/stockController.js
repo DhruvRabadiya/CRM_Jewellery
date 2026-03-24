@@ -165,6 +165,108 @@ const deleteStockPurchase = async (req, res) => {
   }
 };
 
+const addDhalStock = async (req, res) => {
+  try {
+    const { metal_type, weight, description } = req.body;
+
+    if (!metal_type || !weight || weight <= 0) {
+      return formatResponse(res, 400, false, MESSAGES.INVALID_INPUT);
+    }
+
+    await stockService.updateDhalStock(metal_type, weight, true);
+
+    const transactionId = await stockService.logTransaction(
+      metal_type,
+      "DHAL_ADDITION",
+      weight,
+      description || "Manual Dhal Addition",
+    );
+
+    return formatResponse(res, 201, true, "Pure Dhal added successfully", {
+      transactionId,
+    });
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const getDhalPurchases = async (req, res) => {
+  try {
+    const purchases = await stockService.getDhalPurchases();
+    return formatResponse(res, 200, true, "Dhal Purchases fetched", purchases);
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const editDhalPurchase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { weight, description } = req.body;
+    
+    const purchase = await stockService.getPurchaseById(id);
+    if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
+    
+    const newWeight = parseFloat(weight);
+    if (isNaN(newWeight) || newWeight <= 0) {
+      return formatResponse(res, 400, false, "Invalid weight");
+    }
+
+    const diff = newWeight - purchase.weight;
+    
+    if (diff < 0) {
+      const currentStock = await stockService.getStockByMetal(purchase.metal_type);
+      const totalInternalStock = 
+        (currentStock?.dhal_stock || 0) + 
+        (currentStock?.rolling_stock || 0) + 
+        (currentStock?.press_stock || 0) + 
+        (currentStock?.tpp_stock || 0);
+
+      if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(Math.abs(diff) * 1000)) {
+        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient pure/processed stock available.");
+      }
+    }
+
+    if (diff > 0) {
+      await stockService.updateDhalStock(purchase.metal_type, diff, true);
+    } else if (diff < 0) {
+      await stockService.updateDhalStock(purchase.metal_type, Math.abs(diff), false);
+    }
+
+    await stockService.editPurchase(id, newWeight, description || "");
+    return formatResponse(res, 200, true, "Dhal Purchase updated successfully");
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
+const deleteDhalPurchase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const purchase = await stockService.getPurchaseById(id);
+    if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
+    
+    const currentStock = await stockService.getStockByMetal(purchase.metal_type);
+    const totalInternalStock = 
+      (currentStock?.dhal_stock || 0) + 
+      (currentStock?.rolling_stock || 0) + 
+      (currentStock?.press_stock || 0) + 
+      (currentStock?.tpp_stock || 0);
+
+    if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(purchase.weight * 1000)) {
+      return formatResponse(res, 400, false, "Cannot delete purchase: total stock in the system is less than this purchase weight.");
+    }
+
+    await stockService.updateDhalStock(purchase.metal_type, purchase.weight, false);
+    await stockService.deletePurchase(id);
+    
+    return formatResponse(res, 200, true, "Dhal Purchase deleted and stock refunded successfully");
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   getStock,
   addStock,
@@ -173,4 +275,8 @@ module.exports = {
   getDetailedScrapAndLoss,
   editStockPurchase,
   deleteStockPurchase,
+  addDhalStock,
+  getDhalPurchases,
+  editDhalPurchase,
+  deleteDhalPurchase,
 };

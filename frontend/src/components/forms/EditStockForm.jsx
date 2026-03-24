@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Save, ArrowDownLeft } from "lucide-react";
-import { editPurchase } from "../../api/stockService";
+import { editPurchase, editDhalPurchase } from "../../api/stockService";
 
-const EditStockForm = ({ purchase, onSuccess, onCancel, showToast }) => {
+const EditStockForm = ({ isDhal = false, purchase, onSuccess, onCancel, showToast }) => {
   const isSilver = purchase.metal_type === "Silver";
   
   const [formData, setFormData] = useState({
@@ -30,16 +30,24 @@ const EditStockForm = ({ purchase, onSuccess, onCancel, showToast }) => {
 
     setIsSubmitting(true);
     try {
-      await editPurchase(purchase.id, {
-        weight: finalWeight,
-        description: formData.description
-      });
-      showToast("Stock Entry Updated Successfully!", "success");
+      if (isDhal) {
+        await editDhalPurchase(purchase.id, {
+          weight: finalWeight,
+          description: formData.description
+        });
+        showToast("Pure Dhal Entry Updated Successfully!", "success");
+      } else {
+        await editPurchase(purchase.id, {
+          weight: finalWeight,
+          description: formData.description
+        });
+        showToast("Stock Entry Updated Successfully!", "success");
+      }
       onSuccess();
     } catch (error) {
       setIsShaking(true);
       setTimeout(() => setIsShaking(false), 500);
-      showToast(error.message || "Failed to edit stock", "error");
+      showToast(error.message || (isDhal ? "Failed to edit pure dhal" : "Failed to edit stock"), "error");
     } finally {
       setIsSubmitting(false);
     }

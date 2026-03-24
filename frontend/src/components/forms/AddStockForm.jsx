@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { PlusCircle, ArrowDownLeft } from "lucide-react";
-import { addStock } from "../../api/stockService";
+import { addStock, addDhalStock } from "../../api/stockService";
 
-const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
+const AddStockForm = ({ isDhal = false, onSuccess, onCancel, showToast }) => {
   const [formData, setFormData] = useState({
     metal_type: "Gold",
     weight: "",
@@ -28,13 +28,18 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
 
     setIsSubmitting(true);
     try {
-      await addStock(formData.metal_type, finalWeight, formData.description);
-      showToast("Stock Added Successfully!", "success");
+      if (isDhal) {
+        await addDhalStock(formData.metal_type, finalWeight, formData.description);
+        showToast("Pure Dhal Added Successfully!", "success");
+      } else {
+        await addStock(formData.metal_type, finalWeight, formData.description);
+        showToast("Stock Added Successfully!", "success");
+      }
       onSuccess();
     } catch (error) {
       setIsShaking(true);
       setTimeout(() => setIsShaking(false), 500);
-      showToast("Failed to add stock", "error");
+      showToast(isDhal ? "Failed to add pure dhal" : "Failed to add stock", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -115,7 +120,7 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
         className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-lg transition-all active:scale-95 flex justify-center items-center gap-2"
       >
         <PlusCircle size={20} />{" "}
-        {isSubmitting ? "Saving..." : "Confirm Purchase"}
+        {isSubmitting ? "Saving..." : (isDhal ? "Confirm Pure Dhal Addition" : "Confirm Purchase")}
       </button>
     </form>
   );

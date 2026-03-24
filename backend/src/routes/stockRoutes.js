@@ -11,4 +11,9 @@ router.post("/add", stockController.addStock);
 router.put("/purchases/:id", stockController.editStockPurchase);
 router.delete("/purchases/:id", stockController.deleteStockPurchase);
 
+router.post("/dhal", stockController.addDhalStock);
+router.get("/dhal/purchases", stockController.getDhalPurchases);
+router.put("/dhal/purchases/:id", stockController.editDhalPurchase);
+router.delete("/dhal/purchases/:id", stockController.deleteDhalPurchase);
+
 module.exports = router;

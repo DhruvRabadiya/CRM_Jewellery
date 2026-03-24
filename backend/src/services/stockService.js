@@ -105,6 +105,16 @@ const getPurchases = () => {
   });
 };
 
+const getDhalPurchases = () => {
+  return new Promise((resolve, reject) => {
+    const query = `SELECT * FROM stock_transactions WHERE transaction_type = 'DHAL_ADDITION' ORDER BY date DESC`;
+    db.all(query, [], (err, rows) => {
+      if (err) reject(err);
+      resolve(rows || []);
+    });
+  });
+};
+
 const getPurchaseById = (id) => {
   return new Promise((resolve, reject) => {
     const query = `SELECT * FROM stock_transactions WHERE id = ?`;
@@ -181,6 +191,7 @@ module.exports = {
   addTotalLoss,
   getLossStats,
   getPurchases,
+  getDhalPurchases,
   getPurchaseById,
   editPurchase,
   deletePurchase,
