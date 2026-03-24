@@ -340,7 +340,8 @@ const ProductionJobs = () => {
   const handleEditProcess = async (e) => {
     e.preventDefault();
     let issueW = parseFloat(editForm.issued_weight);
-    if (editForm.weight_unit === "kg") issueW *= 1000;
+    const isKg = editForm.weight_unit === "kg";
+    if (isKg) issueW *= 1000;
     issueW = parseFloat(issueW.toFixed(8));
 
     let payload = {
@@ -531,6 +532,22 @@ const ProductionJobs = () => {
   }
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(10));
   const isLossNegative = liveLoss < 0;
+
+  const editIssVal = parseFloat(editForm.issued_weight) || 0;
+  let editRetWeight = parseFloat(editForm.return_weight) || 0;
+  let editScrWeight = parseFloat(editForm.scrap_weight) || 0;
+  if (editForm?.weight_unit === "kg") {
+    editRetWeight *= 1000;
+    editScrWeight *= 1000;
+  }
+  const editLiveLoss = parseFloat(
+    (
+      (editForm?.weight_unit === "kg" ? editIssVal * 1000 : editIssVal) -
+      editRetWeight -
+      editScrWeight
+    ).toFixed(10),
+  );
+  const editIsLossNegative = editLiveLoss < 0;
 
   const getAvailableJobNumbers = () => {
     let prevStage = "Rolling";
@@ -1681,6 +1698,28 @@ const ProductionJobs = () => {
                       }
                       placeholder="0"
                     />
+                  </div>
+                  
+                  <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4 flex flex-col justify-center gap-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span>Issued ({editForm?.weight_unit || "g"}):</span>
+                      <span>{editIssVal}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-green-400">
+                      <span>- Return:</span>
+                      <span>{parseFloat(editForm.return_weight || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-yellow-400 mb-2">
+                      <span>- Scrap:</span>
+                      <span>{parseFloat(editForm.scrap_weight || 0)}</span>
+                    </div>
+                    <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
+                      <span>{editIsLossNegative ? "Gain:" : "Loss:"}</span>
+                      <span className={editIsLossNegative ? "text-green-400" : "text-white"}>
+                        {editIsLossNegative ? "+" : ""}
+                        {parseFloat((Math.abs(editLiveLoss) / (editForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </>

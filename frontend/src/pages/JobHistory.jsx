@@ -332,8 +332,9 @@ const JobHistory = () => {
 
   const handleEditProcess = async (e) => {
     e.preventDefault();
+    const isKg = editForm.weight_unit === "kg";
     let issueW = parseFloat(editForm.issued_weight);
-    if (editForm.weight_unit === "kg") issueW *= 1000;
+    if (isKg) issueW *= 1000;
     issueW = parseFloat(issueW.toFixed(8));
 
     let payload = {
@@ -447,6 +448,22 @@ const JobHistory = () => {
   }
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(10));
   const isLossNegative = liveLoss < 0;
+
+  const editIssVal = parseFloat(editForm.issued_weight) || 0;
+  let editRetWeight = parseFloat(editForm.return_weight) || 0;
+  let editScrWeight = parseFloat(editForm.scrap_weight) || 0;
+  if (editForm?.weight_unit === "kg") {
+    editRetWeight *= 1000;
+    editScrWeight *= 1000;
+  }
+  const editLiveLoss = parseFloat(
+    (
+      (editForm?.weight_unit === "kg" ? editIssVal * 1000 : editIssVal) -
+      editRetWeight -
+      editScrWeight
+    ).toFixed(10),
+  );
+  const editIsLossNegative = editLiveLoss < 0;
 
   const getRemainingStockForRow = (row, historyItems, allItems) => {
     let nextStage = null;
@@ -589,6 +606,9 @@ const JobHistory = () => {
                       Status
                     </th>
                     <th className="p-2 px-3 font-bold border-b border-gray-100">
+                      Category
+                    </th>
+                    <th className="p-2 px-3 font-bold border-b border-gray-100">
                       Operator / Date
                     </th>
                     <th className="p-2 px-3 font-bold border-b border-gray-100">
@@ -643,6 +663,11 @@ const JobHistory = () => {
                             <Clock size={12} />
                           )}
                           {h.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-sm font-bold text-gray-700">
+                        <span className="bg-gray-100 px-2 py-1 rounded text-[10px] uppercase border border-gray-200">
+                          {h.category || "N/A"}
                         </span>
                       </td>
                       <td className="p-4 text-gray-500 text-sm whitespace-nowrap">
@@ -1577,18 +1602,30 @@ const JobHistory = () => {
                     />
                   </div>
 
-                  <div className="col-span-1">
+                  <div className="col-span-1 flex flex-col">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                       Live Loss Calculation
                     </label>
-                    <div
-                      className={`w-full py-2.5 px-3 rounded-lg font-bold text-lg border flex items-center shadow-inner ${
-                        editForm.loss_weight < 0
-                          ? "bg-green-50 text-green-700 border-green-200"
-                          : "bg-gray-100 text-gray-700 border-gray-200"
-                      }`}
-                    >
-                      {editForm.loss_weight} {editForm.weight_unit}
+                    <div className="flex-1 bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col justify-center gap-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span>Issued ({editForm?.weight_unit || "g"}):</span>
+                        <span>{editIssVal}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-green-400">
+                        <span>- Return:</span>
+                        <span>{parseFloat(editForm.return_weight || 0)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-yellow-400 mb-2">
+                        <span>- Scrap:</span>
+                        <span>{parseFloat(editForm.scrap_weight || 0)}</span>
+                      </div>
+                      <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
+                        <span>{editIsLossNegative ? "Gain:" : "Loss:"}</span>
+                        <span className={editIsLossNegative ? "text-green-400" : "text-white"}>
+                          {editIsLossNegative ? "+" : ""}
+                          {parseFloat((Math.abs(editLiveLoss) / (editForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
