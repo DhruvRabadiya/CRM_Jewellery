@@ -112,8 +112,15 @@ const editStockPurchase = async (req, res) => {
     // Check if we are reducing weight and if stock permits
     if (diff < 0) {
       const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-      if (!currentStock || currentStock.opening_stock < Math.abs(diff)) {
-        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient opening stock available.");
+      const totalInternalStock = 
+        (currentStock?.opening_stock || 0) + 
+        (currentStock?.dhal_stock || 0) + 
+        (currentStock?.rolling_stock || 0) + 
+        (currentStock?.press_stock || 0) + 
+        (currentStock?.tpp_stock || 0);
+
+      if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(Math.abs(diff) * 1000)) {
+        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient total stock available across all production stages.");
       }
     }
 
@@ -138,8 +145,15 @@ const deleteStockPurchase = async (req, res) => {
     if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
     
     const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-    if (!currentStock || currentStock.opening_stock < purchase.weight) {
-      return formatResponse(res, 400, false, "Cannot delete purchase: insufficient opening stock available to refund.");
+    const totalInternalStock = 
+      (currentStock?.opening_stock || 0) + 
+      (currentStock?.dhal_stock || 0) + 
+      (currentStock?.rolling_stock || 0) + 
+      (currentStock?.press_stock || 0) + 
+      (currentStock?.tpp_stock || 0);
+
+    if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(purchase.weight * 1000)) {
+      return formatResponse(res, 400, false, "Cannot delete purchase: total stock in the system is less than this purchase weight.");
     }
 
     await stockService.updateOpeningStock(purchase.metal_type, purchase.weight, false);
