@@ -112,15 +112,9 @@ const editStockPurchase = async (req, res) => {
     // Check if we are reducing weight and if stock permits
     if (diff < 0) {
       const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-      const totalInternalStock = 
-        (currentStock?.opening_stock || 0) + 
-        (currentStock?.dhal_stock || 0) + 
-        (currentStock?.rolling_stock || 0) + 
-        (currentStock?.press_stock || 0) + 
-        (currentStock?.tpp_stock || 0);
 
-      if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(Math.abs(diff) * 1000)) {
-        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient total stock available across all production stages.");
+      if (!currentStock || Math.round((currentStock.opening_stock || 0) * 1000) < Math.round(Math.abs(diff) * 1000)) {
+        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient raw material available. Delete/revert dependent processes first.");
       }
     }
 
@@ -145,15 +139,9 @@ const deleteStockPurchase = async (req, res) => {
     if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
     
     const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-    const totalInternalStock = 
-      (currentStock?.opening_stock || 0) + 
-      (currentStock?.dhal_stock || 0) + 
-      (currentStock?.rolling_stock || 0) + 
-      (currentStock?.press_stock || 0) + 
-      (currentStock?.tpp_stock || 0);
 
-    if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(purchase.weight * 1000)) {
-      return formatResponse(res, 400, false, "Cannot delete purchase: total stock in the system is less than this purchase weight.");
+    if (!currentStock || Math.round((currentStock.opening_stock || 0) * 1000) < Math.round(purchase.weight * 1000)) {
+      return formatResponse(res, 400, false, "Cannot delete purchase: insufficient raw material available. Revert dependent processes first.");
     }
 
     await stockService.updateOpeningStock(purchase.metal_type, purchase.weight, false);
@@ -216,14 +204,9 @@ const editDhalPurchase = async (req, res) => {
     
     if (diff < 0) {
       const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-      const totalInternalStock = 
-        (currentStock?.dhal_stock || 0) + 
-        (currentStock?.rolling_stock || 0) + 
-        (currentStock?.press_stock || 0) + 
-        (currentStock?.tpp_stock || 0);
 
-      if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(Math.abs(diff) * 1000)) {
-        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient pure/processed stock available.");
+      if (!currentStock || Math.round((currentStock.dhal_stock || 0) * 1000) < Math.round(Math.abs(diff) * 1000)) {
+        return formatResponse(res, 400, false, "Cannot reduce pure dhal weight: insufficient pure dhal available. Revert dependent processes first.");
       }
     }
 
@@ -248,14 +231,9 @@ const deleteDhalPurchase = async (req, res) => {
     if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
     
     const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-    const totalInternalStock = 
-      (currentStock?.dhal_stock || 0) + 
-      (currentStock?.rolling_stock || 0) + 
-      (currentStock?.press_stock || 0) + 
-      (currentStock?.tpp_stock || 0);
 
-    if (!currentStock || Math.round(totalInternalStock * 1000) < Math.round(purchase.weight * 1000)) {
-      return formatResponse(res, 400, false, "Cannot delete purchase: total stock in the system is less than this purchase weight.");
+    if (!currentStock || Math.round((currentStock.dhal_stock || 0) * 1000) < Math.round(purchase.weight * 1000)) {
+      return formatResponse(res, 400, false, "Cannot delete pure dhal purchase: insufficient pure dhal available. Revert dependent processes first.");
     }
 
     await stockService.updateDhalStock(purchase.metal_type, purchase.weight, false);
