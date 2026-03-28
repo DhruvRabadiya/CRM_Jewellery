@@ -181,22 +181,7 @@ const Dashboard = () => {
                 {parseFloat((gold.inprocess_weight || 0).toFixed(10))}g
               </p>
             </div>
-            <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-yellow-200/50">
-              <p className="text-xs font-bold text-yellow-600 uppercase">
-                Dhal Stock
-              </p>
-              <p className="text-xl font-black text-gray-700">
-                {parseFloat((gold.dhal_stock || 0).toFixed(10))}g
-              </p>
-            </div>
-            <div className="bg-yellow-100/60 backdrop-blur-sm p-4 rounded-xl border border-yellow-300/50">
-              <p className="text-xs font-bold text-yellow-800 uppercase">
-                Total Allocated
-              </p>
-              <p className="text-xl font-black text-yellow-900">
-                {parseFloat(((gold.opening_stock || 0) + (gold.inprocess_weight || 0) + (gold.dhal_stock || 0)).toFixed(10))}g
-              </p>
-            </div>
+
           </div>
           <p className="text-xs font-bold text-yellow-600 uppercase tracking-widest mb-3 mt-4">
             Stage Analytics
@@ -276,22 +261,7 @@ const Dashboard = () => {
                 {parseFloat((silver.inprocess_weight / 1000 || 0).toFixed(10))}kg
               </p>
             </div>
-            <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200/50">
-              <p className="text-xs font-bold text-gray-500 uppercase">
-                Dhal Stock
-              </p>
-              <p className="text-xl font-black text-gray-700">
-                {parseFloat(((silver.dhal_stock || 0) / 1000).toFixed(10))}kg
-              </p>
-            </div>
-            <div className="bg-slate-100/80 backdrop-blur-sm p-4 rounded-xl border border-gray-300/50">
-              <p className="text-xs font-bold text-gray-700 uppercase">
-                Total Allocated
-              </p>
-              <p className="text-xl font-black text-gray-800">
-                {parseFloat((((silver.opening_stock || 0) + (silver.inprocess_weight || 0) + (silver.dhal_stock || 0)) / 1000).toFixed(10))}kg
-              </p>
-            </div>
+
           </div>
           <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Stage Analytics
