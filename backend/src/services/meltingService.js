@@ -5,6 +5,7 @@ const createMeltingProcess = (job_number, job_name, metal_type, unit, issue_size
     const query = `INSERT INTO melting_process 
       (job_number, job_name, metal_type, unit, issue_weight, issue_size, issue_pieces, category, employee, description, status) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
+    // issue_weight and issue_size both store the same initial value; issued_weight is updated when started
     db.run(query, [job_number, job_name, metal_type, unit, issue_size, issue_size, issue_pieces, category, employee, description], function (err) {
       if (err) reject(err);
       else resolve(this.lastID);

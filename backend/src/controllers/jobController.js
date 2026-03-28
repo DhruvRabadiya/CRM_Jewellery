@@ -201,6 +201,7 @@ const getCombinedProcesses = async (req, res) => {
       ...addStage(packing, "Packing"),
     ];
 
+    // Sort descending by date; melting uses created_at while production processes use date
     combined.sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
 
     return formatResponse(res, 200, true, "Combined processes fetched", combined);

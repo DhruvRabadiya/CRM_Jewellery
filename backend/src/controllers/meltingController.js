@@ -343,8 +343,8 @@ const revertMeltingProcess = async (req, res) => {
 
 const getRunningMelts = async (req, res) => {
   try {
-    const melts = await meltingService.getAllMeltingProcesses();
-    return formatResponse(res, 200, true, "Melts fetched", melts);
+    const melts = await meltingService.getRunningMelts();
+    return formatResponse(res, 200, true, "Running melts fetched", melts);
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }
