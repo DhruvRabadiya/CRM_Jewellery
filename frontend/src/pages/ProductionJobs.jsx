@@ -1370,43 +1370,43 @@ const ProductionJobs = () => {
                 <div className="col-span-3">Pieces</div>
                 <div className="col-span-1"></div>
               </div>
-              {completeForm.return_items.map((item, idx) => (
+              {completeForm.return_items.map((item, idx) => {
+                const metalSizes = sizeOptions[selectedProcess?.metal_type] || [];
+                const isStandardCategory = metalSizes.includes(item.category);
+                const isCustom = item._isCustom || (!isStandardCategory && item.category !== "");
+                const selectValue = isCustom ? "Other" : item.category;
+
+                return (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-green-50 border border-green-200 p-2 rounded-lg">
                   <div className="col-span-4">
                     <select
-                      value={
-                        sizeOptions[selectedProcess?.metal_type]?.includes(item.category)
-                          ? item.category
-                          : item.category
-                            ? "Other"
-                            : ""
-                      }
+                      value={selectValue}
                       onChange={(e) => {
                         const newItems = [...completeForm.return_items];
-                        newItems[idx] = {
-                          ...newItems[idx],
-                          category: e.target.value === "Other" ? (item._customCategory || "") : e.target.value,
-                          _customCategory: e.target.value === "Other" ? (item._customCategory || "") : "",
-                        };
+                        if (e.target.value === "Other") {
+                          newItems[idx] = { ...newItems[idx], category: "", _isCustom: true };
+                        } else {
+                          newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: false };
+                        }
                         setCompleteForm({ ...completeForm, return_items: newItems });
                       }}
                       className="w-full bg-white border border-green-200 py-2 px-2 rounded text-sm font-medium outline-none"
                     >
                       <option value="">Select Size</option>
-                      {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
+                      {metalSizes.map((c) => (
                         <option key={c} value={c}>
                           {c}
                         </option>
                       ))}
                     </select>
-                    {(!sizeOptions[selectedProcess?.metal_type]?.includes(item.category) && item.category) && (
+                    {isCustom && (
                       <input
                         type="text"
-                        placeholder="Custom category..."
+                        placeholder="Enter custom category..."
                         value={item.category}
                         onChange={(e) => {
                           const newItems = [...completeForm.return_items];
-                          newItems[idx] = { ...newItems[idx], category: e.target.value, _customCategory: e.target.value };
+                          newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: true };
                           setCompleteForm({ ...completeForm, return_items: newItems });
                         }}
                         className="w-full mt-1 bg-white border border-blue-200 py-1.5 px-2 rounded text-xs font-medium outline-none"
@@ -1456,7 +1456,8 @@ const ProductionJobs = () => {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
