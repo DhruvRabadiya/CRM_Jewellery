@@ -69,10 +69,17 @@ const startRolling = async (req, res) => {
 
 const completeRolling = async (req, res) => {
   try {
-    const { process_id, return_weight, return_pieces, scrap_weight, description } = req.body;
-    const retW = parseFloat(return_weight) || 0;
-    const retP = parseInt(return_pieces) || 0;
+    const { process_id, return_items, return_weight, return_pieces, scrap_weight, description } = req.body;
     const scrW = parseFloat(scrap_weight) || 0;
+
+    // Support both single return_weight and return_items array
+    const items = Array.isArray(return_items) && return_items.length > 0 ? return_items : null;
+    const retW = items
+      ? items.reduce((sum, item) => sum + (parseFloat(item.return_weight) || 0), 0)
+      : (parseFloat(return_weight) || 0);
+    const retP = items
+      ? items.reduce((sum, item) => sum + (parseInt(item.return_pieces) || 0), 0)
+      : (parseInt(return_pieces) || 0);
 
     if (!process_id || retW < 0 || scrW < 0) {
       return formatResponse(res, 400, false, "Invalid weights.");
@@ -86,6 +93,21 @@ const completeRolling = async (req, res) => {
 
     const issW = process.issued_weight;
     const lossWeight = calculateLoss(issW, retW, scrW);
+
+    // Save return items to process_return_items if provided
+    if (items && items.length > 0) {
+      const db = require("../../config/dbConfig");
+      await new Promise((resolve, reject) => {
+        db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'rolling'`, [process_id], (err) => err ? reject(err) : resolve());
+      });
+      for (const item of items) {
+        await new Promise((resolve, reject) => {
+          db.run(`INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'rolling', ?, ?, ?)`,
+            [process_id, item.category || process.category || '', parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0],
+            (err) => err ? reject(err) : resolve());
+        });
+      }
+    }
 
     await rollingService.completeRollingProcess(process_id, retW, retP, scrW, lossWeight, description !== undefined ? description : null);
 
