@@ -12,12 +12,11 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 db.serialize(() => {
-  // 1. STOCK MASTER (Raw Material, Dhal, and Pooled Stages)
+  // 1. STOCK MASTER (Raw Material and Pooled Stages)
   db.run(`CREATE TABLE IF NOT EXISTS stock_master (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         metal_type TEXT UNIQUE, -- 'Gold' or 'Silver'
         opening_stock REAL DEFAULT 0, -- Raw Material
-        dhal_stock REAL DEFAULT 0,    -- Pure metal (Source for Rolling)
         rolling_stock REAL DEFAULT 0, -- Completed Rolling (Source for Press)
         press_stock REAL DEFAULT 0,   -- Completed Press (Source for TPP)
         tpp_stock REAL DEFAULT 0,     -- Completed TPP (Source for Packing)
@@ -25,16 +24,11 @@ db.serialize(() => {
     )`);
 
   // Initialize default rows if they don't exist
-  // By using INSERT OR IGNORE, if rows already exist they aren't overridden,
-  // but if we modified the table we might need to add columns safely in real prod,
-  // here since SQLite IF NOT EXISTS is on create table, it won't add new columns to existing tables automatically.
-  // For simplicity, we assume we might drop/recreate db locally or alter table manually if needed,
-  // but let's at least keep the insert valid.
   db.run(
-    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold', 0, 0, 0, 0, 0)`,
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold', 0, 0, 0, 0)`,
   );
   db.run(
-    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Silver', 0, 0, 0, 0, 0)`,
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Silver', 0, 0, 0, 0)`,
   );
 
   // Safe migration for total_loss column on existing databases

@@ -29,11 +29,11 @@ const createJob = async (req, res) => {
     }
 
     const currentStock = await stockService.getStockByMetal(metal_type);
-    if (!currentStock || currentStock.dhal_stock < weight) {
-      return formatResponse(res, 400, false, MESSAGES.INSUFFICIENT_DHAL);
+    if (!currentStock || currentStock.opening_stock < weight) {
+      return formatResponse(res, 400, false, MESSAGES.INSUFFICIENT_STOCK);
     }
 
-    await stockService.updateDhalStock(metal_type, weight, false);
+    await stockService.updateOpeningStock(metal_type, weight, false);
     const jobId = await jobService.createJob(
       job_number,
       metal_type,

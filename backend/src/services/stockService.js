@@ -13,19 +13,7 @@ const getStockByMetal = (metalType) => {
 const updateOpeningStock = (metalType, weight, isAddition) => {
   return new Promise((resolve, reject) => {
     const operator = isAddition ? "+" : "-";
-    const query = `UPDATE stock_master SET opening_stock = opening_stock ${operator} ? WHERE metal_type = ?`;
-
-    db.run(query, [weight, metalType], function (err) {
-      if (err) reject(err);
-      resolve(this.changes);
-    });
-  });
-};
-
-const updateDhalStock = (metalType, weight, isAddition) => {
-  return new Promise((resolve, reject) => {
-    const operator = isAddition ? "+" : "-";
-    const query = `UPDATE stock_master SET dhal_stock = dhal_stock ${operator} ? WHERE metal_type = ?`;
+    const query = `UPDATE stock_master SET opening_stock = MAX(opening_stock ${operator} ?, 0) WHERE metal_type = ?`;
 
     db.run(query, [weight, metalType], function (err) {
       if (err) reject(err);
@@ -116,16 +104,6 @@ const getPurchases = () => {
   });
 };
 
-const getDhalPurchases = () => {
-  return new Promise((resolve, reject) => {
-    const query = `SELECT * FROM stock_transactions WHERE transaction_type = 'DHAL_ADDITION' ORDER BY date DESC`;
-    db.all(query, [], (err, rows) => {
-      if (err) reject(err);
-      resolve(rows || []);
-    });
-  });
-};
-
 const getPurchaseById = (id) => {
   return new Promise((resolve, reject) => {
     const query = `SELECT * FROM stock_transactions WHERE id = ?`;
@@ -196,14 +174,12 @@ const getDetailedScrapAndLoss = () => {
 module.exports = {
   getStockByMetal,
   updateOpeningStock,
-  updateDhalStock,
   updateProcessStock,
   updateInprocessWeight,
   logTransaction,
   addTotalLoss,
   getLossStats,
   getPurchases,
-  getDhalPurchases,
   getPurchaseById,
   editPurchase,
   deletePurchase,

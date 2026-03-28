@@ -25,7 +25,6 @@ module.exports = {
   },
   MESSAGES: {
     INSUFFICIENT_STOCK: "Insufficient Opening Stock available.",
-    INSUFFICIENT_DHAL: "Insufficient Dhal Stock available.",
     JOB_NOT_FOUND: "Job not found.",
     STEP_ALREADY_COMPLETED: "This step is already completed.",
     INVALID_INPUT: "Invalid input data provided.",
