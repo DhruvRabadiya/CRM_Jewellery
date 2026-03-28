@@ -20,7 +20,7 @@ const MainLayout = () => {
 
   // Menu Items Configuration (Conditionally rendered)
   const menuItems = [
-    { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
+    { path: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     ...(isAdmin ? [{ path: "/stock", label: "Stock Management", icon: <Coins size={20} /> }] : []),
     { path: "/melting", label: "Melting Process", icon: <Flame size={20} /> },
     {

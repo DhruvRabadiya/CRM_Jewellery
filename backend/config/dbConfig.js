@@ -181,6 +181,16 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // 6. SVG INVENTORY (Sales Vault)
+  db.run(`CREATE TABLE IF NOT EXISTS svg_inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metal_type TEXT,
+      target_product TEXT,
+      pieces INTEGER,
+      weight REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Safe migration for description and employee columns across all process tables
   const processTables = [
     "melting_process",

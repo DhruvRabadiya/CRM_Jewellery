@@ -9,6 +9,10 @@ import FinishedGoods from "./pages/FinishedGoods";
 import JobHistory from "./pages/JobHistory";
 import Login from "./pages/Login";
 import EmployeeManagement from "./pages/EmployeeManagement";
+import ModeSelection from "./pages/ModeSelection";
+import SellingLayout from "./layouts/SellingLayout";
+import SellingCounter from "./pages/SellingCounter";
+import SvgCounter from "./pages/SvgCounter";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 // Guard wrapper to ensure user is logged in
@@ -30,23 +34,33 @@ function App() {
           {/* Public Route */}
           <Route path="/login" element={<Login />} />
 
-          {/* Protected Routes inside MainLayout */}
-          <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+          {/* Mode Selection */}
+          <Route path="/" element={<ProtectedRoute><ModeSelection /></ProtectedRoute>} />
+
+          {/* Protected Routes inside MainLayout (Production Mode) */}
+          <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
             
             {/* Standard Employee/Admin Routes */}
-            <Route index element={<Dashboard />} />
-            <Route path="stock" element={<StockManagement />} />
-            <Route path="melting" element={<MeltingProcess />} />
-            <Route path="production" element={<ProductionJobs />} />
-            <Route path="finished" element={<FinishedGoods />} />
-            <Route path="job-history/:jobNumber" element={<JobHistory />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/stock" element={<StockManagement />} />
+            <Route path="/melting" element={<MeltingProcess />} />
+            <Route path="/production" element={<ProductionJobs />} />
+            <Route path="/finished" element={<FinishedGoods />} />
+            <Route path="/job-history/:jobNumber" element={<JobHistory />} />
 
             {/* Admin-Only Routes */}
-            <Route path="employees" element={<ProtectedRoute requireAdmin={true}><EmployeeManagement /></ProtectedRoute>} />
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/employees" element={<ProtectedRoute requireAdmin={true}><EmployeeManagement /></ProtectedRoute>} />
           </Route>
+
+          {/* Protected Routes inside SellingLayout (Selling Mode) */}
+          <Route path="/selling" element={<ProtectedRoute><SellingLayout /></ProtectedRoute>}>
+            <Route index element={<Navigate to="stocks" replace />} />
+            <Route path="stocks" element={<SellingCounter />} />
+            <Route path="svg" element={<SvgCounter />} />
+          </Route>
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </HashRouter>
