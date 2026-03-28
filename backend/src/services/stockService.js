@@ -96,7 +96,7 @@ const getLossStats = () => {
 
 const getPurchases = () => {
   return new Promise((resolve, reject) => {
-    const query = `SELECT * FROM stock_transactions WHERE transaction_type = 'PURCHASE' ORDER BY date DESC`;
+    const query = `SELECT * FROM stock_transactions WHERE transaction_type IN ('PURCHASE', 'DHAL_ADDITION') ORDER BY date DESC`;
     db.all(query, [], (err, rows) => {
       if (err) reject(err);
       resolve(rows || []);

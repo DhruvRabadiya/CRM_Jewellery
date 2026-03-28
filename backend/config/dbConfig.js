@@ -49,6 +49,16 @@ db.serialize(() => {
   // Fix any negative total_loss values (clamp to 0)
   db.run(`UPDATE stock_master SET total_loss = 0 WHERE total_loss < 0`);
 
+  // Migration: move any leftover dhal_stock into opening_stock and zero it out
+  db.all(`PRAGMA table_info(stock_master)`, (err, columns) => {
+    if (!err && columns && columns.some((col) => col.name === "dhal_stock")) {
+      db.run(`UPDATE stock_master SET opening_stock = opening_stock + dhal_stock, dhal_stock = 0 WHERE dhal_stock > 0`, (alterErr) => {
+        if (alterErr) console.error("Error migrating dhal_stock:", alterErr.message);
+        else console.log("Migrated any remaining dhal_stock into opening_stock");
+      });
+    }
+  });
+
   // 2. STOCK TRANSACTIONS (Ledger for Audit)
   db.run(`CREATE TABLE IF NOT EXISTS stock_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
