@@ -109,6 +109,7 @@ const ProductionJobs = () => {
     weight_unit: "g",
     description: "",
     employee: "",
+    startFresh: true,
   });
 
   const [startForm, setStartForm] = useState({
@@ -186,6 +187,7 @@ const ProductionJobs = () => {
           job_number: result.data.next_job_number,
           original_next_job: result.data.next_job_number,
           stage: "Melting",
+          metal_type: "Gold",
           category: sizeOptions["Gold"][0],
           issue_size: "",
           issue_pieces: "",
@@ -194,6 +196,7 @@ const ProductionJobs = () => {
           customCategory: "",
           description: "",
           employee: user?.username || "",
+          startFresh: true,
         }));
         setIsNextStep(false);
         setIsCreateModalOpen(true);
@@ -896,44 +899,12 @@ const ProductionJobs = () => {
                   value={createForm.stage || "Melting"}
                   onChange={(e) => {
                     const newStage = e.target.value;
-                    let nextJobNum = createForm.job_number;
-                    if (newStage === "Melting") {
-                      nextJobNum = createForm.original_next_job;
-                    } else {
-                      let prevStage = "Melting";
-                      if (newStage === "Press") prevStage = "Rolling";
-                      if (newStage === "TPP") prevStage = "Press";
-                      if (newStage === "Packing") prevStage = "TPP";
-                      const available = [
-                        ...new Set(
-                          processes
-                            .filter(
-                              (p) =>
-                                p.stage === prevStage &&
-                                p.status === "COMPLETED",
-                            )
-                            .map((p) => p.job_number),
-                        ),
-                      ];
-                      nextJobNum = available.length > 0 ? available[0] : "";
-                    }
-
-                    const parentJob = processes.find(
-                      (p) => p.job_number === nextJobNum,
-                    );
-
+                    // Always start fresh with new job number when switching stages
                     setCreateForm({
                       ...createForm,
                       stage: newStage,
-                      job_number: nextJobNum || "",
-                      ...(parentJob && newStage !== "Melting"
-                        ? {
-                            metal_type: parentJob.metal_type,
-                            category: parentJob.category,
-                            weight_unit:
-                              parentJob.metal_type === "Silver" ? "kg" : "g",
-                          }
-                        : {}),
+                      startFresh: true,
+                      job_number: createForm.original_next_job,
                     });
                   }}
                 >
@@ -950,7 +921,7 @@ const ProductionJobs = () => {
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Job Number
               </label>
-              {isNextStep || createForm.stage === "Melting" ? (
+              {isNextStep || createForm.startFresh ? (
                 <input
                   type="text"
                   className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
@@ -994,13 +965,55 @@ const ProductionJobs = () => {
                   ))}
                 </select>
               )}
+
+              {/* Toggle: Start Fresh vs Continue Existing (only for non-Melting, non-next-step) */}
+              {!isNextStep && createForm.stage !== "Melting" && (
+                <div className="flex mt-2 bg-gray-100 p-0.5 rounded-lg text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCreateForm({
+                        ...createForm,
+                        startFresh: true,
+                        job_number: createForm.original_next_job,
+                      })
+                    }
+                    className={`flex-1 py-1.5 rounded-md transition-colors ${createForm.startFresh ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    New Job
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const available = getAvailableJobNumbers();
+                      const firstJob = available.length > 0 ? available[0] : "";
+                      const parentJob = processes.find((p) => p.job_number === firstJob);
+                      setCreateForm({
+                        ...createForm,
+                        startFresh: false,
+                        job_number: firstJob,
+                        ...(parentJob
+                          ? {
+                              metal_type: parentJob.metal_type,
+                              category: parentJob.category,
+                              weight_unit: parentJob.metal_type === "Silver" ? "kg" : "g",
+                            }
+                          : {}),
+                      });
+                    }}
+                    className={`flex-1 py-1.5 rounded-md transition-colors ${!createForm.startFresh ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    Continue Existing
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Metal
               </label>
-              {isNextStep || createForm.stage !== "Melting" ? (
+              {isNextStep || (!createForm.startFresh && createForm.stage !== "Melting") ? (
                 <input
                   type="text"
                   className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
@@ -1097,7 +1110,7 @@ const ProductionJobs = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Issue Size (Previous Pool)
+                Issue Size (Opening Stock)
               </label>
               <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 overflow-hidden transition-colors">
                 <input
@@ -1350,26 +1363,61 @@ const ProductionJobs = () => {
             </div>
 
             <div className="space-y-2">
+              {/* Column labels */}
+              <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                <div className="col-span-4">Category / Size</div>
+                <div className="col-span-4">Weight ({completeForm.weight_unit})</div>
+                <div className="col-span-3">Pieces</div>
+                <div className="col-span-1"></div>
+              </div>
               {completeForm.return_items.map((item, idx) => (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-green-50 border border-green-200 p-2 rounded-lg">
                   <div className="col-span-4">
-                    <input
-                      type="text"
-                      placeholder="Category/Size"
-                      value={item.category}
+                    <select
+                      value={
+                        sizeOptions[selectedProcess?.metal_type]?.includes(item.category)
+                          ? item.category
+                          : item.category
+                            ? "Other"
+                            : ""
+                      }
                       onChange={(e) => {
                         const newItems = [...completeForm.return_items];
-                        newItems[idx] = { ...newItems[idx], category: e.target.value };
+                        newItems[idx] = {
+                          ...newItems[idx],
+                          category: e.target.value === "Other" ? (item._customCategory || "") : e.target.value,
+                          _customCategory: e.target.value === "Other" ? (item._customCategory || "") : "",
+                        };
                         setCompleteForm({ ...completeForm, return_items: newItems });
                       }}
                       className="w-full bg-white border border-green-200 py-2 px-2 rounded text-sm font-medium outline-none"
-                    />
+                    >
+                      <option value="">Select Size</option>
+                      {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    {(!sizeOptions[selectedProcess?.metal_type]?.includes(item.category) && item.category) && (
+                      <input
+                        type="text"
+                        placeholder="Custom category..."
+                        value={item.category}
+                        onChange={(e) => {
+                          const newItems = [...completeForm.return_items];
+                          newItems[idx] = { ...newItems[idx], category: e.target.value, _customCategory: e.target.value };
+                          setCompleteForm({ ...completeForm, return_items: newItems });
+                        }}
+                        className="w-full mt-1 bg-white border border-blue-200 py-1.5 px-2 rounded text-xs font-medium outline-none"
+                      />
+                    )}
                   </div>
                   <div className="col-span-4">
                     <input
                       type="number"
                       step="0.001"
-                      placeholder={`Wt (${completeForm.weight_unit})`}
+                      placeholder={`0.000`}
                       value={item.return_weight}
                       onChange={(e) => {
                         const newItems = [...completeForm.return_items];
@@ -1383,7 +1431,7 @@ const ProductionJobs = () => {
                     <input
                       type="number"
                       step="1"
-                      placeholder="Pcs"
+                      placeholder="0"
                       value={item.return_pieces}
                       onChange={(e) => {
                         const newItems = [...completeForm.return_items];
