@@ -17,6 +17,7 @@ const Dashboard = () => {
   const [stock, setStock] = useState(null);
   const [lossStats, setLossStats] = useState([]);
   const initialStageMetrics = () => ({
+    Melting: { pending: 0, running: 0 },
     Rolling: { pending: 0, running: 0 },
     Press: { pending: 0, running: 0 },
     TPP: { pending: 0, running: 0 },
@@ -116,9 +117,6 @@ const Dashboard = () => {
   const gold = stock.gold || {};
   const silver = stock.silver || {};
 
-  const goldInProcess = Object.values(processMetrics.Gold).reduce((sum, s) => sum + s.running, 0);
-  const silverInProcess = Object.values(processMetrics.Silver).reduce((sum, s) => sum + s.running, 0);
-
   return (
     <div className="p-6 relative max-w-7xl mx-auto">
       {toast && (
@@ -175,20 +173,12 @@ const Dashboard = () => {
                 {parseFloat((gold.opening_stock || 0).toFixed(10))}g
               </p>
             </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-yellow-300">
-              <p className="text-xs font-bold text-yellow-800 uppercase">
-                Pure Dhal (Active)
-              </p>
-              <p className="text-2xl font-black text-green-700">
-                {parseFloat((gold.dhal_stock || 0).toFixed(10))}g
-              </p>
-            </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
               <p className="text-xs font-bold text-blue-800 uppercase">
                 In Process
               </p>
               <p className="text-2xl font-black text-blue-700">
-                {parseFloat(goldInProcess.toFixed(10))}g
+                {parseFloat((gold.inprocess_weight || 0).toFixed(10))}g
               </p>
             </div>
           </div>
@@ -197,14 +187,15 @@ const Dashboard = () => {
           </p>
           <div className="space-y-3 mb-4">
             {[
-              { stage: "Rolling", key: "rolling_stock" },
-              { stage: "Press", key: "press_stock" },
-              { stage: "TPP", key: "tpp_stock" },
-              { stage: "Packing", key: null },
+              { stage: "Melting" },
+              { stage: "Rolling" },
+              { stage: "Press" },
+              { stage: "TPP" },
+              { stage: "Packing" },
             ].map((s) => (
               <div
                 key={s.stage}
-                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-yellow-200/50 hover:border-yellow-400 hover:bg-white transition-all cursor-default"
+                className="grid grid-cols-3 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-yellow-200/50 hover:border-yellow-400 hover:bg-white transition-all cursor-default"
               >
                 <div className="flex items-center justify-start pl-2 font-bold text-yellow-900 text-sm">
                   {s.stage}
@@ -229,17 +220,6 @@ const Dashboard = () => {
                       (processMetrics.Gold[s.stage]?.running || 0).toFixed(10),
                     )}
                     g
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-green-600 font-bold">
-                    {s.key ? "Pool (Completed)" : "Completed"}
-                  </p>
-                  <p className="font-black text-green-700 text-sm">
-                    {s.key
-                      ? parseFloat((gold[s.key] || 0).toFixed(10))
-                      : "N/A"}
-                    {s.key ? "g" : ""}
                   </p>
                 </div>
               </div>
@@ -272,20 +252,12 @@ const Dashboard = () => {
                 {parseFloat((silver.opening_stock / 1000).toFixed(10))}kg
               </p>
             </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-300">
-              <p className="text-xs font-bold text-gray-800 uppercase">
-                Pure Dhal (Active)
-              </p>
-              <p className="text-2xl font-black text-green-700">
-                {parseFloat((silver.dhal_stock / 1000).toFixed(10))}kg
-              </p>
-            </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
               <p className="text-xs font-bold text-blue-800 uppercase">
                 In Process
               </p>
               <p className="text-2xl font-black text-blue-700">
-                {parseFloat((silverInProcess / 1000).toFixed(10))}kg
+                {parseFloat((silver.inprocess_weight / 1000 || 0).toFixed(10))}kg
               </p>
             </div>
           </div>
@@ -294,14 +266,15 @@ const Dashboard = () => {
           </p>
           <div className="space-y-3 mb-4">
             {[
-              { stage: "Rolling", key: "rolling_stock" },
-              { stage: "Press", key: "press_stock" },
-              { stage: "TPP", key: "tpp_stock" },
-              { stage: "Packing", key: null },
+              { stage: "Melting" },
+              { stage: "Rolling" },
+              { stage: "Press" },
+              { stage: "TPP" },
+              { stage: "Packing" },
             ].map((s) => (
               <div
                 key={s.stage}
-                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-gray-200/50 hover:border-blue-400 hover:bg-white transition-all cursor-default"
+                className="grid grid-cols-3 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-gray-200/50 hover:border-blue-400 hover:bg-white transition-all cursor-default"
               >
                 <div className="flex items-center justify-start pl-2 font-bold text-gray-800 text-sm">
                   {s.stage}
@@ -330,17 +303,6 @@ const Dashboard = () => {
                       ).toFixed(10),
                     ) || "0"}
                     kg
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-green-600 font-bold">
-                    {s.key ? "Pool (Completed)" : "Completed"}
-                  </p>
-                  <p className="font-black text-green-700 text-sm">
-                    {s.key
-                      ? parseFloat((silver[s.key] / 1000 || 0).toFixed(10))
-                      : "N/A"}
-                    {s.key ? "kg" : ""}
                   </p>
                 </div>
               </div>

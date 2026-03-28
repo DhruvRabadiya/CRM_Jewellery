@@ -3,7 +3,6 @@ import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import StockManagement from "./pages/StockManagement";
-import MeltingProcess from "./pages/MeltingProcess";
 import ProductionJobs from "./pages/ProductionJobs";
 import FinishedGoods from "./pages/FinishedGoods";
 import JobHistory from "./pages/JobHistory";
@@ -36,7 +35,6 @@ function App() {
             {/* Standard Employee/Admin Routes */}
             <Route index element={<Dashboard />} />
             <Route path="stock" element={<StockManagement />} />
-            <Route path="melting" element={<MeltingProcess />} />
             <Route path="production" element={<ProductionJobs />} />
             <Route path="finished" element={<FinishedGoods />} />
             <Route path="job-history/:jobNumber" element={<JobHistory />} />

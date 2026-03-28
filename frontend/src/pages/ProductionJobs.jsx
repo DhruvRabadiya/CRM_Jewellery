@@ -67,7 +67,7 @@ const sizeOptions = {
   ],
 };
 
-const stages = ["Rolling", "Press", "TPP", "Packing"];
+const stages = ["Melting", "Rolling", "Press", "TPP", "Packing"];
 
 const ProductionJobs = () => {
   const [processes, setProcesses] = useState([]);
@@ -97,7 +97,7 @@ const ProductionJobs = () => {
   const [sortConfig, setSortConfig] = useState({ key: "job_number", direction: "asc" });
 
   const [createForm, setCreateForm] = useState({
-    stage: "Rolling",
+    stage: "Melting",
     job_number: "",
     original_next_job: "",
     metal_type: "Gold",
@@ -119,9 +119,8 @@ const ProductionJobs = () => {
     employee: "",
   });
   const [completeForm, setCompleteForm] = useState({
-    return_weight: "",
+    return_items: [{ category: "", return_weight: "", return_pieces: "" }],
     scrap_weight: "",
-    return_pieces: "",
     weight_unit: "g",
     description: "",
   });
@@ -186,8 +185,7 @@ const ProductionJobs = () => {
           ...prev,
           job_number: result.data.next_job_number,
           original_next_job: result.data.next_job_number,
-          stage: "Rolling",
-          metal_type: "Gold",
+          stage: "Melting",
           category: sizeOptions["Gold"][0],
           issue_size: "",
           issue_pieces: "",
@@ -207,6 +205,7 @@ const ProductionJobs = () => {
 
   const openNextStepModal = (process) => {
     let nextStage = "Rolling";
+    if (process.stage === "Melting") nextStage = "Rolling";
     if (process.stage === "Rolling") nextStage = "Press";
     if (process.stage === "Press") nextStage = "TPP";
     if (process.stage === "TPP") nextStage = "Packing";
@@ -423,9 +422,8 @@ const ProductionJobs = () => {
   const openCompleteModal = (process) => {
     setSelectedProcess(process);
     setCompleteForm({
-      return_weight: "",
+      return_items: [{ category: process.category || "", return_weight: "", return_pieces: "" }],
       scrap_weight: "",
-      return_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: process.description || "",
     });
@@ -434,31 +432,34 @@ const ProductionJobs = () => {
 
   const handleCompleteProcess = async (e) => {
     e.preventDefault();
-    const issW = parseFloat(selectedProcess.issued_weight);
-    let retW = parseFloat(completeForm.return_weight) || 0;
+    
+    const div = completeForm.weight_unit === "kg" ? 1000 : 1;
+    
+    const returnItems = completeForm.return_items
+      .filter(item => parseFloat(item.return_weight) > 0)
+      .map(item => ({
+        category: item.category || selectedProcess.category || "",
+        return_weight: parseFloat(parseFloat(item.return_weight * div).toFixed(8)),
+        return_pieces: parseInt(item.return_pieces) || 0,
+      }));
+
+    const totalRetW = returnItems.reduce((sum, item) => sum + item.return_weight, 0);
     let scrW = parseFloat(completeForm.scrap_weight) || 0;
-
-    if (completeForm.weight_unit === "kg") {
-      retW *= 1000;
-      scrW *= 1000;
-    }
-
-    retW = parseFloat(retW.toFixed(8));
+    if (completeForm.weight_unit === "kg") scrW *= 1000;
     scrW = parseFloat(scrW.toFixed(8));
 
-    const liveLoss = issW - retW - scrW;
-
-    if (retW <= 0) {
+    if (totalRetW <= 0) {
       triggerError();
-      return showToast("Return must be > 0", "error");
+      return showToast("At least one return weight must be > 0", "error");
     }
 
     try {
       await completeProcess(selectedProcess.stage, {
         process_id: selectedProcess.id,
-        return_weight: retW,
+        return_items: returnItems,
+        return_weight: totalRetW,
         scrap_weight: scrW,
-        return_pieces: parseInt(completeForm.return_pieces) || 0,
+        return_pieces: returnItems.reduce((sum, item) => sum + item.return_pieces, 0),
         description: completeForm.description || "",
       });
       showToast("Completed!", "success");
@@ -471,7 +472,7 @@ const ProductionJobs = () => {
   };
 
   const getLatestProcesses = (procs) => {
-    const stagePriority = { Rolling: 1, Press: 2, TPP: 3, Packing: 4 };
+    const stagePriority = { Melting: 0, Rolling: 1, Press: 2, TPP: 3, Packing: 4 };
     const jobMap = {};
 
     procs.forEach((p) => {
@@ -523,13 +524,9 @@ const ProductionJobs = () => {
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0
     : 0;
-  let retVal = parseFloat(completeForm.return_weight) || 0;
-  let scrVal = parseFloat(completeForm.scrap_weight) || 0;
-
-  if (completeForm?.weight_unit === "kg") {
-    retVal *= 1000;
-    scrVal *= 1000;
-  }
+  const div = completeForm?.weight_unit === "kg" ? 1000 : 1;
+  let retVal = (completeForm.return_items || []).reduce((sum, item) => sum + (parseFloat(item.return_weight) || 0), 0) * div;
+  let scrVal = (parseFloat(completeForm.scrap_weight) || 0) * div;
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(10));
   const isLossNegative = liveLoss < 0;
 
@@ -550,7 +547,8 @@ const ProductionJobs = () => {
   const editIsLossNegative = editLiveLoss < 0;
 
   const getAvailableJobNumbers = () => {
-    let prevStage = "Rolling";
+    let prevStage = "Melting";
+    if (createForm.stage === "Press") prevStage = "Rolling";
     if (createForm.stage === "TPP") prevStage = "Press";
     if (createForm.stage === "Packing") prevStage = "TPP";
 
@@ -895,14 +893,15 @@ const ProductionJobs = () => {
               ) : (
                 <select
                   className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold outline-none text-blue-800"
-                  value={createForm.stage || "Rolling"}
+                  value={createForm.stage || "Melting"}
                   onChange={(e) => {
                     const newStage = e.target.value;
                     let nextJobNum = createForm.job_number;
-                    if (newStage === "Rolling") {
+                    if (newStage === "Melting") {
                       nextJobNum = createForm.original_next_job;
                     } else {
-                      let prevStage = "Rolling";
+                      let prevStage = "Melting";
+                      if (newStage === "Press") prevStage = "Rolling";
                       if (newStage === "TPP") prevStage = "Press";
                       if (newStage === "Packing") prevStage = "TPP";
                       const available = [
@@ -927,7 +926,7 @@ const ProductionJobs = () => {
                       ...createForm,
                       stage: newStage,
                       job_number: nextJobNum || "",
-                      ...(parentJob && newStage !== "Rolling"
+                      ...(parentJob && newStage !== "Melting"
                         ? {
                             metal_type: parentJob.metal_type,
                             category: parentJob.category,
@@ -938,6 +937,7 @@ const ProductionJobs = () => {
                     });
                   }}
                 >
+                  <option value="Melting">Melting</option>
                   <option value="Rolling">Rolling</option>
                   <option value="Press">Press</option>
                   <option value="TPP">TPP</option>
@@ -950,7 +950,7 @@ const ProductionJobs = () => {
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Job Number
               </label>
-              {isNextStep || createForm.stage === "Rolling" ? (
+              {isNextStep || createForm.stage === "Melting" ? (
                 <input
                   type="text"
                   className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
@@ -1000,7 +1000,7 @@ const ProductionJobs = () => {
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Metal
               </label>
-              {isNextStep || createForm.stage !== "Rolling" ? (
+              {isNextStep || createForm.stage !== "Melting" ? (
                 <input
                   type="text"
                   className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
@@ -1293,7 +1293,6 @@ const ProductionJobs = () => {
       </Modal>
 
       {/* COMPLETE MODAL */}
-      {/* COMPLETE MODAL */}
       <Modal
         isOpen={isCompleteModalOpen}
         onClose={() => setIsCompleteModalOpen(false)}
@@ -1304,166 +1303,163 @@ const ProductionJobs = () => {
           onSubmit={handleCompleteProcess}
           className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-            <div className="col-span-1 bg-indigo-50 px-4 py-3 rounded-lg border border-indigo-100 flex justify-between items-center h-full">
-              <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
-                Category
-              </span>
-              <span className="text-sm font-black text-indigo-900">
-                {selectedProcess?.category || "N/A"}
-              </span>
+          {/* Weight Unit Toggle */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+              Weight Unit
+            </label>
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setCompleteForm({ ...completeForm, weight_unit: "g" })}
+                className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                Grams (g)
+              </button>
+              <button
+                type="button"
+                onClick={() => setCompleteForm({ ...completeForm, weight_unit: "kg" })}
+                className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                Kilogram (kg)
+              </button>
             </div>
+          </div>
 
-            <div className="col-span-1">
-              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Weight Unit
+          {/* Return Items */}
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-xs font-bold text-green-700 uppercase tracking-wide">
+                Return Weights (by Size)
               </label>
-              <div className="flex bg-gray-100 p-1 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCompleteForm({ ...completeForm, weight_unit: "g" })
-                  }
-                  className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                >
-                  Grams (g)
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCompleteForm({ ...completeForm, weight_unit: "kg" })
-                  }
-                  className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                >
-                  Kilogram (kg)
-                </button>
-              </div>
-            </div>
-
-            <div className="col-span-1">
-              <label className="block text-xs font-bold text-green-700 mb-1.5 uppercase">
-                Good Output
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                required
-                className="w-full bg-green-50 border-2 border-green-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none vivid-focus-green transition-all"
-                value={completeForm.return_weight}
-                onChange={(e) =>
+              <button
+                type="button"
+                onClick={() =>
                   setCompleteForm({
                     ...completeForm,
-                    return_weight: e.target.value,
+                    return_items: [
+                      ...completeForm.return_items,
+                      { category: "", return_weight: "", return_pieces: "" },
+                    ],
                   })
                 }
-                placeholder="0.000"
-              />
+                className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-200"
+              >
+                + Add Row
+              </button>
             </div>
 
-            <div className="col-span-1">
-              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
-                Scrap/Dust
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                className="w-full bg-yellow-50/50 border-2 border-yellow-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none vivid-focus-yellow transition-all"
-                value={completeForm.scrap_weight}
-                onChange={(e) =>
-                  setCompleteForm({
-                    ...completeForm,
-                    scrap_weight: e.target.value,
-                  })
-                }
-                placeholder="0.000"
-              />
+            <div className="space-y-2">
+              {completeForm.return_items.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-green-50 border border-green-200 p-2 rounded-lg">
+                  <div className="col-span-4">
+                    <input
+                      type="text"
+                      placeholder="Category/Size"
+                      value={item.category}
+                      onChange={(e) => {
+                        const newItems = [...completeForm.return_items];
+                        newItems[idx] = { ...newItems[idx], category: e.target.value };
+                        setCompleteForm({ ...completeForm, return_items: newItems });
+                      }}
+                      className="w-full bg-white border border-green-200 py-2 px-2 rounded text-sm font-medium outline-none"
+                    />
+                  </div>
+                  <div className="col-span-4">
+                    <input
+                      type="number"
+                      step="0.001"
+                      placeholder={`Wt (${completeForm.weight_unit})`}
+                      value={item.return_weight}
+                      onChange={(e) => {
+                        const newItems = [...completeForm.return_items];
+                        newItems[idx] = { ...newItems[idx], return_weight: e.target.value };
+                        setCompleteForm({ ...completeForm, return_items: newItems });
+                      }}
+                      className="w-full bg-white border border-green-200 py-2 px-2 rounded text-xl font-bold outline-none"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      type="number"
+                      step="1"
+                      placeholder="Pcs"
+                      value={item.return_pieces}
+                      onChange={(e) => {
+                        const newItems = [...completeForm.return_items];
+                        newItems[idx] = { ...newItems[idx], return_pieces: e.target.value };
+                        setCompleteForm({ ...completeForm, return_items: newItems });
+                      }}
+                      className="w-full bg-white border border-green-200 py-2 px-2 rounded text-sm font-bold outline-none"
+                    />
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    {completeForm.return_items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newItems = completeForm.return_items.filter((_, i) => i !== idx);
+                          setCompleteForm({ ...completeForm, return_items: newItems });
+                        }}
+                        className="text-red-400 hover:text-red-600 font-bold text-lg leading-none"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
+          </div>
 
-            <div className="col-span-1 flex flex-col gap-4">
-              <div>
-                <label className="block text-xs font-bold text-purple-700 mb-1.5 uppercase">
-                  Final Pieces {reqPieces ? "" : "(Optional)"}
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  required={reqPieces}
-                  className="w-full bg-purple-50 border-2 border-purple-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none vivid-focus-purple transition-all"
-                  value={completeForm.return_pieces}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      return_pieces: e.target.value,
-                    })
-                  }
-                  placeholder={reqPieces ? "0" : "0 (Optional)"}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
-                  Description / Notes (Optional)
-                </label>
-                <textarea
-                  className="w-full bg-gray-50 border-2 border-blue-200 py-2.5 px-3 rounded-lg outline-none vivid-focus-blue min-h-20 text-sm transition-all font-medium"
-                  value={completeForm.description || ""}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      description: e.target.value,
-                    })
-                  }
-                  placeholder="Add completion notes or issues..."
-                />
-              </div>
+          {/* Scrap */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+              Scrap/Dust ({completeForm.weight_unit})
+            </label>
+            <input
+              type="number"
+              step="0.001"
+              className="w-full bg-yellow-50/50 border-2 border-yellow-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none transition-all"
+              value={completeForm.scrap_weight}
+              onChange={(e) => setCompleteForm({ ...completeForm, scrap_weight: e.target.value })}
+              placeholder="0.000"
+            />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+              Description / Notes (Optional)
+            </label>
+            <textarea
+              className="w-full bg-gray-50 border-2 border-blue-200 py-2.5 px-3 rounded-lg outline-none min-h-16 text-sm transition-all font-medium"
+              value={completeForm.description || ""}
+              onChange={(e) => setCompleteForm({ ...completeForm, description: e.target.value })}
+              placeholder="Add completion notes..."
+            />
+          </div>
+
+          {/* Live loss summary */}
+          <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col gap-1.5">
+            <div className="flex justify-between text-sm">
+              <span>Issued ({completeForm?.weight_unit || "g"}):</span>
+              <span>{parseFloat((issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
             </div>
-
-            <div className="col-span-1 flex flex-col justify-end">
-              <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner h-full flex flex-col justify-center gap-1.5">
-                <div className="flex justify-between text-sm">
-                  <span>Issued ({completeForm?.weight_unit || "g"}):</span>
-                  <span>
-                    {parseFloat(
-                      (
-                        issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                      ).toFixed(10),
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm text-green-400">
-                  <span>- Return:</span>
-                  <span>
-                    {parseFloat(
-                      (
-                        retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                      ).toFixed(10),
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm text-yellow-400 mb-2">
-                  <span>- Scrap:</span>
-                  <span>
-                    {parseFloat(
-                      (
-                        scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                      ).toFixed(10),
-                    )}
-                  </span>
-                </div>
-                <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
-                  <span>{isLossNegative ? "Gain:" : "Loss:"}</span>
-                  <span
-                    className={isLossNegative ? "text-green-400" : "text-white"}
-                  >
-                    {isLossNegative ? "+" : ""}
-                    {parseFloat(
-                      (
-                        Math.abs(liveLoss) /
-                        (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                      ).toFixed(10),
-                    )}
-                  </span>
-                </div>
-              </div>
+            <div className="flex justify-between text-sm text-green-400">
+              <span>- Total Return:</span>
+              <span>{parseFloat((retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+            </div>
+            <div className="flex justify-between text-sm text-yellow-400 mb-2">
+              <span>- Scrap:</span>
+              <span>{parseFloat((scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+            </div>
+            <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
+              <span>{isLossNegative ? "Gain:" : "Loss:"}</span>
+              <span className={isLossNegative ? "text-green-400" : "text-white"}>
+                {isLossNegative ? "+" : ""}
+                {parseFloat((Math.abs(liveLoss) / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}
+              </span>
             </div>
           </div>
 
@@ -1475,8 +1471,6 @@ const ProductionJobs = () => {
           </button>
         </form>
       </Modal>
-
-      {/* EDIT MODAL */}
       {/* EDIT MODAL */}
       <Modal
         isOpen={isEditModalOpen}
