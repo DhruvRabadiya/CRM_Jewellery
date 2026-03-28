@@ -1,53 +1,34 @@
 const db = require("../../config/dbConfig");
-const { STATUS } = require("../utils/constants");
 
-const createMeltingProcess = (metal_type, unit, issue_weight, pieces, employee, description) => {
+const createMeltingProcess = (job_number, job_name, metal_type, unit, issue_size, issue_pieces, category, employee, description = '') => {
   return new Promise((resolve, reject) => {
-    const query = `
-      INSERT INTO melting_process 
-      (metal_type, unit, issue_weight, issue_pieces, employee, description, status) 
-      VALUES (?, ?, ?, ?, ?, ?, 'RUNNING')
-    `;
-    db.run(
-      query,
-      [metal_type, unit, issue_weight, pieces, employee, description],
-      function (err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      },
-    );
+    const query = `INSERT INTO melting_process 
+      (job_number, job_name, metal_type, unit, issue_weight, issue_size, issue_pieces, category, employee, description, status) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`;
+    db.run(query, [job_number, job_name, metal_type, unit, issue_size, issue_size, issue_pieces, category, employee, description], function (err) {
+      if (err) reject(err);
+      else resolve(this.lastID);
+    });
   });
 };
 
-const updateMeltingProcess = (
-  processId,
-  returnWeight,
-  returnPieces,
-  scrapWeight,
-  lossWeight,
-  description = "",
-) => {
+const startMeltingProcess = (processId, issued_weight, issue_pieces, employee, description) => {
   return new Promise((resolve, reject) => {
-    const query = `UPDATE melting_process 
-                       SET return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, status = ?, completed_at = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) 
-                       WHERE id = ?`;
+    const query = `UPDATE melting_process SET status = 'RUNNING', issued_weight = ?, issue_pieces = ?, employee = COALESCE(?, employee), description = COALESCE(?, description), start_time = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(query, [issued_weight, issue_pieces, employee, description, processId], function (err) {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+};
 
-    db.run(
-      query,
-      [
-        returnWeight,
-        returnPieces,
-        scrapWeight,
-        lossWeight,
-        STATUS.COMPLETED,
-        description,
-        processId,
-      ],
-      function (err) {
-        if (err) reject(err);
-        resolve(this.changes);
-      },
-    );
+const completeMeltingProcess = (processId, return_weight, return_pieces, scrap_weight, loss_weight, description = '') => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE melting_process SET status = 'COMPLETED', return_weight = ?, return_pieces = ?, scrap_weight = ?, loss_weight = ?, end_time = CURRENT_TIMESTAMP, completed_at = CURRENT_TIMESTAMP, description = COALESCE(NULLIF(?, ''), description) WHERE id = ?`;
+    db.run(query, [return_weight, return_pieces, scrap_weight, loss_weight, description, processId], function (err) {
+      if (err) reject(err);
+      else resolve(this.changes);
+    });
   });
 };
 
@@ -56,17 +37,7 @@ const getMeltingProcessById = (processId) => {
     const query = `SELECT * FROM melting_process WHERE id = ?`;
     db.get(query, [processId], (err, row) => {
       if (err) reject(err);
-      resolve(row);
-    });
-  });
-};
-
-const getRunningMelts = () => {
-  return new Promise((resolve, reject) => {
-    const query = `SELECT *, created_at AS date FROM melting_process WHERE status = ?`;
-    db.all(query, [STATUS.RUNNING], (err, rows) => {
-      if (err) reject(err);
-      resolve(rows);
+      else resolve(row);
     });
   });
 };
@@ -80,11 +51,10 @@ const editMeltingProcess = (processId, updates) => {
       values.push(val);
     }
     values.push(processId);
-
     const query = `UPDATE melting_process SET ${fields.join(", ")} WHERE id = ?`;
     db.run(query, values, function (err) {
       if (err) reject(err);
-      resolve(this.changes);
+      else resolve(this.changes);
     });
   });
 };
@@ -94,30 +64,36 @@ const deleteMeltingProcess = (processId) => {
     const query = `DELETE FROM melting_process WHERE id = ?`;
     db.run(query, [processId], function (err) {
       if (err) reject(err);
-      resolve(this.changes);
+      else resolve(this.changes);
+    });
+  });
+};
+
+const getRunningMelts = () => {
+  return new Promise((resolve, reject) => {
+    db.all(`SELECT *, created_at AS date FROM melting_process WHERE status = 'RUNNING'`, [], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows || []);
     });
   });
 };
 
 const getAllMeltingProcesses = () => {
   return new Promise((resolve, reject) => {
-    db.all(
-      "SELECT *, created_at AS date FROM melting_process ORDER BY created_at DESC",
-      [],
-      (err, rows) => {
-        if (err) reject(err);
-        resolve(rows);
-      },
-    );
+    db.all(`SELECT *, created_at AS date FROM melting_process ORDER BY id DESC`, [], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows || []);
+    });
   });
 };
 
 module.exports = {
   createMeltingProcess,
-  updateMeltingProcess,
+  startMeltingProcess,
+  completeMeltingProcess,
   getMeltingProcessById,
-  getRunningMelts,
   editMeltingProcess,
   deleteMeltingProcess,
+  getRunningMelts,
   getAllMeltingProcesses,
 };

@@ -4,6 +4,7 @@ module.exports = {
     SILVER: "Silver",
   },
   JOB_STEPS: {
+    MELTING: "Melting",
     ROLLING: "Rolling",
     PRESS: "Press",
     TPP: "TPP",

@@ -12,6 +12,7 @@ const getStock = async (req, res) => {
     const defaultStock = (metal) => ({
       metal_type: metal,
       opening_stock: 0,
+      inprocess_weight: 0,
       dhal_stock: 0,
       rolling_stock: 0,
       press_stock: 0,

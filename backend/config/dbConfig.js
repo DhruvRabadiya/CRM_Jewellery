@@ -221,6 +221,48 @@ db.serialize(() => {
     });
   });
 
+  // Migration: add inprocess_weight to stock_master
+  db.all(`PRAGMA table_info(stock_master)`, (err, columns) => {
+    if (!err && columns && !columns.some((col) => col.name === "inprocess_weight")) {
+      db.run(`ALTER TABLE stock_master ADD COLUMN inprocess_weight REAL DEFAULT 0`, (alterErr) => {
+        if (alterErr) console.error("Error migrating inprocess_weight:", alterErr.message);
+        else console.log("Successfully added inprocess_weight column to stock_master");
+      });
+    }
+  });
+
+  // process_return_items table for multiple return rows per job
+  db.run(`CREATE TABLE IF NOT EXISTS process_return_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      process_id INTEGER NOT NULL,
+      process_type TEXT NOT NULL,
+      category TEXT DEFAULT '',
+      return_weight REAL DEFAULT 0,
+      return_pieces INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Migration: add extra columns to melting_process for PENDING/RUNNING/COMPLETED support
+  db.all(`PRAGMA table_info(melting_process)`, (err, columns) => {
+    if (!err && columns) {
+      const addCol = (col, def) => {
+        if (!columns.some((c) => c.name === col)) {
+          db.run(`ALTER TABLE melting_process ADD COLUMN ${col} ${def}`, (alterErr) => {
+            if (alterErr) console.error(`Error adding ${col} to melting_process:`, alterErr.message);
+            else console.log(`Added ${col} to melting_process`);
+          });
+        }
+      };
+      addCol("job_number", "TEXT");
+      addCol("job_name", "TEXT");
+      addCol("category", "TEXT DEFAULT ''");
+      addCol("issued_weight", "REAL DEFAULT 0");
+      addCol("issue_size", "REAL DEFAULT 0");
+      addCol("start_time", "DATETIME");
+      addCol("end_time", "DATETIME");
+    }
+  });
+
   // 6. USERS (Authentication & Authorization)
   db.run(`CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

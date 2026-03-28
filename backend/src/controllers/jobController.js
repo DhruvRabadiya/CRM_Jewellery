@@ -1,5 +1,6 @@
 const jobService = require("../services/jobService");
 const stockService = require("../services/stockService");
+const meltingService = require("../services/meltingService");
 const rollingService = require("../services/rollingService");
 const pressService = require("../services/pressService");
 const tppService = require("../services/tppService");
@@ -183,6 +184,7 @@ const startJobStep = async (req, res) => {
 };
 const getCombinedProcesses = async (req, res) => {
   try {
+    const melting = await meltingService.getAllMeltingProcesses();
     const rolling = await rollingService.getAllRollingProcesses();
     const press = await pressService.getAllPressProcesses();
     const tpp = await tppService.getAllTppProcesses();
@@ -192,21 +194,16 @@ const getCombinedProcesses = async (req, res) => {
       arr.map((item) => ({ ...item, stage: stageName }));
 
     const combined = [
+      ...addStage(melting, "Melting"),
       ...addStage(rolling, "Rolling"),
       ...addStage(press, "Press"),
       ...addStage(tpp, "TPP"),
       ...addStage(packing, "Packing"),
     ];
 
-    combined.sort((a, b) => new Date(b.date) - new Date(a.date));
+    combined.sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at));
 
-    return formatResponse(
-      res,
-      200,
-      true,
-      "Combined processes fetched",
-      combined,
-    );
+    return formatResponse(res, 200, true, "Combined processes fetched", combined);
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }
