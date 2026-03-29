@@ -907,12 +907,31 @@ const ProductionJobs = () => {
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Stage
               </label>
-              <input
-                type="text"
-                className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
-                value={createForm.stage}
-                readOnly
-              />
+              {isNextStep ? (
+                <input
+                  type="text"
+                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
+                  value={createForm.stage}
+                  readOnly
+                />
+              ) : (
+                <select
+                  className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold outline-none text-blue-800"
+                  value={createForm.stage || "Melting"}
+                  onChange={(e) => {
+                    setCreateForm({
+                      ...createForm,
+                      stage: e.target.value,
+                    });
+                  }}
+                >
+                  <option value="Melting">Melting</option>
+                  <option value="Rolling">Rolling</option>
+                  <option value="Press">Press</option>
+                  <option value="TPP">TPP</option>
+                  <option value="Packing">Packing</option>
+                </select>
+              )}
             </div>
 
             <div className="col-span-1">
