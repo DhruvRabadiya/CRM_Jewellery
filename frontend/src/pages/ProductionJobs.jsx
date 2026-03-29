@@ -46,6 +46,7 @@ const sizeOptions = {
     "25 gm",
     "50 gm",
     "100 gm",
+    "Mix",
     "Other",
   ],
   Silver: [
@@ -63,6 +64,7 @@ const sizeOptions = {
     "200g -Bar",
     "250 gm",
     "500 gm",
+    "Mix",
     "Other",
   ],
 };
@@ -101,7 +103,7 @@ const ProductionJobs = () => {
     job_number: "",
     original_next_job: "",
     metal_type: "Gold",
-    category: sizeOptions["Gold"][0],
+    categories: [sizeOptions["Gold"][0]],
     customCategory: "",
     issue_size: "",
     issue_pieces: "",
@@ -130,7 +132,7 @@ const ProductionJobs = () => {
     issued_weight: "",
     weight_unit: "g",
     description: "",
-    category: "",
+    categories: [],
     customCategory: "",
   });
 
@@ -188,7 +190,7 @@ const ProductionJobs = () => {
           original_next_job: result.data.next_job_number,
           stage: "Melting",
           metal_type: "Gold",
-          category: sizeOptions["Gold"][0],
+          categories: [sizeOptions["Gold"][0]],
           issue_size: "",
           issue_pieces: "",
           job_name: "",
@@ -220,7 +222,7 @@ const ProductionJobs = () => {
       job_number: process.job_number,
       job_name: process.job_name || "",
       metal_type: process.metal_type,
-      category: process.category || sizeOptions[process.metal_type][0],
+      categories: process.category ? process.category.split(", ") : [sizeOptions[process.metal_type][0]],
       issue_size:
         process.metal_type === "Silver"
           ? parseFloat((process.return_weight / 1000).toFixed(10)).toString()
@@ -258,7 +260,13 @@ const ProductionJobs = () => {
         employee: createForm.employee || user?.username || "Unknown",
         issue_size: weight,
         issue_pieces: createForm.issue_pieces || 0,
-        category: createForm.category === "Other" ? createForm.customCategory : createForm.category,
+        category: (() => {
+          let cats = createForm.categories.filter(c => c !== "Other");
+          if (createForm.categories.includes("Other") && createForm.customCategory) {
+            cats.push(createForm.customCategory);
+          }
+          return cats.join(", ");
+        })(),
         description: createForm.description || "",
       });
       showToast(`${createForm.stage} Process Created!`, "success");
@@ -331,8 +339,25 @@ const ProductionJobs = () => {
       issue_pieces: process.issue_pieces || "",
       return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
-      category: sizeOptions[process.metal_type].includes(process.category) ? process.category : (process.category ? "Other" : ""),
-      customCategory: sizeOptions[process.metal_type].includes(process.category) ? "" : (process.category || ""),
+      categories: (() => {
+        if (!process.category) return [];
+        const parts = process.category.split(", ");
+        const metalOpts = sizeOptions[process.metal_type] || [];
+        const cats = [];
+        const customParts = [];
+        parts.forEach(p => {
+          if (metalOpts.includes(p)) cats.push(p);
+          else customParts.push(p);
+        });
+        if (customParts.length > 0) cats.push("Other");
+        return cats.length > 0 ? cats : [];
+      })(),
+      customCategory: (() => {
+        if (!process.category) return "";
+        const parts = process.category.split(", ");
+        const metalOpts = sizeOptions[process.metal_type] || [];
+        return parts.filter(p => !metalOpts.includes(p)).join(", ");
+      })(),
       description: process.description || "",
       employee: process.employee || "",
     });
@@ -349,7 +374,13 @@ const ProductionJobs = () => {
     let payload = {
       issued_weight: issueW,
       issue_pieces: parseInt(editForm.issue_pieces) || 0,
-      category: editForm.category === "Other" ? editForm.customCategory : editForm.category,
+      category: (() => {
+        let cats = editForm.categories.filter(c => c !== "Other");
+        if (editForm.categories.includes("Other") && editForm.customCategory) {
+          cats.push(editForm.customCategory);
+        }
+        return cats.join(", ");
+      })(),
     };
     if (editForm.description !== undefined) {
       payload.description = editForm.description;
@@ -942,7 +973,7 @@ const ProductionJobs = () => {
                         ...createForm,
                         job_number: jn,
                         metal_type: parentJob.metal_type,
-                        category: parentJob.category,
+                        categories: parentJob.category ? parentJob.category.split(", ") : [sizeOptions[parentJob.metal_type][0]],
                         weight_unit:
                           parentJob.metal_type === "Silver" ? "kg" : "g",
                       });
@@ -995,7 +1026,7 @@ const ProductionJobs = () => {
                         ...(parentJob
                           ? {
                               metal_type: parentJob.metal_type,
-                              category: parentJob.category,
+                              categories: parentJob.category ? parentJob.category.split(", ") : [sizeOptions[parentJob.metal_type][0]],
                               weight_unit: parentJob.metal_type === "Silver" ? "kg" : "g",
                             }
                           : {}),
@@ -1028,7 +1059,7 @@ const ProductionJobs = () => {
                     setCreateForm({
                       ...createForm,
                       metal_type: e.target.value,
-                      category: sizeOptions[e.target.value][0],
+                      categories: [sizeOptions[e.target.value][0]],
                       weight_unit: e.target.value === "Silver" ? "kg" : "g",
                     })
                   }
@@ -1041,27 +1072,42 @@ const ProductionJobs = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Category
+                Category <span className="text-gray-400 font-normal">(Multi)</span>
               </label>
-              <select
-                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none"
-                value={createForm.category}
-                onChange={(e) =>
-                  setCreateForm({
-                    ...createForm,
-                    category: e.target.value,
-                  })
-                }
-              >
-                {sizeOptions[createForm.metal_type]?.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setCreateForm({ ...createForm, _catOpen: !createForm._catOpen })}
+                  className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none text-left text-sm truncate"
+                >
+                  {createForm.categories.length === 0
+                    ? "Select categories..."
+                    : createForm.categories.filter(c => c !== "Other").join(", ") + (createForm.categories.includes("Other") && createForm.customCategory ? (createForm.categories.filter(c => c !== "Other").length > 0 ? ", " : "") + createForm.customCategory : "")}
+                </button>
+                {createForm._catOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                    {sizeOptions[createForm.metal_type]?.map((c) => (
+                      <label key={c} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={createForm.categories.includes(c)}
+                          onChange={(e) => {
+                            const updated = e.target.checked
+                              ? [...createForm.categories, c]
+                              : createForm.categories.filter(cat => cat !== c);
+                            setCreateForm({ ...createForm, categories: updated });
+                          }}
+                          className="accent-blue-600 w-4 h-4"
+                        />
+                        {c}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {createForm.category === "Other" && (
+            {createForm.categories.includes("Other") && (
               <div className="col-span-1">
                 <label className="block text-xs font-bold text-blue-700 mb-1.5 uppercase tracking-wide">
                   Custom Category Name
@@ -1591,27 +1637,42 @@ const ProductionJobs = () => {
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Category
+                Category <span className="text-gray-400 font-normal">(Multi)</span>
               </label>
-              <select
-                className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none cursor-pointer"
-                value={editForm.category}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    category: e.target.value,
-                  })
-                }
-              >
-                {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setEditForm({ ...editForm, _catOpen: !editForm._catOpen })}
+                  className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none cursor-pointer text-left text-sm truncate"
+                >
+                  {editForm.categories.length === 0
+                    ? "Select categories..."
+                    : editForm.categories.filter(c => c !== "Other").join(", ") + (editForm.categories.includes("Other") && editForm.customCategory ? (editForm.categories.filter(c => c !== "Other").length > 0 ? ", " : "") + editForm.customCategory : "")}
+                </button>
+                {editForm._catOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                    {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
+                      <label key={c} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={editForm.categories.includes(c)}
+                          onChange={(e) => {
+                            const updated = e.target.checked
+                              ? [...editForm.categories, c]
+                              : editForm.categories.filter(cat => cat !== c);
+                            setEditForm({ ...editForm, categories: updated });
+                          }}
+                          className="accent-blue-600 w-4 h-4"
+                        />
+                        {c}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {editForm.category === "Other" && (
+            {editForm.categories.includes("Other") && (
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-blue-700 mb-1.5 uppercase tracking-wide">
                   Custom Category Name
