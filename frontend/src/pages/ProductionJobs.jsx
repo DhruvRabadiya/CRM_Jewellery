@@ -110,7 +110,6 @@ const ProductionJobs = () => {
   const [createForm, setCreateForm] = useState({
     stage: "Melting",
     job_number: "",
-    original_next_job: "",
     metal_type: "Gold",
     categories: [sizeOptions["Gold"][0]],
     customCategory: "",
@@ -120,7 +119,6 @@ const ProductionJobs = () => {
     weight_unit: "g",
     description: "",
     employee: "",
-    startFresh: true,
   });
 
   const [startForm, setStartForm] = useState({
@@ -196,7 +194,6 @@ const ProductionJobs = () => {
         setCreateForm((prev) => ({
           ...prev,
           job_number: result.data.next_job_number,
-          original_next_job: result.data.next_job_number,
           stage: "Melting",
           metal_type: "Gold",
           categories: [sizeOptions["Gold"][0]],
@@ -207,7 +204,6 @@ const ProductionJobs = () => {
           customCategory: "",
           description: "",
           employee: user?.username || "",
-          startFresh: true,
         }));
         setIsNextStep(false);
         setIsCreateModalOpen(true);
@@ -589,21 +585,6 @@ const ProductionJobs = () => {
   );
   const editIsLossNegative = editLiveLoss < 0;
 
-  const getAvailableJobNumbers = () => {
-    let prevStage = "Melting";
-    if (createForm.stage === "Press") prevStage = "Rolling";
-    if (createForm.stage === "TPP") prevStage = "Press";
-    if (createForm.stage === "Packing") prevStage = "TPP";
-
-    return [
-      ...new Set(
-        processes
-          .filter((p) => p.stage === prevStage && p.status === "COMPLETED")
-          .map((p) => p.job_number),
-      ),
-    ];
-  };
-
   if (loading)
     return (
       <div className="p-8 text-center animate-pulse">
@@ -926,134 +907,31 @@ const ProductionJobs = () => {
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Stage
               </label>
-              {isNextStep ? (
-                <input
-                  type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
-                  value={createForm.stage}
-                  readOnly
-                />
-              ) : (
-                <select
-                  className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold outline-none text-blue-800"
-                  value={createForm.stage || "Melting"}
-                  onChange={(e) => {
-                    const newStage = e.target.value;
-                    // Always start fresh with new job number when switching stages
-                    setCreateForm({
-                      ...createForm,
-                      stage: newStage,
-                      startFresh: true,
-                      job_number: createForm.original_next_job,
-                    });
-                  }}
-                >
-                  <option value="Melting">Melting</option>
-                  <option value="Rolling">Rolling</option>
-                  <option value="Press">Press</option>
-                  <option value="TPP">TPP</option>
-                  <option value="Packing">Packing</option>
-                </select>
-              )}
+              <input
+                type="text"
+                className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
+                value={createForm.stage}
+                readOnly
+              />
             </div>
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Job Number
               </label>
-              {isNextStep || createForm.startFresh ? (
-                <input
-                  type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
-                  value={createForm.job_number}
-                  readOnly
-                />
-              ) : (
-                <select
-                  className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none uppercase"
-                  value={createForm.job_number || ""}
-                  onChange={(e) => {
-                    const jn = e.target.value;
-                    const parentJob = processes.find(
-                      (p) => p.job_number === jn,
-                    );
-                    if (parentJob) {
-                      setCreateForm({
-                        ...createForm,
-                        job_number: jn,
-                        metal_type: parentJob.metal_type,
-                        categories: parentJob.category ? parentJob.category.split(", ") : [sizeOptions[parentJob.metal_type][0]],
-                        weight_unit:
-                          parentJob.metal_type === "Silver" ? "kg" : "g",
-                      });
-                    } else {
-                      setCreateForm({
-                        ...createForm,
-                        job_number: jn,
-                      });
-                    }
-                  }}
-                  required
-                >
-                  <option value="" disabled>
-                    Select Job
-                  </option>
-                  {getAvailableJobNumbers().map((jn) => (
-                    <option key={jn} value={jn}>
-                      {jn}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {/* Toggle: Start Fresh vs Continue Existing (only for non-Melting, non-next-step) */}
-              {!isNextStep && createForm.stage !== "Melting" && (
-                <div className="flex mt-2 bg-gray-100 p-0.5 rounded-lg text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCreateForm({
-                        ...createForm,
-                        startFresh: true,
-                        job_number: createForm.original_next_job,
-                      })
-                    }
-                    className={`flex-1 py-1.5 rounded-md transition-colors ${createForm.startFresh ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                  >
-                    New Job
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const available = getAvailableJobNumbers();
-                      const firstJob = available.length > 0 ? available[0] : "";
-                      const parentJob = processes.find((p) => p.job_number === firstJob);
-                      setCreateForm({
-                        ...createForm,
-                        startFresh: false,
-                        job_number: firstJob,
-                        ...(parentJob
-                          ? {
-                              metal_type: parentJob.metal_type,
-                              categories: parentJob.category ? parentJob.category.split(", ") : [sizeOptions[parentJob.metal_type][0]],
-                              weight_unit: parentJob.metal_type === "Silver" ? "kg" : "g",
-                            }
-                          : {}),
-                      });
-                    }}
-                    className={`flex-1 py-1.5 rounded-md transition-colors ${!createForm.startFresh ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                  >
-                    Continue Existing
-                  </button>
-                </div>
-              )}
+              <input
+                type="text"
+                className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
+                value={createForm.job_number}
+                readOnly
+              />
             </div>
 
             <div className="col-span-1">
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Metal
               </label>
-              {isNextStep || (!createForm.startFresh && createForm.stage !== "Melting") ? (
+              {isNextStep ? (
                 <input
                   type="text"
                   className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
