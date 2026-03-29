@@ -171,6 +171,36 @@ const getDetailedScrapAndLoss = () => {
   });
 };
 
+// Recalculate inprocess_weight from active (PENDING/RUNNING) processes across all stages
+const recalculateInprocessWeight = (metalType) => {
+  return new Promise((resolve, reject) => {
+    // For PENDING: use issue_size (queued weight)
+    // For RUNNING: use issued_weight (actual started weight, may differ from queued)
+    const query = `
+      SELECT COALESCE(SUM(w), 0) as total FROM (
+        SELECT CASE WHEN status = 'RUNNING' THEN COALESCE(issued_weight, issue_size, issue_weight, 0) ELSE COALESCE(issue_size, issue_weight, 0) END as w FROM melting_process WHERE metal_type = ? AND status IN ('PENDING', 'RUNNING')
+        UNION ALL
+        SELECT CASE WHEN status = 'RUNNING' THEN COALESCE(issued_weight, issue_size, 0) ELSE COALESCE(issue_size, 0) END as w FROM rolling_processes WHERE metal_type = ? AND status IN ('PENDING', 'RUNNING')
+        UNION ALL
+        SELECT CASE WHEN status = 'RUNNING' THEN COALESCE(issued_weight, issue_size, 0) ELSE COALESCE(issue_size, 0) END as w FROM press_processes WHERE metal_type = ? AND status IN ('PENDING', 'RUNNING')
+        UNION ALL
+        SELECT CASE WHEN status = 'RUNNING' THEN COALESCE(issued_weight, issue_size, 0) ELSE COALESCE(issue_size, 0) END as w FROM tpp_processes WHERE metal_type = ? AND status IN ('PENDING', 'RUNNING')
+        UNION ALL
+        SELECT CASE WHEN status = 'RUNNING' THEN COALESCE(issued_weight, issue_size, 0) ELSE COALESCE(issue_size, 0) END as w FROM packing_processes WHERE metal_type = ? AND status IN ('PENDING', 'RUNNING')
+      )
+    `;
+    db.get(query, [metalType, metalType, metalType, metalType, metalType], (err, row) => {
+      if (err) return reject(err);
+      const correctWeight = row ? row.total : 0;
+      // Sync the stock_master value
+      db.run(`UPDATE stock_master SET inprocess_weight = ? WHERE metal_type = ?`, [correctWeight, metalType], function (updateErr) {
+        if (updateErr) return reject(updateErr);
+        resolve(correctWeight);
+      });
+    });
+  });
+};
+
 module.exports = {
   getStockByMetal,
   updateOpeningStock,
@@ -184,4 +214,5 @@ module.exports = {
   editPurchase,
   deletePurchase,
   getDetailedScrapAndLoss,
+  recalculateInprocessWeight,
 };

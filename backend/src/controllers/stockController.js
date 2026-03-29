@@ -4,6 +4,12 @@ const { MESSAGES, TRANSACTION_TYPES } = require("../utils/constants");
 
 const getStock = async (req, res) => {
   try {
+    // Recalculate inprocess_weight from actual active processes to stay in sync
+    await Promise.all([
+      stockService.recalculateInprocessWeight("Gold"),
+      stockService.recalculateInprocessWeight("Silver"),
+    ]);
+
     const [goldStock, silverStock] = await Promise.all([
       stockService.getStockByMetal("Gold"),
       stockService.getStockByMetal("Silver"),
