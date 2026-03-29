@@ -71,6 +71,15 @@ const sizeOptions = {
 
 const stages = ["Melting", "Rolling", "Press", "TPP", "Packing"];
 
+const formatCategoryDisplay = (categories, customCategory) => {
+  if (!categories || categories.length === 0) return "Select categories...";
+  const standard = categories.filter(c => c !== "Other");
+  const custom = categories.includes("Other") && customCategory ? customCategory : "";
+  const parts = [...standard];
+  if (custom) parts.push(custom);
+  return parts.join(", ");
+};
+
 const ProductionJobs = () => {
   const [processes, setProcesses] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -1080,9 +1089,7 @@ const ProductionJobs = () => {
                   onClick={() => setCreateForm({ ...createForm, _catOpen: !createForm._catOpen })}
                   className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none text-left text-sm truncate"
                 >
-                  {createForm.categories.length === 0
-                    ? "Select categories..."
-                    : createForm.categories.filter(c => c !== "Other").join(", ") + (createForm.categories.includes("Other") && createForm.customCategory ? (createForm.categories.filter(c => c !== "Other").length > 0 ? ", " : "") + createForm.customCategory : "")}
+                  {formatCategoryDisplay(createForm.categories, createForm.customCategory)}
                 </button>
                 {createForm._catOpen && (
                   <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
@@ -1645,9 +1652,7 @@ const ProductionJobs = () => {
                   onClick={() => setEditForm({ ...editForm, _catOpen: !editForm._catOpen })}
                   className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none cursor-pointer text-left text-sm truncate"
                 >
-                  {editForm.categories.length === 0
-                    ? "Select categories..."
-                    : editForm.categories.filter(c => c !== "Other").join(", ") + (editForm.categories.includes("Other") && editForm.customCategory ? (editForm.categories.filter(c => c !== "Other").length > 0 ? ", " : "") + editForm.customCategory : "")}
+                  {formatCategoryDisplay(editForm.categories, editForm.customCategory)}
                 </button>
                 {editForm._catOpen && (
                   <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
