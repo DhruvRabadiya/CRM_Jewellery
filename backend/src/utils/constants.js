@@ -3,13 +3,6 @@ module.exports = {
     GOLD: "Gold",
     SILVER: "Silver",
   },
-  JOB_STEPS: {
-    MELTING: "Melting",
-    ROLLING: "Rolling",
-    PRESS: "Press",
-    TPP: "TPP",
-    PACKING: "Packing",
-  },
   STATUS: {
     PENDING: "PENDING",
     RUNNING: "RUNNING",

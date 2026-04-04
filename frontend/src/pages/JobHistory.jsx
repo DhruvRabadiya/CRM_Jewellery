@@ -10,7 +10,6 @@ import {
   PlayCircle,
   Hammer,
   Trash2,
-  ArrowRightCircle,
   PlusCircle,
   Printer,
 } from "lucide-react";
@@ -153,7 +152,6 @@ const JobHistory = () => {
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isNextStep, setIsNextStep] = useState(false);
   const [createForm, setCreateForm] = useState({
     stage: "Rolling",
     job_number: "",
@@ -375,30 +373,6 @@ const JobHistory = () => {
     }
   };
 
-  const openNextStepModal = (process, remainingWeight) => {
-    let nextStage = "Rolling";
-    if (process.stage === "Rolling") nextStage = "Press";
-    if (process.stage === "Press") nextStage = "TPP";
-    if (process.stage === "TPP") nextStage = "Packing";
-
-    setCreateForm({
-      stage: nextStage,
-      job_number: process.job_number,
-      metal_type: process.metal_type,
-      category: sizeOptions[process.metal_type].includes(process.category) ? process.category : (process.category ? "Other" : ""),
-      customCategory: sizeOptions[process.metal_type].includes(process.category) ? "" : (process.category || ""),
-      issue_size:
-        process.metal_type === "Silver"
-          ? parseFloat((remainingWeight / 1000).toFixed(10)).toString()
-          : parseFloat(remainingWeight.toFixed(10)).toString(),
-      issue_pieces: process.return_pieces || "",
-      weight_unit: process.metal_type === "Silver" ? "kg" : "g",
-      description: process.description || "",
-    });
-    setIsNextStep(true);
-    setIsCreateModalOpen(true);
-  };
-
   const openViewModal = (process) => {
     setSelectedProcess(process);
     setIsViewModalOpen(true);
@@ -464,54 +438,6 @@ const JobHistory = () => {
     ).toFixed(10),
   );
   const editIsLossNegative = editLiveLoss < 0;
-
-  const getRemainingStockForRow = (row, historyItems, allItems) => {
-    let nextStage = null;
-    if (row.stage === "Rolling") nextStage = "Press";
-    if (row.stage === "Press") nextStage = "TPP";
-    if (row.stage === "TPP") nextStage = "Packing";
-    if (!nextStage) return 0;
-
-    let stageReturns = historyItems
-      .filter((p) => p.stage === row.stage && p.status === "COMPLETED")
-      .map((p) => ({ ...p, remaining: parseFloat(p.return_weight) || 0 }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    let consumedItems = allItems
-      .filter((p) => p.stage === nextStage && p.job_number === row.job_number)
-      .map((p) => parseFloat(p.issued_weight || p.issue_size || 0));
-
-    for (let i = 0; i < consumedItems.length; i++) {
-      let c = consumedItems[i];
-      if (c <= 0) continue;
-
-      let exactMatchIndex = stageReturns.findIndex(
-        (r) => Math.abs(r.remaining - c) < 0.001,
-      );
-      if (exactMatchIndex !== -1) {
-        stageReturns[exactMatchIndex].remaining = 0;
-        consumedItems[i] = 0;
-      }
-    }
-
-    let totalConsumed = consumedItems.reduce((sum, c) => sum + c, 0);
-
-    for (let r of stageReturns) {
-      if (totalConsumed <= 0) break;
-      if (r.remaining <= 0) continue;
-
-      if (totalConsumed >= r.remaining) {
-        totalConsumed -= r.remaining;
-        r.remaining = 0;
-      } else {
-        r.remaining -= totalConsumed;
-        totalConsumed = 0;
-      }
-    }
-
-    const targetRow = stageReturns.find((r) => r.id === row.id);
-    return targetRow ? parseFloat(targetRow.remaining.toFixed(10)) : 0;
-  };
 
   if (loading)
     return (
@@ -746,34 +672,9 @@ const JobHistory = () => {
                         )}
 
                         {h.status === "COMPLETED" && (
-                          <>
-                            {h.stage !== "Packing" &&
-                              getRemainingStockForRow(
-                                h,
-                                history,
-                                allProcesses,
-                              ) > 0.001 && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openNextStepModal(
-                                      h,
-                                      getRemainingStockForRow(
-                                        h,
-                                        history,
-                                        allProcesses,
-                                      ),
-                                    );
-                                  }}
-                                  className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                                >
-                                  <ArrowRightCircle size={14} /> Start Next
-                                </button>
-                              )}
-                            <div className="w-8 flex justify-center items-center text-green-500">
-                              <CheckCircle size={20} />
-                            </div>
-                          </>
+                          <div className="w-8 flex justify-center items-center text-green-500">
+                            <CheckCircle size={20} />
+                          </div>
                         )}
                         {isAdmin && (
                           <button
@@ -848,7 +749,7 @@ const JobHistory = () => {
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Stage
                 </label>
-                {isNextStep || true ? (
+                {true ? (
                   <input
                     type="text"
                     className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
@@ -913,7 +814,7 @@ const JobHistory = () => {
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Job Number
                 </label>
-                {isNextStep || createForm.stage === "Rolling" ? (
+                {createForm.stage === "Rolling" ? (
                   <input
                     type="text"
                     className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
@@ -960,7 +861,7 @@ const JobHistory = () => {
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Metal
                 </label>
-                {isNextStep || true ? (
+                {true ? (
                   <input
                     type="text"
                     className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
