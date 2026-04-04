@@ -214,7 +214,7 @@ const ProductionJobs = () => {
       return showToast("Packing is the final stage.", "error");
 
     const returnWeight = process.return_weight || 0;
-    const metalOptions = sizeOptions[process.metal_type] || sizeOptions["Gold"];
+    const metalOptions = sizeOptions[process.metal_type] || [];
 
     setCreateForm({
       stage: nextStage,
