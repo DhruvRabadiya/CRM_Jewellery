@@ -185,6 +185,32 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // 5b. PRODUCTION JOBS (Legacy job tracking system)
+  db.run(`CREATE TABLE IF NOT EXISTS production_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_number TEXT UNIQUE,
+      metal_type TEXT,
+      target_product TEXT,
+      current_step TEXT,
+      status TEXT DEFAULT 'PENDING',
+      issue_weight REAL,
+      current_weight REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 5c. JOB STEPS (Legacy step logging)
+  db.run(`CREATE TABLE IF NOT EXISTS job_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER,
+      step_name TEXT,
+      issue_weight REAL,
+      return_weight REAL,
+      scrap_weight REAL,
+      loss_weight REAL,
+      return_pieces INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Safe migration for description and employee columns across all process tables
   const processTables = [
     "melting_process",

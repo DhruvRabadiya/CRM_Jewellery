@@ -1,5 +1,5 @@
 const stockService = require("../services/stockService");
-const { formatResponse } = require("../utils/common");
+const { formatResponse, isValidMetalType } = require("../utils/common");
 const { MESSAGES, TRANSACTION_TYPES } = require("../utils/constants");
 
 const getStock = async (req, res) => {
@@ -48,6 +48,10 @@ const addStock = async (req, res) => {
 
     if (!metal_type || !weight || weight <= 0) {
       return formatResponse(res, 400, false, MESSAGES.INVALID_INPUT);
+    }
+
+    if (!isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
     }
 
     await stockService.updateOpeningStock(metal_type, weight, true);
