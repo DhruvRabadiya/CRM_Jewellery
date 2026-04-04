@@ -1,17 +1,20 @@
 const db = require("../../config/dbConfig");
 const packingService = require("../services/packingService");
 const stockService = require("../services/stockService");
-const { calculateLoss, formatResponse } = require("../utils/common");
+const { calculateLoss, formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
 const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const createPacking = async (req, res) => {
   try {
     const { job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, description } = req.body;
     const weight = parseFloat(issue_size);
-    const pieces = parseInt(issue_pieces) || 0;
+    const pieces = sanitizePieces(issue_pieces);
 
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(res, 400, false, "Invalid input. Issue size must be greater than 0.");
+    }
+    if (!isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
     }
 
     const currentStock = await stockService.getStockByMetal(metal_type);
@@ -37,7 +40,7 @@ const startPacking = async (req, res) => {
   try {
     const { process_id, issued_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issued_weight);
-    const pieces = parseInt(issue_pieces) || 0;
+    const pieces = sanitizePieces(issue_pieces);
     if (!process_id || isNaN(weight) || weight <= 0)
       return formatResponse(res, 400, false, "Invalid issued weight.");
 
@@ -77,12 +80,13 @@ const completePacking = async (req, res) => {
     const process = await packingService.getPackingProcessById(process_id);
     if (!process) return formatResponse(res, 404, false, MESSAGES.JOB_NOT_FOUND);
     if (process.status === STATUS.COMPLETED) return formatResponse(res, 400, false, "Process already completed.");
+    if (process.status === "PENDING") return formatResponse(res, 400, false, "Process must be started before completing.");
 
     const items = Array.isArray(return_items) && return_items.length > 0 ? return_items : [];
     const totalRetW = items.reduce((sum, item) => sum + (parseFloat(item.return_weight) || 0), 0);
     const totalRetPieces = items.reduce((sum, item) => sum + (parseInt(item.return_pieces) || 0), 0);
 
-    const issW = process.issued_weight;
+    const issW = process.issued_weight || process.issue_size || 0;
     const lossWeight = calculateLoss(issW, totalRetW, scrW);
 
     await packingService.completePackingProcess(

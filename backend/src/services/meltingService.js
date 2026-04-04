@@ -43,14 +43,25 @@ const getMeltingProcessById = (processId) => {
   });
 };
 
+const VALID_MELTING_COLUMNS = new Set([
+  'issue_weight', 'issue_size', 'issue_pieces', 'issued_weight',
+  'return_weight', 'return_pieces', 'scrap_weight', 'loss_weight',
+  'description', 'employee', 'category', 'status',
+  'start_time', 'end_time', 'completed_at',
+]);
+
 const editMeltingProcess = (processId, updates) => {
   return new Promise((resolve, reject) => {
     const fields = [];
     const values = [];
     for (const [key, val] of Object.entries(updates)) {
+      if (!VALID_MELTING_COLUMNS.has(key)) {
+        return reject(new Error(`Invalid column name: ${key}`));
+      }
       fields.push(`${key} = ?`);
       values.push(val);
     }
+    if (fields.length === 0) return resolve(0);
     values.push(processId);
     const query = `UPDATE melting_process SET ${fields.join(", ")} WHERE id = ?`;
     db.run(query, values, function (err) {

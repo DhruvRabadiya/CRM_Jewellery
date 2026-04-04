@@ -11,6 +11,7 @@ module.exports = {
     PACKING: "Packing",
   },
   STATUS: {
+    PENDING: "PENDING",
     RUNNING: "RUNNING",
     IN_PROGRESS: "IN_PROGRESS",
     COMPLETED: "COMPLETED",

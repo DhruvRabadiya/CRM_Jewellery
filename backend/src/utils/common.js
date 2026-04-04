@@ -14,7 +14,19 @@ const formatResponse = (res, statusCode, success, message, data = null) => {
   });
 };
 
+const isValidMetalType = (metalType) => {
+  return metalType === 'Gold' || metalType === 'Silver';
+};
+
+const sanitizePieces = (value) => {
+  const parsed = parseInt(value);
+  if (isNaN(parsed) || parsed < 0) return 0;
+  return parsed;
+};
+
 module.exports = {
   calculateLoss,
   formatResponse,
+  isValidMetalType,
+  sanitizePieces,
 };
