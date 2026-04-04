@@ -1,6 +1,6 @@
 const packingService = require("../services/packingService");
 const stockService = require("../services/stockService");
-const { calculateLoss, formatResponse } = require("../utils/common");
+const { calculateLoss, formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
 const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const createPacking = async (req, res) => {
@@ -17,8 +17,11 @@ const createPacking = async (req, res) => {
       description,
     } = req.body;
     const weight = parseFloat(issue_size);
-    const pieces = parseInt(issue_pieces) || 0;
+    const pieces = sanitizePieces(issue_pieces);
 
+    if (!metal_type || !isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
+    }
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(
         res,
@@ -28,17 +31,11 @@ const createPacking = async (req, res) => {
       );
     }
 
-    const currentStock = await stockService.getStockByMetal(metal_type);
-    if (
-      !currentStock ||
-      Math.round(currentStock.tpp_stock * 1000) < Math.round(weight * 1000)
-    ) {
-      return formatResponse(
-        res,
-        400,
-        false,
-        "Insufficient pooled TPP Stock available to queue this job.",
-      );
+    // Atomic check-and-deduct to prevent race conditions
+    try {
+      await stockService.atomicCheckAndDeductProcess("tpp", metal_type, weight);
+    } catch (stockErr) {
+      return formatResponse(res, 400, false, "Insufficient pooled TPP Stock available to queue this job.");
     }
 
     const processId = await packingService.createPackingProcess(
@@ -52,8 +49,7 @@ const createPacking = async (req, res) => {
       description || "",
     );
 
-    // DEDUCT IMMEDIATELY UPON CREATION
-    await stockService.updateProcessStock("tpp", metal_type, weight, false);
+    // Stock already deducted atomically above
     await stockService.logTransaction(
       metal_type,
       TRANSACTION_TYPES.JOB_ISSUE,
@@ -137,13 +133,12 @@ const completePacking = async (req, res) => {
   try {
     const { process_id, return_weight, scrap_weight, return_pieces, description } = req.body;
     const retW = parseFloat(return_weight) || 0;
-    const retP = parseInt(return_pieces) || 0;
+    const retP = sanitizePieces(return_pieces);
     const scrW = parseFloat(scrap_weight) || 0;
     const pieces = retP; // Packing currently expects just `pieces` for Finished Goods creation.
 
     if (!process_id || retW < 0 || scrW < 0)
       return formatResponse(res, 400, false, "Invalid weights.");
-    if (pieces < 0) return formatResponse(res, 400, false, "Invalid pieces.");
 
     const process = await packingService.getPackingProcessById(process_id);
     if (!process)

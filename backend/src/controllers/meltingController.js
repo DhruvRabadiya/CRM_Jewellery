@@ -1,31 +1,29 @@
 const meltingService = require("../services/meltingService");
 const stockService = require("../services/stockService");
-const { calculateLoss, formatResponse } = require("../utils/common");
+const { calculateLoss, formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
 const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const startMelting = async (req, res) => {
   try {
     const { metal_type, weight_unit, issue_weight, issue_pieces, employee, description } = req.body;
     const weight = parseFloat(issue_weight);
-    const pieces = parseInt(issue_pieces) || 0;
+    const pieces = sanitizePieces(issue_pieces);
     const unit = weight_unit || "g";
     const assignedEmployee = employee || "Unknown";
 
-    if (!metal_type || isNaN(weight) || weight <= 0) {
-      return formatResponse(
-        res,
-        400,
-        false,
-        "Invalid metal type or issue weight must be greater than 0.",
-      );
+    if (!metal_type || !isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
+    }
+    if (isNaN(weight) || weight <= 0) {
+      return formatResponse(res, 400, false, "Issue weight must be greater than 0.");
     }
 
-    const currentStock = await stockService.getStockByMetal(metal_type);
-    if (!currentStock || currentStock.opening_stock < weight) {
+    // Atomic check-and-deduct to prevent race conditions
+    try {
+      await stockService.atomicCheckAndDeductOpening(metal_type, weight);
+    } catch (stockErr) {
       return formatResponse(res, 400, false, MESSAGES.INSUFFICIENT_STOCK);
     }
-
-    await stockService.updateOpeningStock(metal_type, weight, false);
     const processId = await meltingService.createMeltingProcess(
       metal_type,
       unit,
@@ -59,7 +57,7 @@ const completeMelting = async (req, res) => {
 
     const retW = parseFloat(return_weight) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
-    const retPieces = parseInt(return_pieces) || 0;
+    const retPieces = sanitizePieces(return_pieces);
 
     if (!process_id || retW < 0 || scrW < 0) {
       return formatResponse(
