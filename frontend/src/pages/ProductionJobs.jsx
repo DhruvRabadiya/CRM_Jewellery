@@ -102,8 +102,6 @@ const ProductionJobs = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
-  const [isNextStep, setIsNextStep] = useState(false);
-
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "job_number", direction: "asc" });
 
@@ -205,44 +203,11 @@ const ProductionJobs = () => {
           description: "",
           employee: user?.username || "",
         }));
-        setIsNextStep(false);
         setIsCreateModalOpen(true);
       }
     } catch (error) {
       showToast("Failed to generate Job Number", "error");
     }
-  };
-
-  const openNextStepModal = (process) => {
-    let nextStage = "Rolling";
-    if (process.stage === "Melting") nextStage = "Rolling";
-    if (process.stage === "Rolling") nextStage = "Press";
-    if (process.stage === "Press") nextStage = "TPP";
-    if (process.stage === "TPP") nextStage = "Packing";
-    if (process.stage === "Packing")
-      return showToast("Packing is the final stage.", "error");
-
-    const returnWeight = process.return_weight || 0;
-    const metalOptions = sizeOptions[process.metal_type] || [];
-
-    setCreateForm({
-      stage: nextStage,
-      job_number: process.job_number,
-      job_name: process.job_name || "",
-      metal_type: process.metal_type,
-      categories: process.category ? process.category.split(", ") : [sizeOptions[process.metal_type][0]],
-      issue_size:
-        process.metal_type === "Silver"
-          ? parseFloat((returnWeight / 1000).toFixed(10)).toString()
-          : parseFloat(returnWeight.toFixed(10)).toString(),
-      issue_pieces: process.return_pieces || "",
-      weight_unit: process.metal_type === "Silver" ? "kg" : "g",
-      description: process.description || "",
-      customCategory: "",
-      employee: user?.username || "",
-    });
-    setIsNextStep(true);
-    setIsCreateModalOpen(true);
   };
 
   const openViewModal = (job_number) => {
@@ -830,17 +795,6 @@ const ProductionJobs = () => {
                             <ArrowRightCircle size={14} /> Complete Process
                           </button>
                         )}
-                        {p.status === "COMPLETED" && p.stage !== "Packing" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openNextStepModal(p);
-                            }}
-                            className="bg-blue-100 text-blue-700 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                          >
-                            <ArrowRightCircle size={14} /> Start Next Step
-                          </button>
-                        )}
                         {isAdmin && (
                           <button
                             onClick={(e) => {
@@ -915,15 +869,7 @@ const ProductionJobs = () => {
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Stage
               </label>
-              {isNextStep ? (
-                <input
-                  type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
-                  value={createForm.stage}
-                  readOnly
-                />
-              ) : (
-                <select
+              <select
                   className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold outline-none text-blue-800"
                   value={createForm.stage || "Melting"}
                   onChange={(e) => {
@@ -939,7 +885,6 @@ const ProductionJobs = () => {
                   <option value="TPP">TPP</option>
                   <option value="Packing">Packing</option>
                 </select>
-              )}
             </div>
 
             <div className="col-span-1">
@@ -958,15 +903,7 @@ const ProductionJobs = () => {
               <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                 Metal
               </label>
-              {isNextStep ? (
-                <input
-                  type="text"
-                  className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
-                  value={createForm.metal_type}
-                  readOnly
-                />
-              ) : (
-                <select
+              <select
                   className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none"
                   value={createForm.metal_type}
                   onChange={(e) =>
@@ -981,7 +918,6 @@ const ProductionJobs = () => {
                   <option value="Gold">Gold</option>
                   <option value="Silver">Silver</option>
                 </select>
-              )}
             </div>
 
             <div className="col-span-1">
