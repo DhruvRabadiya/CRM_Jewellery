@@ -44,16 +44,10 @@ const getMeltingProcessById = (processId) => {
 };
 
 const VALID_MELTING_COLUMNS = new Set([
-  'issue_weight', 'issue_size', 'issue_pieces', 'issued_weight',
+  'metal_type', 'unit', 'issue_weight', 'issue_size', 'issue_pieces', 'issued_weight',
   'return_weight', 'return_pieces', 'scrap_weight', 'loss_weight',
   'description', 'employee', 'category', 'status',
   'start_time', 'end_time', 'completed_at',
-]);
-
-const VALID_MELTING_COLUMNS = new Set([
-  'metal_type', 'unit', 'issue_weight', 'issue_pieces', 'return_weight',
-  'return_pieces', 'scrap_weight', 'loss_weight', 'status', 'completed_at',
-  'description', 'employee',
 ]);
 
 const editMeltingProcess = (processId, updates) => {
