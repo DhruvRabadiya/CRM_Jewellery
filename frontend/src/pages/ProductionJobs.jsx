@@ -735,7 +735,9 @@ const ProductionJobs = () => {
                       {p.metal_type}
                     </span>
                     <span className="text-xs font-semibold text-gray-500">
-                      {p.category}
+                      {p.status === "COMPLETED" && p.return_items && p.return_items.length > 0
+                        ? [...new Set(p.return_items.map((item) => item.category).filter(Boolean))].join(", ")
+                        : p.category}
                     </span>
                   </td>
                   <td className="p-4">
