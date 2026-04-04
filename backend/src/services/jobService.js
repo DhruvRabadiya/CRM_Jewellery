@@ -117,18 +117,17 @@ const getActiveJobs = () => {
 // Get the next serial Job Number (e.g., JOB-0001, JOB-0002)
 const getNextJobNumber = () => {
   return new Promise((resolve, reject) => {
-    // Find the absolute last job created across all processes
+    // Find the absolute last job created across all process tables that have job_number.
+    // Note: melting_process does not have a job_number column (melting is standalone).
     const query = `
       SELECT job_number FROM (
-        SELECT job_number FROM melting_process WHERE job_number IS NOT NULL
+        SELECT job_number FROM rolling_processes WHERE job_number IS NOT NULL
         UNION ALL
-        SELECT job_number FROM rolling_processes
+        SELECT job_number FROM press_processes WHERE job_number IS NOT NULL
         UNION ALL
-        SELECT job_number FROM press_processes
+        SELECT job_number FROM tpp_processes WHERE job_number IS NOT NULL
         UNION ALL
-        SELECT job_number FROM tpp_processes
-        UNION ALL
-        SELECT job_number FROM packing_processes
+        SELECT job_number FROM packing_processes WHERE job_number IS NOT NULL
       ) ORDER BY job_number DESC LIMIT 1
     `;
     db.get(query, [], (err, row) => {
