@@ -258,7 +258,7 @@ const ProductionJobs = () => {
         unit: createForm.weight_unit,
         employee: createForm.employee || user?.username || "Unknown",
         issue_size: weight,
-        issue_pieces: createForm.issue_pieces || 0,
+        issue_pieces: Math.max(parseInt(createForm.issue_pieces) || 0, 0),
         category: createForm.category === "Other" ? createForm.customCategory : createForm.category,
         description: createForm.description || "",
       });
@@ -300,7 +300,7 @@ const ProductionJobs = () => {
       await startProcess(selectedProcess.stage, {
         process_id: selectedProcess.id,
         issued_weight: weight,
-        issue_pieces: startForm.issue_pieces || 0,
+        issue_pieces: Math.max(parseInt(startForm.issue_pieces) || 0, 0),
         description: startForm.description || "",
         employee: startForm.employee || user?.username || "Unknown",
       });
@@ -349,7 +349,7 @@ const ProductionJobs = () => {
 
     let payload = {
       issued_weight: issueW,
-      issue_pieces: parseInt(editForm.issue_pieces) || 0,
+      issue_pieces: Math.max(parseInt(editForm.issue_pieces) || 0, 0),
       category: editForm.category === "Other" ? editForm.customCategory : editForm.category,
     };
     if (editForm.description !== undefined) {
@@ -371,7 +371,7 @@ const ProductionJobs = () => {
       }
       payload.return_weight = parseFloat(retW.toFixed(8));
       payload.scrap_weight = parseFloat(scrW.toFixed(8));
-      payload.return_pieces = parseInt(editForm.return_pieces) || 0;
+      payload.return_pieces = Math.max(parseInt(editForm.return_pieces) || 0, 0);
     }
 
     try {
@@ -438,8 +438,12 @@ const ProductionJobs = () => {
   const handleCompleteProcess = async (e) => {
     e.preventDefault();
     const issW = parseFloat(selectedProcess.issued_weight);
-    let retW = parseFloat(completeForm.return_weight) || 0;
-    let scrW = parseFloat(completeForm.scrap_weight) || 0;
+    let retW = parseFloat(completeForm.return_weight);
+    let scrW = parseFloat(completeForm.scrap_weight);
+
+    // Guard against NaN — parseFloat("") or parseFloat(undefined) returns NaN
+    if (isNaN(retW)) retW = 0;
+    if (isNaN(scrW)) scrW = 0;
 
     if (completeForm.weight_unit === "kg") {
       retW *= 1000;
@@ -451,9 +455,14 @@ const ProductionJobs = () => {
 
     const liveLoss = issW - retW - scrW;
 
-    if (retW <= 0) {
+    if (isNaN(retW) || retW <= 0) {
       triggerError();
       return showToast("Return must be > 0", "error");
+    }
+
+    if (scrW < 0) {
+      triggerError();
+      return showToast("Scrap weight cannot be negative", "error");
     }
 
     try {
@@ -461,7 +470,7 @@ const ProductionJobs = () => {
         process_id: selectedProcess.id,
         return_weight: retW,
         scrap_weight: scrW,
-        return_pieces: parseInt(completeForm.return_pieces) || 0,
+        return_pieces: Math.max(parseInt(completeForm.return_pieces) || 0, 0),
         description: completeForm.description || "",
       });
       showToast("Completed!", "success");
