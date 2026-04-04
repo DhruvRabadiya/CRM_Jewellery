@@ -222,6 +222,9 @@ const ProductionJobs = () => {
     if (process.stage === "Packing")
       return showToast("Packing is the final stage.", "error");
 
+    const returnWeight = process.return_weight || 0;
+    const metalOptions = sizeOptions[process.metal_type] || [];
+
     setCreateForm({
       stage: nextStage,
       job_number: process.job_number,
@@ -230,8 +233,8 @@ const ProductionJobs = () => {
       categories: process.category ? process.category.split(", ") : [sizeOptions[process.metal_type][0]],
       issue_size:
         process.metal_type === "Silver"
-          ? parseFloat((process.return_weight / 1000).toFixed(10)).toString()
-          : parseFloat(process.return_weight.toFixed(10)).toString(),
+          ? parseFloat((returnWeight / 1000).toFixed(10)).toString()
+          : parseFloat(returnWeight.toFixed(10)).toString(),
       issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: process.description || "",
@@ -312,7 +315,7 @@ const ProductionJobs = () => {
       await startProcess(selectedProcess.stage, {
         process_id: selectedProcess.id,
         issued_weight: weight,
-        issue_pieces: startForm.issue_pieces || 0,
+        issue_pieces: Math.max(parseInt(startForm.issue_pieces) || 0, 0),
         description: startForm.description || "",
         employee: startForm.employee || user?.username || "Unknown",
       });
@@ -406,7 +409,7 @@ const ProductionJobs = () => {
       }
       payload.return_weight = parseFloat(retW.toFixed(8));
       payload.scrap_weight = parseFloat(scrW.toFixed(8));
-      payload.return_pieces = parseInt(editForm.return_pieces) || 0;
+      payload.return_pieces = Math.max(parseInt(editForm.return_pieces) || 0, 0);
     }
 
     try {
@@ -490,6 +493,11 @@ const ProductionJobs = () => {
     if (totalRetW <= 0) {
       triggerError();
       return showToast("At least one return weight must be > 0", "error");
+    }
+
+    if (scrW < 0) {
+      triggerError();
+      return showToast("Scrap weight cannot be negative", "error");
     }
 
     try {

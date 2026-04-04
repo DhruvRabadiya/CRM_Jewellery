@@ -134,10 +134,10 @@ const deletePackingProcessById = (id) => {
 };
 
 const VALID_PACKING_COLUMNS = new Set([
-  'issue_size', 'issue_pieces', 'issued_weight',
+  'job_number', 'job_name', 'metal_type', 'unit', 'employee', 'issue_size',
+  'issue_pieces', 'issued_weight', 'category', 'status',
   'return_weight', 'return_pieces', 'scrap_weight', 'loss_weight',
-  'description', 'employee', 'category', 'status',
-  'start_time', 'end_time',
+  'description', 'start_time', 'end_time',
 ]);
 
 const editPackingProcessUniversal = (processId, updates) => {

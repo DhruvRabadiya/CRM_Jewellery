@@ -34,7 +34,7 @@ const updateProcessStock = (processName, metalType, weight, isAddition) => {
     }
 
     const operator = isAddition ? "+" : "-";
-    const query = `UPDATE stock_master SET ${columnName} = ${columnName} ${operator} ? WHERE metal_type = ?`;
+    const query = `UPDATE stock_master SET ${columnName} = MAX(${columnName} ${operator} ?, 0) WHERE metal_type = ?`;
 
     db.run(query, [weight, metalType], function (err) {
       if (err) reject(err);

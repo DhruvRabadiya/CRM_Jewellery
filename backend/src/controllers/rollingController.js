@@ -9,6 +9,9 @@ const createRolling = async (req, res) => {
     const weight = parseFloat(issue_size);
     const pieces = sanitizePieces(issue_pieces);
 
+    if (!metal_type || !isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
+    }
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(res, 400, false, "Invalid input. Issue size must be greater than 0.");
     }

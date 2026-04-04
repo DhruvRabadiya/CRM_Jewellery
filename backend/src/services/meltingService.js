@@ -50,6 +50,12 @@ const VALID_MELTING_COLUMNS = new Set([
   'start_time', 'end_time', 'completed_at',
 ]);
 
+const VALID_MELTING_COLUMNS = new Set([
+  'metal_type', 'unit', 'issue_weight', 'issue_pieces', 'return_weight',
+  'return_pieces', 'scrap_weight', 'loss_weight', 'status', 'completed_at',
+  'description', 'employee',
+]);
+
 const editMeltingProcess = (processId, updates) => {
   return new Promise((resolve, reject) => {
     const fields = [];

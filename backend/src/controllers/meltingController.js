@@ -2,7 +2,7 @@ const db = require("../../config/dbConfig");
 const meltingService = require("../services/meltingService");
 const stockService = require("../services/stockService");
 const { calculateLoss, formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
-const { MESSAGES, TRANSACTION_TYPES } = require("../utils/constants");
+const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
 const createMelting = async (req, res) => {
   try {

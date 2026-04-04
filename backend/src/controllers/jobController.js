@@ -5,7 +5,7 @@ const rollingService = require("../services/rollingService");
 const pressService = require("../services/pressService");
 const tppService = require("../services/tppService");
 const packingService = require("../services/packingService");
-const { calculateLoss, formatResponse } = require("../utils/common");
+const { calculateLoss, formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
 const {
   MESSAGES,
   TRANSACTION_TYPES,
@@ -19,6 +19,9 @@ const createJob = async (req, res) => {
     const { job_number, metal_type, target_product, issue_weight } = req.body;
     const weight = parseFloat(issue_weight);
 
+    if (!metal_type || !isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
+    }
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(
         res,
@@ -70,7 +73,7 @@ const completeStep = async (req, res) => {
     const issW = parseFloat(issue_weight) || 0;
     const retW = parseFloat(return_weight) || 0;
     const scrW = parseFloat(scrap_weight) || 0;
-    const pieces = parseInt(return_pieces) || 0;
+    const pieces = sanitizePieces(return_pieces);
 
     if (!job_id || !step_name || retW < 0 || scrW < 0) {
       return formatResponse(res, 400, false, "Invalid weights provided.");

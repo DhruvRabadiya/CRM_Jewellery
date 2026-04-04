@@ -40,9 +40,9 @@ const Dashboard = () => {
   const fetchDashboard = useCallback(async () => {
     try {
       const [stockRes, lossRes, procRes] = await Promise.all([
-        getStockData(),
-        getLossStats().catch(() => ({ data: [] })),
-        getCombinedProcesses().catch(() => ({ data: [] })),
+        getStockData().catch(() => ({ success: false, data: null })),
+        getLossStats().catch(() => ({ success: false, data: [] })),
+        getCombinedProcesses().catch(() => ({ success: false, data: [] })),
       ]);
 
       if (stockRes.success) setStock(stockRes.data);
@@ -306,6 +306,7 @@ const Dashboard = () => {
                     ) || "0"}
                     kg
                   </p>
+                </div>
                 </div>
               </div>
             ))}

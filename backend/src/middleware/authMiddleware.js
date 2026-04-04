@@ -1,6 +1,13 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jewelcrm_super_secret_key_123';
+// Use environment variable for JWT secret. If not set, generate a random one per
+// server instance (tokens won't survive restarts — this is intentional to nudge
+// operators towards setting a proper secret).
+const JWT_SECRET = process.env.JWT_SECRET || (() => {
+  console.warn('WARNING: JWT_SECRET environment variable is not set. Using a randomly generated secret. Tokens will NOT survive server restarts. Set JWT_SECRET in your environment for production use.');
+  return crypto.randomBytes(32).toString('hex');
+})();
 
 // Extractor middleware to parse token into req.user
 const authenticateToken = (req, res, next) => {
