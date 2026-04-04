@@ -307,7 +307,6 @@ const Dashboard = () => {
                     kg
                   </p>
                 </div>
-                </div>
               </div>
             ))}
           </div>

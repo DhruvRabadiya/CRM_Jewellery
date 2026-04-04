@@ -53,10 +53,6 @@ const addStock = async (req, res) => {
       return formatResponse(res, 400, false, MESSAGES.INVALID_INPUT);
     }
 
-    if (!isValidMetalType(metal_type)) {
-      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
-    }
-
     await stockService.updateOpeningStock(metal_type, weight, true);
 
     const transactionId = await stockService.logTransaction(

@@ -16,9 +16,6 @@ const createPacking = async (req, res) => {
     if (!job_number || isNaN(weight) || weight <= 0) {
       return formatResponse(res, 400, false, "Invalid input. Issue size must be greater than 0.");
     }
-    if (!isValidMetalType(metal_type)) {
-      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
-    }
 
     const currentStock = await stockService.getStockByMetal(metal_type);
     if (!currentStock || Math.round(currentStock.opening_stock * 1000) < Math.round(weight * 1000)) {
