@@ -262,8 +262,12 @@ db.serialize(() => {
              if (!err && row.count === 0) {
                  try {
                      const bcrypt = require("bcryptjs");
+                     const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
+                     if (!process.env.DEFAULT_ADMIN_PASSWORD) {
+                       console.warn("WARNING: DEFAULT_ADMIN_PASSWORD environment variable is not set. Using default password 'admin123'. Set DEFAULT_ADMIN_PASSWORD in your environment for production use.");
+                     }
                      const salt = await bcrypt.genSalt(10);
-                     const hashed = await bcrypt.hash("admin123", salt);
+                     const hashed = await bcrypt.hash(defaultPassword, salt);
                      
                      db.run(`INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'ADMIN')`, ['admin', hashed], (insertErr) => {
                          if (insertErr) {
@@ -282,5 +286,41 @@ db.serialize(() => {
       }
   });
 });
+
+// Helper to run multiple operations inside a SQLite transaction.
+// Usage: await runTransaction(async (run, get) => { ... });
+// `run` and `get` are promisified wrappers around db.run/db.get that execute
+// within the same BEGIN/COMMIT/ROLLBACK block.
+db.runTransaction = (fn) => {
+  return new Promise((resolve, reject) => {
+    db.run("BEGIN TRANSACTION", async (beginErr) => {
+      if (beginErr) return reject(beginErr);
+      try {
+        const run = (sql, params = []) =>
+          new Promise((res, rej) => {
+            db.run(sql, params, function (err) {
+              if (err) return rej(err);
+              res({ lastID: this.lastID, changes: this.changes });
+            });
+          });
+        const get = (sql, params = []) =>
+          new Promise((res, rej) => {
+            db.get(sql, params, (err, row) => {
+              if (err) return rej(err);
+              res(row);
+            });
+          });
+
+        const result = await fn(run, get);
+        db.run("COMMIT", (commitErr) => {
+          if (commitErr) return reject(commitErr);
+          resolve(result);
+        });
+      } catch (error) {
+        db.run("ROLLBACK", () => reject(error));
+      }
+    });
+  });
+};
 
 module.exports = db;

@@ -13,7 +13,7 @@ const getStockByMetal = (metalType) => {
 const updateOpeningStock = (metalType, weight, isAddition) => {
   return new Promise((resolve, reject) => {
     const operator = isAddition ? "+" : "-";
-    const query = `UPDATE stock_master SET opening_stock = opening_stock ${operator} ? WHERE metal_type = ?`;
+    const query = `UPDATE stock_master SET opening_stock = MAX(opening_stock ${operator} ?, 0) WHERE metal_type = ?`;
 
     db.run(query, [weight, metalType], function (err) {
       if (err) reject(err);
@@ -25,7 +25,7 @@ const updateOpeningStock = (metalType, weight, isAddition) => {
 const updateDhalStock = (metalType, weight, isAddition) => {
   return new Promise((resolve, reject) => {
     const operator = isAddition ? "+" : "-";
-    const query = `UPDATE stock_master SET dhal_stock = dhal_stock ${operator} ? WHERE metal_type = ?`;
+    const query = `UPDATE stock_master SET dhal_stock = MAX(dhal_stock ${operator} ?, 0) WHERE metal_type = ?`;
 
     db.run(query, [weight, metalType], function (err) {
       if (err) reject(err);
@@ -46,7 +46,7 @@ const updateProcessStock = (processName, metalType, weight, isAddition) => {
     }
 
     const operator = isAddition ? "+" : "-";
-    const query = `UPDATE stock_master SET ${columnName} = ${columnName} ${operator} ? WHERE metal_type = ?`;
+    const query = `UPDATE stock_master SET ${columnName} = MAX(${columnName} ${operator} ?, 0) WHERE metal_type = ?`;
 
     db.run(query, [weight, metalType], function (err) {
       if (err) reject(err);
@@ -196,4 +196,40 @@ module.exports = {
   editPurchase,
   deletePurchase,
   getDetailedScrapAndLoss,
+  // Atomic check-and-deduct operations
+  atomicCheckAndDeductOpening: (metalType, weight) => {
+    return db.runTransaction(async (run, get) => {
+      const stock = await get(`SELECT opening_stock FROM stock_master WHERE metal_type = ?`, [metalType]);
+      if (!stock || Math.round((stock.opening_stock || 0) * 1000) < Math.round(weight * 1000)) {
+        throw new Error("Insufficient Opening Stock available.");
+      }
+      await run(`UPDATE stock_master SET opening_stock = opening_stock - ? WHERE metal_type = ?`, [weight, metalType]);
+      return stock.opening_stock - weight;
+    });
+  },
+  atomicCheckAndDeductDhal: (metalType, weight) => {
+    return db.runTransaction(async (run, get) => {
+      const stock = await get(`SELECT dhal_stock FROM stock_master WHERE metal_type = ?`, [metalType]);
+      if (!stock || Math.round((stock.dhal_stock || 0) * 1000) < Math.round(weight * 1000)) {
+        throw new Error("Insufficient Dhal Stock available.");
+      }
+      await run(`UPDATE stock_master SET dhal_stock = dhal_stock - ? WHERE metal_type = ?`, [weight, metalType]);
+      return stock.dhal_stock - weight;
+    });
+  },
+  atomicCheckAndDeductProcess: (processName, metalType, weight) => {
+    const columnName = `${processName}_stock`;
+    const validColumns = ["rolling_stock", "press_stock", "tpp_stock"];
+    if (!validColumns.includes(columnName)) {
+      return Promise.reject(new Error("Invalid process stock column"));
+    }
+    return db.runTransaction(async (run, get) => {
+      const stock = await get(`SELECT ${columnName} FROM stock_master WHERE metal_type = ?`, [metalType]);
+      if (!stock || Math.round((stock[columnName] || 0) * 1000) < Math.round(weight * 1000)) {
+        throw new Error(`Insufficient ${processName} stock available.`);
+      }
+      await run(`UPDATE stock_master SET ${columnName} = ${columnName} - ? WHERE metal_type = ?`, [weight, metalType]);
+      return stock[columnName] - weight;
+    });
+  },
 };
