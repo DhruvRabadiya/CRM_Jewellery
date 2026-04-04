@@ -71,14 +71,24 @@ const getRunningMelts = () => {
   });
 };
 
+const VALID_MELTING_COLUMNS = new Set([
+  'metal_type', 'unit', 'issue_weight', 'issue_pieces', 'return_weight',
+  'return_pieces', 'scrap_weight', 'loss_weight', 'status', 'completed_at',
+  'description', 'employee',
+]);
+
 const editMeltingProcess = (processId, updates) => {
   return new Promise((resolve, reject) => {
     const fields = [];
     const values = [];
     for (const [key, val] of Object.entries(updates)) {
+      if (!VALID_MELTING_COLUMNS.has(key)) {
+        return reject(new Error(`Invalid column name: ${key}`));
+      }
       fields.push(`${key} = ?`);
       values.push(val);
     }
+    if (fields.length === 0) return resolve(0);
     values.push(processId);
 
     const query = `UPDATE melting_process SET ${fields.join(", ")} WHERE id = ?`;

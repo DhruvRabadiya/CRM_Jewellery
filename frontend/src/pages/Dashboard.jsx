@@ -39,9 +39,9 @@ const Dashboard = () => {
   const fetchDashboard = useCallback(async () => {
     try {
       const [stockRes, lossRes, procRes] = await Promise.all([
-        getStockData(),
-        getLossStats().catch(() => ({ data: [] })),
-        getCombinedProcesses().catch(() => ({ data: [] })),
+        getStockData().catch(() => ({ success: false, data: null })),
+        getLossStats().catch(() => ({ success: false, data: [] })),
+        getCombinedProcesses().catch(() => ({ success: false, data: [] })),
       ]);
 
       if (stockRes.success) setStock(stockRes.data);
@@ -269,7 +269,7 @@ const Dashboard = () => {
                 Opening Stock
               </p>
               <p className="text-xl font-black text-gray-700">
-                {parseFloat((silver.opening_stock / 1000).toFixed(10))}kg
+                {parseFloat(((silver.opening_stock || 0) / 1000).toFixed(10))}kg
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-300">
@@ -277,7 +277,7 @@ const Dashboard = () => {
                 Pure Dhal (Active)
               </p>
               <p className="text-2xl font-black text-green-700">
-                {parseFloat((silver.dhal_stock / 1000).toFixed(10))}kg
+                {parseFloat(((silver.dhal_stock || 0) / 1000).toFixed(10))}kg
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
@@ -338,7 +338,7 @@ const Dashboard = () => {
                   </p>
                   <p className="font-black text-green-700 text-sm">
                     {s.key
-                      ? parseFloat((silver[s.key] / 1000 || 0).toFixed(10))
+                      ? parseFloat(((silver[s.key] || 0) / 1000).toFixed(10))
                       : "N/A"}
                     {s.key ? "kg" : ""}
                   </p>

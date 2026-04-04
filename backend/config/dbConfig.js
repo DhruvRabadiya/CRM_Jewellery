@@ -171,7 +171,34 @@ db.serialize(() => {
         end_time DATETIME
     )`);
 
-  // 5. FINISHED GOODS (Final Inventory)
+  // 5. PRODUCTION JOBS (Job Tracking)
+  db.run(`CREATE TABLE IF NOT EXISTS production_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_number TEXT,
+      metal_type TEXT,
+      target_product TEXT,
+      current_step TEXT,
+      status TEXT DEFAULT 'PENDING',
+      issue_weight REAL DEFAULT 0,
+      current_weight REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 6. JOB STEPS (Step Logs)
+  db.run(`CREATE TABLE IF NOT EXISTS job_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER,
+      step_name TEXT,
+      issue_weight REAL DEFAULT 0,
+      return_weight REAL DEFAULT 0,
+      scrap_weight REAL DEFAULT 0,
+      loss_weight REAL DEFAULT 0,
+      return_pieces INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (job_id) REFERENCES production_jobs(id)
+  )`);
+
+  // 7. FINISHED GOODS (Final Inventory)
   db.run(`CREATE TABLE IF NOT EXISTS finished_goods (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       metal_type TEXT,

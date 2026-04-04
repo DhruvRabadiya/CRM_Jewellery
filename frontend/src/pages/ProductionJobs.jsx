@@ -213,16 +213,19 @@ const ProductionJobs = () => {
     if (process.stage === "Packing")
       return showToast("Packing is the final stage.", "error");
 
+    const returnWeight = process.return_weight || 0;
+    const metalOptions = sizeOptions[process.metal_type] || sizeOptions["Gold"];
+
     setCreateForm({
       stage: nextStage,
       job_number: process.job_number,
       job_name: process.job_name || "",
       metal_type: process.metal_type,
-      category: process.category || sizeOptions[process.metal_type][0],
+      category: process.category || metalOptions[0],
       issue_size:
         process.metal_type === "Silver"
-          ? parseFloat((process.return_weight / 1000).toFixed(10)).toString()
-          : parseFloat(process.return_weight.toFixed(10)).toString(),
+          ? parseFloat((returnWeight / 1000).toFixed(10)).toString()
+          : parseFloat(returnWeight.toFixed(10)).toString(),
       issue_pieces: process.return_pieces || "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: process.description || "",
@@ -329,8 +332,8 @@ const ProductionJobs = () => {
       issue_pieces: process.issue_pieces || "",
       return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
-      category: sizeOptions[process.metal_type].includes(process.category) ? process.category : (process.category ? "Other" : ""),
-      customCategory: sizeOptions[process.metal_type].includes(process.category) ? "" : (process.category || ""),
+      category: (sizeOptions[process.metal_type] || []).includes(process.category) ? process.category : (process.category ? "Other" : ""),
+      customCategory: (sizeOptions[process.metal_type] || []).includes(process.category) ? "" : (process.category || ""),
       description: process.description || "",
       employee: process.employee || "",
     });

@@ -120,6 +120,8 @@ const getNextJobNumber = () => {
     // Find the absolute last job created across all processes
     const query = `
       SELECT job_number FROM (
+        SELECT job_number FROM melting_process WHERE job_number IS NOT NULL
+        UNION ALL
         SELECT job_number FROM rolling_processes
         UNION ALL
         SELECT job_number FROM press_processes

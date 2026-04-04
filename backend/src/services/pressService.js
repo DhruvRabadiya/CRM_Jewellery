@@ -106,14 +106,25 @@ const deletePressProcessById = (id) => {
   });
 };
 
+const VALID_PRESS_COLUMNS = new Set([
+  'job_number', 'job_name', 'metal_type', 'unit', 'employee', 'issue_size',
+  'category', 'status', 'issued_weight', 'issue_pieces', 'return_weight',
+  'return_pieces', 'scrap_weight', 'loss_weight', 'start_time', 'end_time',
+  'description',
+]);
+
 const editPressProcessUniversal = (processId, updates) => {
   return new Promise((resolve, reject) => {
     const fields = [];
     const values = [];
     for (const [key, val] of Object.entries(updates)) {
+      if (!VALID_PRESS_COLUMNS.has(key)) {
+        return reject(new Error(`Invalid column name: ${key}`));
+      }
       fields.push(`${key} = ?`);
       values.push(val);
     }
+    if (fields.length === 0) return resolve(0);
     values.push(processId);
 
     const query = `UPDATE press_processes SET ${fields.join(", ")} WHERE id = ?`;
