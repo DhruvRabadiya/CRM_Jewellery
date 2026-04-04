@@ -17,11 +17,11 @@ const Dashboard = () => {
   const [stock, setStock] = useState(null);
   const [lossStats, setLossStats] = useState([]);
   const initialStageMetrics = () => ({
-    Melting: { pending: 0, running: 0 },
-    Rolling: { pending: 0, running: 0 },
-    Press: { pending: 0, running: 0 },
-    TPP: { pending: 0, running: 0 },
-    Packing: { pending: 0, running: 0 },
+    Melting: { pending: 0, running: 0, completed: 0 },
+    Rolling: { pending: 0, running: 0, completed: 0 },
+    Press: { pending: 0, running: 0, completed: 0 },
+    TPP: { pending: 0, running: 0, completed: 0 },
+    Packing: { pending: 0, running: 0, completed: 0 },
   });
 
   const [processMetrics, setProcessMetrics] = useState({
@@ -58,6 +58,8 @@ const Dashboard = () => {
               metrics[p.metal_type][p.stage].pending += Number(p.issue_size) || 0;
             if (p.status === "RUNNING")
               metrics[p.metal_type][p.stage].running += Number(p.issued_weight) || 0;
+            if (p.status === "COMPLETED")
+              metrics[p.metal_type][p.stage].completed += Number(p.return_weight) || 0;
           }
         });
         setProcessMetrics(metrics);
@@ -196,7 +198,7 @@ const Dashboard = () => {
             ].map((s) => (
               <div
                 key={s.stage}
-                className="grid grid-cols-3 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-yellow-200/50 hover:border-yellow-400 hover:bg-white transition-all cursor-default"
+                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-yellow-200/50 hover:border-yellow-400 hover:bg-white transition-all cursor-default"
               >
                 <div className="flex items-center justify-start pl-2 font-bold text-yellow-900 text-sm">
                   {s.stage}
@@ -219,6 +221,17 @@ const Dashboard = () => {
                   <p className="font-black text-blue-800 text-sm">
                     {parseFloat(
                       (processMetrics.Gold[s.stage]?.running || 0).toFixed(10),
+                    )}
+                    g
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-green-500 font-bold">
+                    Completed
+                  </p>
+                  <p className="font-black text-green-700 text-sm">
+                    {parseFloat(
+                      (processMetrics.Gold[s.stage]?.completed || 0).toFixed(10),
                     )}
                     g
                   </p>
@@ -276,7 +289,7 @@ const Dashboard = () => {
             ].map((s) => (
               <div
                 key={s.stage}
-                className="grid grid-cols-3 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-gray-200/50 hover:border-blue-400 hover:bg-white transition-all cursor-default"
+                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-gray-200/50 hover:border-blue-400 hover:bg-white transition-all cursor-default"
               >
                 <div className="flex items-center justify-start pl-2 font-bold text-gray-800 text-sm">
                   {s.stage}
@@ -302,6 +315,19 @@ const Dashboard = () => {
                     {parseFloat(
                       (
                         (processMetrics.Silver[s.stage]?.running || 0) / 1000
+                      ).toFixed(10),
+                    ) || "0"}
+                    kg
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-green-500 font-bold">
+                    Completed
+                  </p>
+                  <p className="font-black text-green-700 text-sm">
+                    {parseFloat(
+                      (
+                        (processMetrics.Silver[s.stage]?.completed || 0) / 1000
                       ).toFixed(10),
                     ) || "0"}
                     kg
