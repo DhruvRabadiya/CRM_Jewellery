@@ -4,6 +4,30 @@ const stockService = require("../services/stockService");
 const { calculateLoss, formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
 const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
+// Helper: remove finished goods entries that were added when this packing process was completed.
+// Uses process_return_items for accurate per-category removal; falls back to process.category
+// if no return_items exist (legacy single-category records).
+const removeFinishedGoodsForProcess = async (process) => {
+  const returnItems = await new Promise((resolve, reject) => {
+    db.all(
+      `SELECT category, return_weight, return_pieces FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`,
+      [process.id],
+      (err, rows) => (err ? reject(err) : resolve(rows || []))
+    );
+  });
+
+  if (returnItems.length > 0) {
+    for (const item of returnItems) {
+      if ((item.return_weight || 0) > 0) {
+        await packingService.removeFinishedGoods(process.metal_type, item.category, item.return_weight);
+      }
+    }
+  } else if ((process.return_weight || 0) > 0) {
+    // Fallback for legacy single-category records
+    await packingService.removeFinishedGoods(process.metal_type, process.category, process.return_weight);
+  }
+};
+
 const createPacking = async (req, res) => {
   try {
     const { job_number, job_name, metal_type, unit, employee, issue_size, issue_pieces, category, description } = req.body;
@@ -94,9 +118,9 @@ const completePacking = async (req, res) => {
       description !== undefined ? description : null
     );
 
-    // Remove old finished goods if previously set
+    // Remove old finished goods if previously set (re-completion scenario)
     if ((process.return_weight || 0) > 0) {
-      await packingService.removeFinishedGoods(process.metal_type, process.category, process.return_weight);
+      await removeFinishedGoodsForProcess(process);
     }
 
     // Remove old return items
@@ -211,7 +235,7 @@ const editPacking = async (req, res) => {
       // Re-create the Finished Goods Record if Return Weight or Return Pieces or Category changed
       if (newRetWeight !== process.return_weight || newPieces !== process.return_pieces || req.body.category !== undefined) {
         if ((process.return_weight || 0) > 0) {
-          await packingService.removeFinishedGoods(process.metal_type, process.category, process.return_weight);
+          await removeFinishedGoodsForProcess(process);
         }
         if (newRetWeight > 0) {
           await packingService.addFinishedGoods(process.metal_type, updates.category || process.category, newPieces, newRetWeight);
@@ -277,9 +301,9 @@ const deletePacking = async (req, res) => {
     }
 
     if (process.status === "COMPLETED") {
-      // Revert finished goods
+      // Revert finished goods using per-category removal
       if (process.return_weight > 0) {
-        await packingService.removeFinishedGoods(process.metal_type, process.category, process.return_weight);
+        await removeFinishedGoodsForProcess(process);
       }
       if (process.scrap_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);
@@ -307,7 +331,7 @@ const revertPacking = async (req, res) => {
 
     if (process.status === "COMPLETED") {
       if (process.return_weight > 0) {
-        await packingService.removeFinishedGoods(process.metal_type, process.category, process.return_weight);
+        await removeFinishedGoodsForProcess(process);
       }
       if (process.scrap_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.scrap_weight, false);

@@ -428,8 +428,15 @@ const ProductionJobs = () => {
 
   const openCompleteModal = (process) => {
     setSelectedProcess(process);
+    // Split multi-category strings (e.g. "1 gm, 2 gm") into individual return rows
+    // so each category gets its own weight/pieces entry and appears individually in
+    // finished goods. This matches the Silver behavior.
+    const cats = (process.category || "").split(",").map(c => c.trim()).filter(Boolean);
+    const initialItems = cats.length > 1
+      ? cats.map(cat => ({ category: cat, return_weight: "", return_pieces: "" }))
+      : [{ category: process.category || "", return_weight: "", return_pieces: "" }];
     setCompleteForm({
-      return_items: [{ category: process.category || "", return_weight: "", return_pieces: "" }],
+      return_items: initialItems,
       scrap_weight: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: process.description || "",
