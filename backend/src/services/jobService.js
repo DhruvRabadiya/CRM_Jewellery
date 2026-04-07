@@ -38,15 +38,38 @@ const getNextJobNumber = () => {
   });
 };
 
-// Group and fetch all finished goods
+// Compute finished goods from completed packing processes and their return items (source of truth)
 const getFinishedGoodsInventory = () => {
   return new Promise((resolve, reject) => {
     const query = `
-            SELECT metal_type, target_product, SUM(pieces) as total_pieces, SUM(weight) as total_weight 
-            FROM finished_goods 
-            GROUP BY metal_type, target_product
-            ORDER BY metal_type, target_product
-        `;
+      SELECT metal_type, target_product, SUM(total_pieces) as total_pieces, SUM(total_weight) as total_weight
+      FROM (
+        -- Multi-category entries via process_return_items
+        SELECT pp.metal_type, pri.category AS target_product,
+               SUM(pri.return_pieces) as total_pieces,
+               SUM(pri.return_weight) as total_weight
+        FROM process_return_items pri
+        INNER JOIN packing_processes pp ON pri.process_id = pp.id AND pri.process_type = 'packing'
+        WHERE pp.status = 'COMPLETED'
+        GROUP BY pp.metal_type, pri.category
+
+        UNION ALL
+
+        -- Fallback: completed packing processes without process_return_items (legacy single-category)
+        SELECT pp.metal_type, pp.category AS target_product,
+               pp.return_pieces as total_pieces,
+               pp.return_weight as total_weight
+        FROM packing_processes pp
+        WHERE pp.status = 'COMPLETED' AND pp.return_weight > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM process_return_items pri
+            WHERE pri.process_id = pp.id AND pri.process_type = 'packing'
+          )
+      )
+      GROUP BY metal_type, target_product
+      HAVING SUM(total_weight) > 0 OR SUM(total_pieces) > 0
+      ORDER BY metal_type, target_product
+    `;
     db.all(query, [], (err, rows) => {
       if (err) reject(err);
       resolve(rows || []);

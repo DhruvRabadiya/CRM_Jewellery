@@ -4,10 +4,14 @@ const { MESSAGES, TRANSACTION_TYPES } = require("../utils/constants");
 
 const getStock = async (req, res) => {
   try {
-    // Recalculate inprocess_weight from actual active processes to stay in sync
+    // Recalculate all stock_master values from source-of-truth tables
     await Promise.all([
+      stockService.recalculateOpeningStock("Gold"),
+      stockService.recalculateOpeningStock("Silver"),
       stockService.recalculateInprocessWeight("Gold"),
       stockService.recalculateInprocessWeight("Silver"),
+      stockService.recalculateTotalLoss("Gold"),
+      stockService.recalculateTotalLoss("Silver"),
     ]);
 
     const [goldStock, silverStock] = await Promise.all([
@@ -147,6 +151,31 @@ const deleteStockPurchase = async (req, res) => {
   }
 };
 
+const recalculateStock = async (req, res) => {
+  try {
+    await Promise.all([
+      stockService.recalculateOpeningStock("Gold"),
+      stockService.recalculateOpeningStock("Silver"),
+      stockService.recalculateInprocessWeight("Gold"),
+      stockService.recalculateInprocessWeight("Silver"),
+      stockService.recalculateTotalLoss("Gold"),
+      stockService.recalculateTotalLoss("Silver"),
+    ]);
+
+    const [goldStock, silverStock] = await Promise.all([
+      stockService.getStockByMetal("Gold"),
+      stockService.getStockByMetal("Silver"),
+    ]);
+
+    return formatResponse(res, 200, true, "Stock recalculated from source of truth", {
+      gold: goldStock,
+      silver: silverStock,
+    });
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   getStock,
   addStock,
@@ -155,4 +184,5 @@ module.exports = {
   getDetailedScrapAndLoss,
   editStockPurchase,
   deleteStockPurchase,
+  recalculateStock,
 };

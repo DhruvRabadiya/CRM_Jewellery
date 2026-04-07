@@ -97,10 +97,12 @@ const updateRollingIssuedWeight = (processId, new_weight) => {
 
 const deleteRollingProcessById = (id) => {
   return new Promise((resolve, reject) => {
-    const query = `DELETE FROM rolling_processes WHERE id = ?`;
-    db.run(query, [id], function (err) {
-      if (err) reject(err);
-      resolve();
+    db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'rolling'`, [id], (err1) => {
+      if (err1) return reject(err1);
+      db.run(`DELETE FROM rolling_processes WHERE id = ?`, [id], function (err2) {
+        if (err2) return reject(err2);
+        resolve(this.changes);
+      });
     });
   });
 };

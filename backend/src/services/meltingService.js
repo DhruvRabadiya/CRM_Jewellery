@@ -73,10 +73,12 @@ const editMeltingProcess = (processId, updates) => {
 
 const deleteMeltingProcess = (processId) => {
   return new Promise((resolve, reject) => {
-    const query = `DELETE FROM melting_process WHERE id = ?`;
-    db.run(query, [processId], function (err) {
-      if (err) reject(err);
-      else resolve(this.changes);
+    db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'melting'`, [processId], (err1) => {
+      if (err1) return reject(err1);
+      db.run(`DELETE FROM melting_process WHERE id = ?`, [processId], function (err2) {
+        if (err2) return reject(err2);
+        resolve(this.changes);
+      });
     });
   });
 };

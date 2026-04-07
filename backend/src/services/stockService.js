@@ -171,6 +171,82 @@ const getDetailedScrapAndLoss = () => {
   });
 };
 
+// Recalculate opening_stock from source-of-truth tables.
+// Formula: purchases - pending_issues - running_issues - all_completed_losses - packing_finished_output
+const recalculateOpeningStock = (metalType) => {
+  return new Promise((resolve, reject) => {
+    const query = `
+      SELECT
+        (SELECT COALESCE(SUM(weight), 0) FROM stock_transactions
+          WHERE metal_type = $metal AND transaction_type IN ('PURCHASE', 'DHAL_ADDITION'))
+
+        - (SELECT COALESCE(SUM(w), 0) FROM (
+            SELECT COALESCE(issue_size, issue_weight, 0) as w FROM melting_process WHERE metal_type = $metal AND status = 'PENDING'
+            UNION ALL SELECT COALESCE(issue_size, 0) FROM rolling_processes WHERE metal_type = $metal AND status = 'PENDING'
+            UNION ALL SELECT COALESCE(issue_size, 0) FROM press_processes WHERE metal_type = $metal AND status = 'PENDING'
+            UNION ALL SELECT COALESCE(issue_size, 0) FROM tpp_processes WHERE metal_type = $metal AND status = 'PENDING'
+            UNION ALL SELECT COALESCE(issue_size, 0) FROM packing_processes WHERE metal_type = $metal AND status = 'PENDING'
+          ))
+
+        - (SELECT COALESCE(SUM(w), 0) FROM (
+            SELECT COALESCE(issued_weight, issue_size, issue_weight, 0) as w FROM melting_process WHERE metal_type = $metal AND status = 'RUNNING'
+            UNION ALL SELECT COALESCE(issued_weight, issue_size, 0) FROM rolling_processes WHERE metal_type = $metal AND status = 'RUNNING'
+            UNION ALL SELECT COALESCE(issued_weight, issue_size, 0) FROM press_processes WHERE metal_type = $metal AND status = 'RUNNING'
+            UNION ALL SELECT COALESCE(issued_weight, issue_size, 0) FROM tpp_processes WHERE metal_type = $metal AND status = 'RUNNING'
+            UNION ALL SELECT COALESCE(issued_weight, issue_size, 0) FROM packing_processes WHERE metal_type = $metal AND status = 'RUNNING'
+          ))
+
+        - (SELECT COALESCE(SUM(w), 0) FROM (
+            SELECT COALESCE(loss_weight, 0) as w FROM melting_process WHERE metal_type = $metal AND status = 'COMPLETED'
+            UNION ALL SELECT COALESCE(loss_weight, 0) FROM rolling_processes WHERE metal_type = $metal AND status = 'COMPLETED'
+            UNION ALL SELECT COALESCE(loss_weight, 0) FROM press_processes WHERE metal_type = $metal AND status = 'COMPLETED'
+            UNION ALL SELECT COALESCE(loss_weight, 0) FROM tpp_processes WHERE metal_type = $metal AND status = 'COMPLETED'
+            UNION ALL SELECT COALESCE(loss_weight, 0) FROM packing_processes WHERE metal_type = $metal AND status = 'COMPLETED'
+          ))
+
+        - (SELECT COALESCE(SUM(COALESCE(return_weight, 0)), 0) FROM packing_processes
+            WHERE metal_type = $metal AND status = 'COMPLETED')
+
+        as opening_stock
+    `;
+    db.get(query, { $metal: metalType }, (err, row) => {
+      if (err) return reject(err);
+      const correctStock = Math.max(row ? row.opening_stock : 0, 0);
+      db.run(`UPDATE stock_master SET opening_stock = ? WHERE metal_type = ?`, [correctStock, metalType], function (updateErr) {
+        if (updateErr) return reject(updateErr);
+        resolve(correctStock);
+      });
+    });
+  });
+};
+
+// Recalculate total_loss from all COMPLETED processes across all stages
+const recalculateTotalLoss = (metalType) => {
+  return new Promise((resolve, reject) => {
+    const query = `
+      SELECT COALESCE(SUM(w), 0) as total FROM (
+        SELECT COALESCE(loss_weight, 0) as w FROM melting_process WHERE metal_type = ? AND status = 'COMPLETED'
+        UNION ALL
+        SELECT COALESCE(loss_weight, 0) FROM rolling_processes WHERE metal_type = ? AND status = 'COMPLETED'
+        UNION ALL
+        SELECT COALESCE(loss_weight, 0) FROM press_processes WHERE metal_type = ? AND status = 'COMPLETED'
+        UNION ALL
+        SELECT COALESCE(loss_weight, 0) FROM tpp_processes WHERE metal_type = ? AND status = 'COMPLETED'
+        UNION ALL
+        SELECT COALESCE(loss_weight, 0) FROM packing_processes WHERE metal_type = ? AND status = 'COMPLETED'
+      )
+    `;
+    db.get(query, [metalType, metalType, metalType, metalType, metalType], (err, row) => {
+      if (err) return reject(err);
+      const correctLoss = Math.max(row ? row.total : 0, 0);
+      db.run(`UPDATE stock_master SET total_loss = ? WHERE metal_type = ?`, [correctLoss, metalType], function (updateErr) {
+        if (updateErr) return reject(updateErr);
+        resolve(correctLoss);
+      });
+    });
+  });
+};
+
 // Recalculate inprocess_weight from active (PENDING/RUNNING) processes across all stages
 const recalculateInprocessWeight = (metalType) => {
   return new Promise((resolve, reject) => {
@@ -214,5 +290,7 @@ module.exports = {
   editPurchase,
   deletePurchase,
   getDetailedScrapAndLoss,
+  recalculateOpeningStock,
+  recalculateTotalLoss,
   recalculateInprocessWeight,
 };
