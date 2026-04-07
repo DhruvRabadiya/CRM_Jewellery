@@ -16,4 +16,6 @@ router.get("/dhal/purchases", stockController.getDhalPurchases);
 router.put("/dhal/purchases/:id", stockController.editDhalPurchase);
 router.delete("/dhal/purchases/:id", stockController.deleteDhalPurchase);
 
+router.post("/recalculate", stockController.recalculateStockEndpoint);
+
 module.exports = router;

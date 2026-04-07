@@ -145,6 +145,222 @@ const deletePurchase = (id) => {
   });
 };
 
+// Helper: run a query that returns a single numeric value
+const querySum = (sql, params) => {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? row.total : 0);
+    });
+  });
+};
+
+// Helper: check if a table exists in the database
+const tableExists = (tableName) => {
+  return new Promise((resolve, reject) => {
+    db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+      [tableName],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(!!row);
+      },
+    );
+  });
+};
+
+/**
+ * Recalculates all stock_master values from source-of-truth process tables
+ * and stock_transactions. This fixes any drift caused by partial failures,
+ * old legacy job data, or accumulated floating-point errors.
+ */
+const recalculateStock = async (metalType) => {
+  const hasProductionJobs = await tableExists("production_jobs");
+  const hasJobSteps = await tableExists("job_steps");
+
+  // --- OPENING STOCK ---
+  // Sum of all purchases
+  const totalPurchases = await querySum(
+    "SELECT COALESCE(SUM(weight), 0) as total FROM stock_transactions WHERE metal_type = ? AND transaction_type = 'PURCHASE'",
+    [metalType],
+  );
+
+  // Melting issue_weight is deducted from opening_stock on creation (all statuses)
+  const meltingIssued = await querySum(
+    "SELECT COALESCE(SUM(issue_weight), 0) as total FROM melting_process WHERE metal_type = ?",
+    [metalType],
+  );
+
+  // Scrap from all COMPLETED processes is returned to opening_stock
+  const scrapReturned = await querySum(
+    `SELECT COALESCE(SUM(s), 0) as total FROM (
+      SELECT COALESCE(SUM(scrap_weight), 0) as s FROM melting_process WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(scrap_weight), 0) FROM rolling_processes WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(scrap_weight), 0) FROM press_processes WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(scrap_weight), 0) FROM tpp_processes WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(scrap_weight), 0) FROM packing_processes WHERE metal_type = ? AND status = 'COMPLETED'
+    )`,
+    [metalType, metalType, metalType, metalType, metalType],
+  );
+
+  // Old production_jobs scrap returns (if tables exist)
+  let oldJobScrap = 0;
+  if (hasProductionJobs && hasJobSteps) {
+    oldJobScrap = await querySum(
+      `SELECT COALESCE(SUM(js.scrap_weight), 0) as total
+       FROM job_steps js
+       JOIN production_jobs pj ON js.job_id = pj.id
+       WHERE pj.metal_type = ?`,
+      [metalType],
+    );
+  }
+
+  const openingStock = totalPurchases - meltingIssued + scrapReturned + oldJobScrap;
+
+  // --- DHAL STOCK ---
+  const dhalAdditions = await querySum(
+    "SELECT COALESCE(SUM(weight), 0) as total FROM stock_transactions WHERE metal_type = ? AND transaction_type = 'DHAL_ADDITION'",
+    [metalType],
+  );
+
+  // Completed melting returns go to dhal_stock
+  const meltingReturns = await querySum(
+    "SELECT COALESCE(SUM(return_weight), 0) as total FROM melting_process WHERE metal_type = ? AND status = 'COMPLETED'",
+    [metalType],
+  );
+
+  // Rolling consumes from dhal_stock:
+  // PENDING: issue_size deducted; RUNNING/COMPLETED: issued_weight deducted (after delta adjustments)
+  const rollingConsumed = await querySum(
+    `SELECT COALESCE(SUM(
+      CASE WHEN status = 'PENDING' THEN issue_size
+           ELSE COALESCE(NULLIF(issued_weight, 0), issue_size)
+      END
+    ), 0) as total FROM rolling_processes WHERE metal_type = ?`,
+    [metalType],
+  );
+
+  // Old production_jobs consumed from dhal_stock
+  let oldJobDhal = 0;
+  if (hasProductionJobs) {
+    oldJobDhal = await querySum(
+      "SELECT COALESCE(SUM(issue_weight), 0) as total FROM production_jobs WHERE metal_type = ?",
+      [metalType],
+    );
+  }
+
+  const dhalStock = dhalAdditions + meltingReturns - rollingConsumed - oldJobDhal;
+
+  // --- ROLLING STOCK ---
+  const rollingReturns = await querySum(
+    "SELECT COALESCE(SUM(return_weight), 0) as total FROM rolling_processes WHERE metal_type = ? AND status = 'COMPLETED'",
+    [metalType],
+  );
+
+  const pressConsumed = await querySum(
+    `SELECT COALESCE(SUM(
+      CASE WHEN status = 'PENDING' THEN issue_size
+           ELSE COALESCE(NULLIF(issued_weight, 0), issue_size)
+      END
+    ), 0) as total FROM press_processes WHERE metal_type = ?`,
+    [metalType],
+  );
+
+  const rollingStock = rollingReturns - pressConsumed;
+
+  // --- PRESS STOCK ---
+  const pressReturns = await querySum(
+    "SELECT COALESCE(SUM(return_weight), 0) as total FROM press_processes WHERE metal_type = ? AND status = 'COMPLETED'",
+    [metalType],
+  );
+
+  const tppConsumed = await querySum(
+    `SELECT COALESCE(SUM(
+      CASE WHEN status = 'PENDING' THEN issue_size
+           ELSE COALESCE(NULLIF(issued_weight, 0), issue_size)
+      END
+    ), 0) as total FROM tpp_processes WHERE metal_type = ?`,
+    [metalType],
+  );
+
+  const pressStock = pressReturns - tppConsumed;
+
+  // --- TPP STOCK ---
+  const tppReturns = await querySum(
+    "SELECT COALESCE(SUM(return_weight), 0) as total FROM tpp_processes WHERE metal_type = ? AND status = 'COMPLETED'",
+    [metalType],
+  );
+
+  const packingConsumed = await querySum(
+    `SELECT COALESCE(SUM(
+      CASE WHEN status = 'PENDING' THEN issue_size
+           ELSE COALESCE(NULLIF(issued_weight, 0), issue_size)
+      END
+    ), 0) as total FROM packing_processes WHERE metal_type = ?`,
+    [metalType],
+  );
+
+  const tppStock = tppReturns - packingConsumed;
+
+  // --- TOTAL LOSS ---
+  const processLoss = await querySum(
+    `SELECT COALESCE(SUM(l), 0) as total FROM (
+      SELECT COALESCE(SUM(loss_weight), 0) as l FROM melting_process WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(loss_weight), 0) FROM rolling_processes WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(loss_weight), 0) FROM press_processes WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(loss_weight), 0) FROM tpp_processes WHERE metal_type = ? AND status = 'COMPLETED'
+      UNION ALL
+      SELECT COALESCE(SUM(loss_weight), 0) FROM packing_processes WHERE metal_type = ? AND status = 'COMPLETED'
+    )`,
+    [metalType, metalType, metalType, metalType, metalType],
+  );
+
+  let oldJobLoss = 0;
+  if (hasProductionJobs && hasJobSteps) {
+    oldJobLoss = await querySum(
+      `SELECT COALESCE(SUM(js.loss_weight), 0) as total
+       FROM job_steps js
+       JOIN production_jobs pj ON js.job_id = pj.id
+       WHERE pj.metal_type = ?`,
+      [metalType],
+    );
+  }
+
+  const totalLoss = Math.max(processLoss + oldJobLoss, 0);
+
+  // Update stock_master with recalculated values
+  await new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE stock_master SET
+        opening_stock = ?, dhal_stock = ?, rolling_stock = ?,
+        press_stock = ?, tpp_stock = ?, total_loss = ?
+       WHERE metal_type = ?`,
+      [openingStock, dhalStock, rollingStock, pressStock, tppStock, totalLoss, metalType],
+      function (err) {
+        if (err) return reject(err);
+        resolve(this.changes);
+      },
+    );
+  });
+
+  return {
+    metal_type: metalType,
+    opening_stock: openingStock,
+    dhal_stock: dhalStock,
+    rolling_stock: rollingStock,
+    press_stock: pressStock,
+    tpp_stock: tppStock,
+    total_loss: totalLoss,
+  };
+};
+
 const getDetailedScrapAndLoss = () => {
   return new Promise((resolve, reject) => {
     // Instead of immutable transaction logs, query the source of truth directly so edits sync retroactively.
@@ -196,4 +412,5 @@ module.exports = {
   editPurchase,
   deletePurchase,
   getDetailedScrapAndLoss,
+  recalculateStock,
 };

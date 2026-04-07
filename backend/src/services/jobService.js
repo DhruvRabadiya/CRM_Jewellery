@@ -149,19 +149,57 @@ const getNextJobNumber = () => {
   });
 };
 
-// Group and fetch all finished goods
+// Group and fetch all finished goods — computed from COMPLETED packing_processes
+// (source of truth) instead of the finished_goods table, so deletions are
+// automatically reflected without relying on heuristic finished_goods cleanup.
 const getFinishedGoodsInventory = () => {
   return new Promise((resolve, reject) => {
-    const query = `
-            SELECT metal_type, target_product, SUM(pieces) as total_pieces, SUM(weight) as total_weight 
-            FROM finished_goods 
+    // First check if old production_jobs tables exist for legacy data
+    db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='production_jobs'",
+      [],
+      (err, tableRow) => {
+        if (err) return reject(err);
+
+        let query;
+        if (tableRow) {
+          // Include old production_jobs finished goods via UNION
+          query = `
+            SELECT metal_type, target_product,
+                   CASE WHEN SUM(pieces) < 0 THEN 0 ELSE SUM(pieces) END as total_pieces,
+                   SUM(weight) as total_weight
+            FROM (
+              SELECT metal_type, category as target_product, return_pieces as pieces, return_weight as weight
+              FROM packing_processes
+              WHERE status = 'COMPLETED' AND return_weight > 0
+              UNION ALL
+              SELECT pj.metal_type, pj.target_product, js.return_pieces as pieces, js.return_weight as weight
+              FROM job_steps js
+              JOIN production_jobs pj ON js.job_id = pj.id
+              WHERE js.step_name = 'Packing' AND pj.status = 'COMPLETED'
+            )
             GROUP BY metal_type, target_product
             ORDER BY metal_type, target_product
-        `;
-    db.all(query, [], (err, rows) => {
-      if (err) reject(err);
-      resolve(rows || []);
-    });
+          `;
+        } else {
+          // No legacy tables — compute only from packing_processes
+          query = `
+            SELECT metal_type, category as target_product,
+                   CASE WHEN SUM(return_pieces) < 0 THEN 0 ELSE SUM(return_pieces) END as total_pieces,
+                   SUM(return_weight) as total_weight
+            FROM packing_processes
+            WHERE status = 'COMPLETED' AND return_weight > 0
+            GROUP BY metal_type, category
+            ORDER BY metal_type, category
+          `;
+        }
+
+        db.all(query, [], (err, rows) => {
+          if (err) return reject(err);
+          resolve(rows || []);
+        });
+      },
+    );
   });
 };
 

@@ -4,6 +4,13 @@ const { MESSAGES, TRANSACTION_TYPES } = require("../utils/constants");
 
 const getStock = async (req, res) => {
   try {
+    // Recalculate stock from source-of-truth process tables before returning
+    // This ensures displayed values are always accurate regardless of any drift
+    await Promise.all([
+      stockService.recalculateStock("Gold"),
+      stockService.recalculateStock("Silver"),
+    ]);
+
     const [goldStock, silverStock] = await Promise.all([
       stockService.getStockByMetal("Gold"),
       stockService.getStockByMetal("Silver"),
@@ -245,6 +252,25 @@ const deleteDhalPurchase = async (req, res) => {
   }
 };
 
+const recalculateStockEndpoint = async (req, res) => {
+  try {
+    const [gold, silver] = await Promise.all([
+      stockService.recalculateStock("Gold"),
+      stockService.recalculateStock("Silver"),
+    ]);
+
+    return formatResponse(
+      res,
+      200,
+      true,
+      "Stock recalculated from source-of-truth process data",
+      { gold, silver },
+    );
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   getStock,
   addStock,
@@ -257,4 +283,5 @@ module.exports = {
   getDhalPurchases,
   editDhalPurchase,
   deleteDhalPurchase,
+  recalculateStockEndpoint,
 };
