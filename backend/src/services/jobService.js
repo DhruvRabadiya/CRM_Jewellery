@@ -60,19 +60,25 @@ const getFinishedGoodsInventory = () => {
                pp.return_pieces as total_pieces,
                pp.return_weight as total_weight
         FROM packing_processes pp
-        WHERE pp.status = 'COMPLETED' AND pp.return_weight > 0
+        WHERE pp.status = 'COMPLETED' AND (pp.return_weight > 0 OR pp.return_pieces > 0)
           AND NOT EXISTS (
             SELECT 1 FROM process_return_items pri
             WHERE pri.process_id = pp.id AND pri.process_type = 'packing'
           )
       )
       GROUP BY metal_type, target_product
-      HAVING SUM(total_weight) > 0 OR SUM(total_pieces) > 0
+      HAVING MAX(SUM(total_weight), 0) > 0 OR MAX(SUM(total_pieces), 0) > 0
       ORDER BY metal_type, target_product
     `;
     db.all(query, [], (err, rows) => {
       if (err) reject(err);
-      resolve(rows || []);
+      // Clamp negative values to 0
+      const sanitized = (rows || []).map(r => ({
+        ...r,
+        total_pieces: Math.max(r.total_pieces || 0, 0),
+        total_weight: Math.max(r.total_weight || 0, 0),
+      }));
+      resolve(sanitized);
     });
   });
 };
