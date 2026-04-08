@@ -159,7 +159,7 @@ const getAllRolling = async (req, res) => {
 const editRolling = async (req, res) => {
   try {
     const process_id = req.params.id;
-    const { issued_weight, return_weight, scrap_weight, issue_pieces, return_pieces, description, employee } = req.body;
+    const { issued_weight, return_weight, scrap_weight, issue_pieces, return_pieces, return_items, description, employee } = req.body;
     const newWeight = parseFloat(issued_weight);
 
     if (!process_id || isNaN(newWeight) || newWeight <= 0) {
@@ -172,15 +172,24 @@ const editRolling = async (req, res) => {
     const oldWeight = process.issue_size || process.issued_weight || 0;
     const delta = newWeight - oldWeight;
 
+    // Derive aggregate from return_items if provided
+    const hasReturnItems = Array.isArray(return_items) && return_items.length > 0;
+    const effectiveReturnWeight = hasReturnItems
+      ? return_items.reduce((s, i) => s + (parseFloat(i.return_weight) || 0), 0)
+      : return_weight;
+    const effectiveReturnPieces = hasReturnItems
+      ? return_items.reduce((s, i) => s + (parseInt(i.return_pieces) || 0), 0)
+      : return_pieces;
+
     let newRetWeight = process.return_weight;
     let newScrWeight = process.scrap_weight;
     let newPieces = process.return_pieces;
     let newLossWeight = process.loss_weight;
 
     if (process.status === "COMPLETED") {
-      newRetWeight = return_weight !== undefined ? parseFloat(return_weight) || 0 : process.return_weight;
+      newRetWeight = effectiveReturnWeight !== undefined ? parseFloat(effectiveReturnWeight) || 0 : process.return_weight;
       newScrWeight = scrap_weight !== undefined ? parseFloat(scrap_weight) || 0 : process.scrap_weight;
-      newPieces = return_pieces !== undefined ? parseInt(return_pieces) || 0 : process.return_pieces;
+      newPieces = effectiveReturnPieces !== undefined ? parseInt(effectiveReturnPieces) || 0 : process.return_pieces;
       newLossWeight = calculateLoss(newWeight, newRetWeight, newScrWeight);
     }
 
@@ -235,10 +244,28 @@ const editRolling = async (req, res) => {
       updates.return_weight = newRetWeight;
       updates.scrap_weight = newScrWeight;
       updates.loss_weight = newLossWeight;
-      if (return_pieces !== undefined) updates.return_pieces = parseInt(return_pieces) || 0;
+      updates.return_pieces = newPieces;
     }
 
     await rollingService.editRollingProcessUniversal(process_id, updates);
+
+    // Update process_return_items if new items provided and process is COMPLETED
+    if (hasReturnItems && process.status === "COMPLETED") {
+      const db = require("../../config/dbConfig");
+      await new Promise((resolve, reject) => {
+        db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'rolling'`, [process_id], (err) => err ? reject(err) : resolve());
+      });
+      for (const item of return_items) {
+        await new Promise((resolve, reject) => {
+          db.run(
+            `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'rolling', ?, ?, ?)`,
+            [process_id, item.category || process.category || '', parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0],
+            (err) => err ? reject(err) : resolve()
+          );
+        });
+      }
+    }
+
     return formatResponse(res, 200, true, "Rolling process updated successfully.");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);

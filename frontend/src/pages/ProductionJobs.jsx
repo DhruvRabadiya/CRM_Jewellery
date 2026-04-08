@@ -139,6 +139,8 @@ const ProductionJobs = () => {
     description: "",
     categories: [],
     customCategory: "",
+    return_items: [{ category: "", return_weight: "", return_pieces: "" }],
+    scrap_weight: "",
   });
 
   const showToast = (message, type) => {
@@ -297,20 +299,33 @@ const ProductionJobs = () => {
     setSelectedProcess(process);
     const isSil = process.metal_type === "Silver";
     const div = isSil ? 1000 : 1;
+
+    // Pre-populate return_items from process_return_items if available (COMPLETED)
+    const prefilledReturnItems =
+      process.return_items && process.return_items.length > 0
+        ? process.return_items.map((item) => ({
+            category: item.category || "",
+            return_weight: item.return_weight != null
+              ? parseFloat((item.return_weight / div).toFixed(10)).toString()
+              : "",
+            return_pieces: item.return_pieces != null ? item.return_pieces.toString() : "",
+            _isCustom: item.category
+              ? !(sizeOptions[process.metal_type] || []).includes(item.category)
+              : false,
+          }))
+        : process.status === "COMPLETED" && process.return_weight != null
+        ? [{ category: process.category || "", return_weight: parseFloat((process.return_weight / div).toFixed(10)).toString(), return_pieces: (process.return_pieces || "").toString(), _isCustom: false }]
+        : [{ category: "", return_weight: "", return_pieces: "" }];
+
     setEditForm({
       issued_weight: process.issued_weight
         ? parseFloat((process.issued_weight / div).toFixed(10)).toString()
         : "",
-      return_weight:
-        process.return_weight !== null && process.return_weight !== undefined
-          ? parseFloat((process.return_weight / div).toFixed(10)).toString()
-          : "",
       scrap_weight:
         process.scrap_weight !== null && process.scrap_weight !== undefined
           ? parseFloat((process.scrap_weight / div).toFixed(10)).toString()
           : "",
       issue_pieces: process.issue_pieces || "",
-      return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
       categories: (() => {
         if (!process.category) return [];
@@ -333,6 +348,7 @@ const ProductionJobs = () => {
       })(),
       description: process.description || "",
       employee: process.employee || "",
+      return_items: prefilledReturnItems,
     });
     setIsEditModalOpen(true);
   };
@@ -366,15 +382,23 @@ const ProductionJobs = () => {
       selectedProcess?.status === "COMPLETED" ||
       selectedProcess?.status === "RUNNING"
     ) {
-      let retW = parseFloat(editForm.return_weight) || 0;
+      const div = isKg ? 1000 : 1;
+      const returnItems = (editForm.return_items || [])
+        .filter(item => parseFloat(item.return_weight) > 0)
+        .map(item => ({
+          category: item.category || selectedProcess.category || "",
+          return_weight: parseFloat(parseFloat(item.return_weight * div).toFixed(8)),
+          return_pieces: parseInt(item.return_pieces) || 0,
+        }));
+
       let scrW = parseFloat(editForm.scrap_weight) || 0;
-      if (isKg) {
-        retW *= 1000;
-        scrW *= 1000;
-      }
-      payload.return_weight = parseFloat(retW.toFixed(8));
-      payload.scrap_weight = parseFloat(scrW.toFixed(8));
-      payload.return_pieces = Math.max(parseInt(editForm.return_pieces) || 0, 0);
+      if (isKg) scrW *= 1000;
+      scrW = parseFloat(scrW.toFixed(8));
+
+      payload.return_items = returnItems;
+      payload.return_weight = parseFloat(returnItems.reduce((s, i) => s + i.return_weight, 0).toFixed(8));
+      payload.return_pieces = returnItems.reduce((s, i) => s + i.return_pieces, 0);
+      payload.scrap_weight = scrW;
     }
 
     try {
@@ -550,7 +574,7 @@ const ProductionJobs = () => {
   const isLossNegative = liveLoss < 0;
 
   const editIssVal = parseFloat(editForm.issued_weight) || 0;
-  let editRetWeight = parseFloat(editForm.return_weight) || 0;
+  let editRetWeight = (editForm.return_items || []).reduce((s, i) => s + (parseFloat(i.return_weight) || 0), 0);
   let editScrWeight = parseFloat(editForm.scrap_weight) || 0;
   if (editForm?.weight_unit === "kg") {
     editRetWeight *= 1000;
@@ -1598,28 +1622,122 @@ const ProductionJobs = () => {
             {selectedProcess?.status === "COMPLETED" ||
             selectedProcess?.status === "RUNNING" ? (
               <>
-                <div className="col-span-1 border-l border-gray-200 pl-6 space-y-4 row-span-3">
-                  <div>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3">
-                      Output Adjustments
+                <div className="col-span-2 border-t border-gray-100 pt-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                      Output Adjustments (by Size)
                     </p>
-                    <label className="block text-xs font-bold text-green-700 mb-1.5">
-                      Return Weight
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      className="w-full bg-green-50/50 border border-green-200 text-green-800 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-green-400 transition-colors"
-                      value={editForm.return_weight}
-                      onChange={(e) =>
+                    <button
+                      type="button"
+                      onClick={() =>
                         setEditForm({
                           ...editForm,
-                          return_weight: e.target.value,
+                          return_items: [
+                            ...(editForm.return_items || []),
+                            { category: "", return_weight: "", return_pieces: "" },
+                          ],
                         })
                       }
-                      placeholder="0.000"
-                    />
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors border border-blue-200"
+                    >
+                      + Add Row
+                    </button>
                   </div>
+
+                  {/* Column labels */}
+                  <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                    <div className="col-span-4">Category / Size</div>
+                    <div className="col-span-4">Weight ({editForm.weight_unit})</div>
+                    <div className="col-span-3">Pieces</div>
+                    <div className="col-span-1"></div>
+                  </div>
+
+                  {(editForm.return_items || []).map((item, idx) => {
+                    const metalSizes = sizeOptions[selectedProcess?.metal_type] || [];
+                    const isStandardCategory = metalSizes.includes(item.category);
+                    const isCustom = item._isCustom || (!isStandardCategory && item.category !== "");
+                    const selectValue = isCustom ? "Other" : item.category;
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-green-50 border border-green-200 p-2 rounded-lg">
+                        <div className="col-span-4">
+                          <select
+                            value={selectValue}
+                            onChange={(e) => {
+                              const newItems = [...(editForm.return_items || [])];
+                              if (e.target.value === "Other") {
+                                newItems[idx] = { ...newItems[idx], category: "", _isCustom: true };
+                              } else {
+                                newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: false };
+                              }
+                              setEditForm({ ...editForm, return_items: newItems });
+                            }}
+                            className="w-full bg-white border border-green-200 py-1.5 px-2 rounded text-sm font-medium outline-none"
+                          >
+                            <option value="">Select Size</option>
+                            {metalSizes.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                          {isCustom && (
+                            <input
+                              type="text"
+                              placeholder="Custom category..."
+                              value={item.category}
+                              onChange={(e) => {
+                                const newItems = [...(editForm.return_items || [])];
+                                newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: true };
+                                setEditForm({ ...editForm, return_items: newItems });
+                              }}
+                              className="w-full mt-1 bg-white border border-blue-200 py-1 px-2 rounded text-xs font-medium outline-none"
+                            />
+                          )}
+                        </div>
+                        <div className="col-span-4">
+                          <input
+                            type="number"
+                            step="0.001"
+                            placeholder="0.000"
+                            value={item.return_weight}
+                            onChange={(e) => {
+                              const newItems = [...(editForm.return_items || [])];
+                              newItems[idx] = { ...newItems[idx], return_weight: e.target.value };
+                              setEditForm({ ...editForm, return_items: newItems });
+                            }}
+                            className="w-full bg-white border border-green-200 py-1.5 px-2 rounded text-base font-bold outline-none"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="number"
+                            step="1"
+                            placeholder="0"
+                            value={item.return_pieces}
+                            onChange={(e) => {
+                              const newItems = [...(editForm.return_items || [])];
+                              newItems[idx] = { ...newItems[idx], return_pieces: e.target.value };
+                              setEditForm({ ...editForm, return_items: newItems });
+                            }}
+                            className="w-full bg-white border border-green-200 py-1.5 px-2 rounded text-sm font-bold outline-none"
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-center">
+                          {(editForm.return_items || []).length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newItems = (editForm.return_items || []).filter((_, i) => i !== idx);
+                                setEditForm({ ...editForm, return_items: newItems });
+                              }}
+                              className="text-red-400 hover:text-red-600 font-bold text-lg leading-none"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">
                       Scrap / Dust
@@ -1638,35 +1756,15 @@ const ProductionJobs = () => {
                       placeholder="0.000"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                      Return Pieces{" "}
-                      <span className="text-gray-400 font-normal">
-                        (Optional)
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
-                      value={editForm.return_pieces}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          return_pieces: e.target.value,
-                        })
-                      }
-                      placeholder="0"
-                    />
-                  </div>
-                  
-                  <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4 flex flex-col justify-center gap-1.5">
+
+                  <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col justify-center gap-1.5">
                     <div className="flex justify-between text-sm">
                       <span>Issued ({editForm?.weight_unit || "g"}):</span>
                       <span>{editIssVal}</span>
                     </div>
                     <div className="flex justify-between text-sm text-green-400">
-                      <span>- Return:</span>
-                      <span>{parseFloat(editForm.return_weight || 0)}</span>
+                      <span>- Total Return:</span>
+                      <span>{parseFloat((editRetWeight / (editForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
                     </div>
                     <div className="flex justify-between text-sm text-yellow-400 mb-2">
                       <span>- Scrap:</span>

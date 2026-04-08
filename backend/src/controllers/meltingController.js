@@ -152,13 +152,22 @@ const getAllMelting = async (req, res) => {
 const editMeltingProcess = async (req, res) => {
   try {
     const { id } = req.params;
-    const { issued_weight, return_weight, scrap_weight, issue_pieces, return_pieces, description, employee, category } = req.body;
+    const { issued_weight, return_weight, scrap_weight, issue_pieces, return_pieces, return_items, description, employee, category } = req.body;
 
     const process = await meltingService.getMeltingProcessById(id);
     if (!process) return formatResponse(res, 404, false, MESSAGES.JOB_NOT_FOUND);
 
     const oldIssueSize = process.issue_size || process.issue_weight || 0;
     const oldIssuedWeight = process.issued_weight || oldIssueSize;
+
+    // If return_items array provided, derive aggregate from items
+    const hasReturnItems = Array.isArray(return_items) && return_items.length > 0;
+    const effectiveReturnWeight = hasReturnItems
+      ? return_items.reduce((s, i) => s + (parseFloat(i.return_weight) || 0), 0)
+      : return_weight;
+    const effectiveReturnPieces = hasReturnItems
+      ? return_items.reduce((s, i) => s + (parseInt(i.return_pieces) || 0), 0)
+      : return_pieces;
 
     let updates = {};
     if (description !== undefined) updates.description = description;
@@ -205,9 +214,9 @@ const editMeltingProcess = async (req, res) => {
     } else if (process.status === "COMPLETED") {
       const newIssuedWeight = issued_weight !== undefined ? parseFloat(issued_weight) : oldIssuedWeight;
       if (isNaN(newIssuedWeight) || newIssuedWeight <= 0) return formatResponse(res, 400, false, "Invalid weight.");
-      const newRetWeight = return_weight !== undefined ? parseFloat(return_weight) || 0 : (process.return_weight || 0);
+      const newRetWeight = effectiveReturnWeight !== undefined ? parseFloat(effectiveReturnWeight) || 0 : (process.return_weight || 0);
       const newScrWeight = scrap_weight !== undefined ? parseFloat(scrap_weight) || 0 : (process.scrap_weight || 0);
-      const newRetPieces = return_pieces !== undefined ? parseInt(return_pieces) || 0 : (process.return_pieces || 0);
+      const newRetPieces = effectiveReturnPieces !== undefined ? parseInt(effectiveReturnPieces) || 0 : (process.return_pieces || 0);
       const newLossWeight = calculateLoss(newIssuedWeight, newRetWeight, newScrWeight);
 
       const retWeightDiff = newRetWeight - (process.return_weight || 0);
@@ -230,6 +239,23 @@ const editMeltingProcess = async (req, res) => {
     }
 
     await meltingService.editMeltingProcess(id, updates);
+
+    // Update process_return_items if new items provided and process is COMPLETED
+    if (hasReturnItems && process.status === "COMPLETED") {
+      await new Promise((resolve, reject) => {
+        db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'melting'`, [id], (err) => err ? reject(err) : resolve());
+      });
+      for (const item of return_items) {
+        await new Promise((resolve, reject) => {
+          db.run(
+            `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'melting', ?, ?, ?)`,
+            [id, item.category || process.category || '', parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0],
+            (err) => err ? reject(err) : resolve()
+          );
+        });
+      }
+    }
+
     return formatResponse(res, 200, true, "Melting process updated.");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
