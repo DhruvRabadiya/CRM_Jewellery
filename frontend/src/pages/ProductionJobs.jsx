@@ -106,10 +106,10 @@ const ProductionJobs = () => {
   const [sortConfig, setSortConfig] = useState({ key: "job_number", direction: "asc" });
 
   const [createForm, setCreateForm] = useState({
-    stage: "Melting",
+    stage: "",
     job_number: "",
-    metal_type: "Gold",
-    categories: [sizeOptions["Gold"][0]],
+    metal_type: "",
+    categories: [],
     customCategory: "",
     issue_size: "",
     issue_pieces: "",
@@ -194,9 +194,9 @@ const ProductionJobs = () => {
         setCreateForm((prev) => ({
           ...prev,
           job_number: result.data.next_job_number,
-          stage: "Melting",
-          metal_type: "Gold",
-          categories: [sizeOptions["Gold"][0]],
+          stage: "",
+          metal_type: "",
+          categories: [],
           issue_size: "",
           issue_pieces: "",
           job_name: "",
@@ -218,6 +218,22 @@ const ProductionJobs = () => {
 
   const handleCreateProcess = async (e) => {
     e.preventDefault();
+    if (!createForm.stage) {
+      triggerError();
+      return showToast("Please select a Stage", "error");
+    }
+    if (!createForm.metal_type) {
+      triggerError();
+      return showToast("Please select a Metal Type", "error");
+    }
+    const selectedCategories = createForm.categories.filter(c => c !== "Other");
+    if (createForm.categories.includes("Other") && createForm.customCategory) {
+      selectedCategories.push(createForm.customCategory);
+    }
+    if (selectedCategories.length === 0) {
+      triggerError();
+      return showToast("Please select at least one Category", "error");
+    }
     let weight = parseFloat(createForm.issue_size);
     if (createForm.weight_unit === "kg") weight *= 1000;
     weight = parseFloat(weight.toFixed(8));
@@ -235,13 +251,7 @@ const ProductionJobs = () => {
         employee: createForm.employee || user?.username || "Unknown",
         issue_size: weight,
         issue_pieces: createForm.issue_pieces || 0,
-        category: (() => {
-          let cats = createForm.categories.filter(c => c !== "Other");
-          if (createForm.categories.includes("Other") && createForm.customCategory) {
-            cats.push(createForm.customCategory);
-          }
-          return cats.join(", ");
-        })(),
+        category: selectedCategories.join(", "),
         description: createForm.description || "",
       });
       showToast(`${createForm.stage} Process Created!`, "success");
@@ -890,7 +900,7 @@ const ProductionJobs = () => {
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="Create Process Job"
+        title={`New Job #${createForm.job_number}`}
         maxWidth="max-w-2xl"
       >
         <form
@@ -904,7 +914,8 @@ const ProductionJobs = () => {
               </label>
               <select
                   className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold outline-none text-blue-800"
-                  value={createForm.stage || "Melting"}
+                  value={createForm.stage}
+                  required
                   onChange={(e) => {
                     setCreateForm({
                       ...createForm,
@@ -912,6 +923,7 @@ const ProductionJobs = () => {
                     });
                   }}
                 >
+                  <option value="" disabled>Select Stage</option>
                   <option value="Melting">Melting</option>
                   <option value="Rolling">Rolling</option>
                   <option value="Press">Press</option>
@@ -939,15 +951,17 @@ const ProductionJobs = () => {
               <select
                   className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none"
                   value={createForm.metal_type}
+                  required
                   onChange={(e) =>
                     setCreateForm({
                       ...createForm,
                       metal_type: e.target.value,
-                      categories: [sizeOptions[e.target.value][0]],
+                      categories: [],
                       weight_unit: e.target.value === "Silver" ? "kg" : "g",
                     })
                   }
                 >
+                  <option value="" disabled>Select Metal</option>
                   <option value="Gold">Gold</option>
                   <option value="Silver">Silver</option>
                 </select>
@@ -960,12 +974,19 @@ const ProductionJobs = () => {
               <div className="relative">
                 <button
                   type="button"
+                  disabled={!createForm.metal_type}
                   onClick={() => setCreateForm({ ...createForm, _catOpen: !createForm._catOpen })}
-                  className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none text-left text-sm truncate"
+                  className={`w-full bg-gray-50 border py-2.5 px-3 rounded-lg font-bold outline-none text-left text-sm truncate ${
+                    !createForm.metal_type
+                      ? "border-gray-100 text-gray-300 cursor-not-allowed"
+                      : "border-gray-200 cursor-pointer"
+                  }`}
                 >
-                  {formatCategoryDisplay(createForm.categories, createForm.customCategory)}
+                  {createForm.categories.length === 0
+                    ? <span className="text-gray-400 font-normal">Select Category</span>
+                    : formatCategoryDisplay(createForm.categories, createForm.customCategory)}
                 </button>
-                {createForm._catOpen && (
+                {createForm._catOpen && createForm.metal_type && (
                   <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
                     {sizeOptions[createForm.metal_type]?.map((c) => (
                       <label key={c} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm font-medium">
