@@ -227,7 +227,11 @@ const ProductionJobs = () => {
       return showToast("Please select a Metal Type", "error");
     }
     const selectedCategories = createForm.categories.filter(c => c !== "Other");
-    if (createForm.categories.includes("Other") && createForm.customCategory) {
+    if (createForm.categories.includes("Other")) {
+      if (!createForm.customCategory) {
+        triggerError();
+        return showToast("Please enter a custom category name", "error");
+      }
       selectedCategories.push(createForm.customCategory);
     }
     if (selectedCategories.length === 0) {
@@ -900,7 +904,7 @@ const ProductionJobs = () => {
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title={`New Job #${createForm.job_number}`}
+        title={createForm.job_number ? `New Job #${createForm.job_number}` : "Create Process Job"}
         maxWidth="max-w-2xl"
       >
         <form
