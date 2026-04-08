@@ -904,7 +904,7 @@ const ProductionJobs = () => {
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title={createForm.job_number ? `New Job #${createForm.job_number}` : "Create Process Job"}
+        title={createForm.job_number || "Create Process Job"}
         maxWidth="max-w-2xl"
       >
         <form
@@ -934,18 +934,6 @@ const ProductionJobs = () => {
                   <option value="TPP">TPP</option>
                   <option value="Packing">Packing</option>
                 </select>
-            </div>
-
-            <div className="col-span-1">
-              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                Job Number
-              </label>
-              <input
-                type="text"
-                className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
-                value={createForm.job_number}
-                readOnly
-              />
             </div>
 
             <div className="col-span-1">
