@@ -103,7 +103,8 @@ const ProductionJobs = () => {
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [selectedProcess, setSelectedProcess] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: "job_number", direction: "asc" });
+  const [sortConfig, setSortConfig] = useState({ key: "job_number", direction: "desc" });
+  const [stageFilter, setStageFilter] = useState("");
   const [activeTab, setActiveTab] = useState("incomplete");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -576,8 +577,11 @@ const ProductionJobs = () => {
 
   const filteredProcesses = latestProcesses.filter(
     (p) =>
-      (p.job_number || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.job_name || "").toLowerCase().includes(searchTerm.toLowerCase()),
+      (stageFilter === "" || p.stage === stageFilter) &&
+      (
+        (p.job_number || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.job_name || "").toLowerCase().includes(searchTerm.toLowerCase())
+      ),
   );
 
   const incompleteProcesses = filteredProcesses.filter(
@@ -711,16 +715,29 @@ const ProductionJobs = () => {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6 flex flex-col flex-1 min-h-0">
-        <div className="p-4 border-b border-gray-100 flex gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+        <div className="p-4 border-b border-gray-100 flex flex-wrap gap-3 items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
             <input
               type="text"
-              placeholder="Search by Job Number or Name..."
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500"
+              placeholder="Search by Job No / Name..."
+              className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 text-sm w-56"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             />
+          </div>
+          <div className="relative">
+            <select
+              value={stageFilter}
+              onChange={(e) => { setStageFilter(e.target.value); setCurrentPage(1); }}
+              className="pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 text-sm appearance-none cursor-pointer"
+            >
+              <option value="">All Stages</option>
+              {stages.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <svg className="pointer-events-none absolute right-2 top-3 text-gray-400" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
           </div>
         </div>
 
