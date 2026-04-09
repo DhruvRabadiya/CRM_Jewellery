@@ -263,7 +263,7 @@ const Dashboard = () => {
                 Opening Stock
               </p>
               <p className="text-2xl font-black text-gray-700">
-                {parseFloat((silver.opening_stock / 1000).toFixed(10))}kg
+                {parseFloat((silver.opening_stock || 0).toFixed(10))}g
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
@@ -271,7 +271,7 @@ const Dashboard = () => {
                 In Process
               </p>
               <p className="text-2xl font-black text-blue-700">
-                {parseFloat((silver.inprocess_weight / 1000 || 0).toFixed(10))}kg
+                {parseFloat((silver.inprocess_weight || 0).toFixed(10))}g
               </p>
             </div>
 
@@ -300,11 +300,9 @@ const Dashboard = () => {
                   </p>
                   <p className="font-black text-gray-700 text-sm">
                     {parseFloat(
-                      (
-                        (processMetrics.Silver[s.stage]?.pending || 0) / 1000
-                      ).toFixed(10),
-                    ) || "0"}
-                    kg
+                      (processMetrics.Silver[s.stage]?.pending || 0).toFixed(10),
+                    )}
+                    g
                   </p>
                 </div>
                 <div>
@@ -313,11 +311,9 @@ const Dashboard = () => {
                   </p>
                   <p className="font-black text-blue-800 text-sm">
                     {parseFloat(
-                      (
-                        (processMetrics.Silver[s.stage]?.running || 0) / 1000
-                      ).toFixed(10),
-                    ) || "0"}
-                    kg
+                      (processMetrics.Silver[s.stage]?.running || 0).toFixed(10),
+                    )}
+                    g
                   </p>
                 </div>
                 <div>
@@ -326,11 +322,9 @@ const Dashboard = () => {
                   </p>
                   <p className="font-black text-green-700 text-sm">
                     {parseFloat(
-                      (
-                        (processMetrics.Silver[s.stage]?.completed || 0) / 1000
-                      ).toFixed(10),
-                    ) || "0"}
-                    kg
+                      (processMetrics.Silver[s.stage]?.completed || 0).toFixed(10),
+                    )}
+                    g
                   </p>
                 </div>
               </div>

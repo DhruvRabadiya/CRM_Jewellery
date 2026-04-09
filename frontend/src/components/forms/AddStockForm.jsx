@@ -22,9 +22,6 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
     }
 
     let finalWeight = parseFloat(formData.weight);
-    if (formData.weight_unit === "kg") {
-      finalWeight *= 1000;
-    }
 
     setIsSubmitting(true);
     try {
@@ -90,7 +87,6 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
             }
           >
             <option value="g">g</option>
-            <option value="kg">kg</option>
           </select>
         </div>
       </div>

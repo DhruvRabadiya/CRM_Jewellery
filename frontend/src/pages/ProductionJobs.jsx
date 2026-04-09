@@ -243,7 +243,6 @@ const ProductionJobs = () => {
       return showToast("Please select at least one Category", "error");
     }
     let weight = parseFloat(createForm.issue_size);
-    if (createForm.weight_unit === "kg") weight *= 1000;
     weight = parseFloat(weight.toFixed(8));
 
     if (!createForm.job_number || !weight || weight <= 0) {
@@ -274,12 +273,9 @@ const ProductionJobs = () => {
   const openStartModal = (process) => {
     setSelectedProcess(process);
     setStartForm({
-      issued_weight:
-        process.metal_type === "Silver"
-          ? parseFloat((process.issue_size / 1000).toFixed(10)).toString()
-          : process.issue_size || "",
+      issued_weight: process.issue_size || "",
       issue_pieces: process.issue_pieces || "",
-      weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      weight_unit: "g",
       description: process.description || "",
       employee: process.employee || user?.username || "",
     });
@@ -289,7 +285,6 @@ const ProductionJobs = () => {
   const handleStartProcess = async (e) => {
     e.preventDefault();
     let weight = parseFloat(startForm.issued_weight);
-    if (startForm.weight_unit === "kg") weight *= 1000;
     weight = parseFloat(weight.toFixed(8));
 
     if (!weight || weight <= 0) {
@@ -315,8 +310,6 @@ const ProductionJobs = () => {
 
   const openEditModal = (process) => {
     setSelectedProcess(process);
-    const isSil = process.metal_type === "Silver";
-    const div = isSil ? 1000 : 1;
 
     // Pre-populate return_items from process_return_items if available (COMPLETED)
     const prefilledReturnItems =
@@ -324,7 +317,7 @@ const ProductionJobs = () => {
         ? process.return_items.map((item) => ({
             category: item.category || "",
             return_weight: item.return_weight != null
-              ? parseFloat((item.return_weight / div).toFixed(10)).toString()
+              ? parseFloat(item.return_weight.toFixed(10)).toString()
               : "",
             return_pieces: item.return_pieces != null ? item.return_pieces.toString() : "",
             _isCustom: item.category
@@ -332,19 +325,19 @@ const ProductionJobs = () => {
               : false,
           }))
         : process.status === "COMPLETED" && process.return_weight != null
-        ? [{ category: process.category || "", return_weight: parseFloat((process.return_weight / div).toFixed(10)).toString(), return_pieces: (process.return_pieces || "").toString(), _isCustom: false }]
+        ? [{ category: process.category || "", return_weight: parseFloat(process.return_weight.toFixed(10)).toString(), return_pieces: (process.return_pieces || "").toString(), _isCustom: false }]
         : [{ category: "", return_weight: "", return_pieces: "" }];
 
     setEditForm({
       issued_weight: process.issued_weight
-        ? parseFloat((process.issued_weight / div).toFixed(10)).toString()
+        ? parseFloat(process.issued_weight.toFixed(10)).toString()
         : "",
       scrap_weight:
         process.scrap_weight !== null && process.scrap_weight !== undefined
-          ? parseFloat((process.scrap_weight / div).toFixed(10)).toString()
+          ? parseFloat(process.scrap_weight.toFixed(10)).toString()
           : "",
       issue_pieces: process.issue_pieces || "",
-      weight_unit: isSil ? "kg" : "g",
+      weight_unit: "g",
       categories: (() => {
         if (!process.category) return [];
         const parts = process.category.split(", ");
@@ -374,8 +367,6 @@ const ProductionJobs = () => {
   const handleEditProcess = async (e) => {
     e.preventDefault();
     let issueW = parseFloat(editForm.issued_weight);
-    const isKg = editForm.weight_unit === "kg";
-    if (isKg) issueW *= 1000;
     issueW = parseFloat(issueW.toFixed(8));
 
     let payload = {
@@ -400,17 +391,15 @@ const ProductionJobs = () => {
       selectedProcess?.status === "COMPLETED" ||
       selectedProcess?.status === "RUNNING"
     ) {
-      const div = isKg ? 1000 : 1;
       const returnItems = (editForm.return_items || [])
         .filter(item => parseFloat(item.return_weight) > 0)
         .map(item => ({
           category: item.category || selectedProcess.category || "",
-          return_weight: parseFloat(parseFloat(item.return_weight * div).toFixed(8)),
+          return_weight: parseFloat(parseFloat(item.return_weight).toFixed(8)),
           return_pieces: parseInt(item.return_pieces) || 0,
         }));
 
       let scrW = parseFloat(editForm.scrap_weight) || 0;
-      if (isKg) scrW *= 1000;
       scrW = parseFloat(scrW.toFixed(8));
 
       payload.return_items = returnItems;
@@ -480,7 +469,7 @@ const ProductionJobs = () => {
     setCompleteForm({
       return_items: initialItems,
       scrap_weight: "",
-      weight_unit: process.metal_type === "Silver" ? "kg" : "g",
+      weight_unit: "g",
       description: process.description || "",
     });
     setIsCompleteModalOpen(true);
@@ -489,19 +478,16 @@ const ProductionJobs = () => {
   const handleCompleteProcess = async (e) => {
     e.preventDefault();
     
-    const div = completeForm.weight_unit === "kg" ? 1000 : 1;
-    
     const returnItems = completeForm.return_items
       .filter(item => parseFloat(item.return_weight) > 0)
       .map(item => ({
         category: item.category || selectedProcess.category || "",
-        return_weight: parseFloat(parseFloat(item.return_weight * div).toFixed(8)),
+        return_weight: parseFloat(parseFloat(item.return_weight).toFixed(8)),
         return_pieces: parseInt(item.return_pieces) || 0,
       }));
 
     const totalRetW = returnItems.reduce((sum, item) => sum + item.return_weight, 0);
     let scrW = parseFloat(completeForm.scrap_weight) || 0;
-    if (completeForm.weight_unit === "kg") scrW *= 1000;
     scrW = parseFloat(scrW.toFixed(8));
 
     if (totalRetW <= 0) {
@@ -600,22 +586,17 @@ const ProductionJobs = () => {
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0
     : 0;
-  const div = completeForm?.weight_unit === "kg" ? 1000 : 1;
-  let retVal = (completeForm.return_items || []).reduce((sum, item) => sum + (parseFloat(item.return_weight) || 0), 0) * div;
-  let scrVal = (parseFloat(completeForm.scrap_weight) || 0) * div;
+  let retVal = (completeForm.return_items || []).reduce((sum, item) => sum + (parseFloat(item.return_weight) || 0), 0);
+  let scrVal = parseFloat(completeForm.scrap_weight) || 0;
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(10));
   const isLossNegative = liveLoss < 0;
 
   const editIssVal = parseFloat(editForm.issued_weight) || 0;
   let editRetWeight = (editForm.return_items || []).reduce((s, i) => s + (parseFloat(i.return_weight) || 0), 0);
   let editScrWeight = parseFloat(editForm.scrap_weight) || 0;
-  if (editForm?.weight_unit === "kg") {
-    editRetWeight *= 1000;
-    editScrWeight *= 1000;
-  }
   const editLiveLoss = parseFloat(
     (
-      (editForm?.weight_unit === "kg" ? editIssVal * 1000 : editIssVal) -
+      editIssVal -
       editRetWeight -
       editScrWeight
     ).toFixed(10),
@@ -1015,7 +996,7 @@ const ProductionJobs = () => {
                       ...createForm,
                       metal_type: e.target.value,
                       categories: [],
-                      weight_unit: e.target.value === "Silver" ? "kg" : "g",
+                      weight_unit: "g",
                     })
                   }
                 >
@@ -1141,7 +1122,6 @@ const ProductionJobs = () => {
                   }
                 >
                   <option value="g">g</option>
-                  <option value="kg">kg</option>
                 </select>
               </div>
             </div>
@@ -1232,7 +1212,6 @@ const ProductionJobs = () => {
                   }
                 >
                   <option value="g">g</option>
-                  <option value="kg">kg</option>
                 </select>
               </div>
             </div>
@@ -1331,16 +1310,9 @@ const ProductionJobs = () => {
               <button
                 type="button"
                 onClick={() => setCompleteForm({ ...completeForm, weight_unit: "g" })}
-                className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                className="flex-1 py-1.5 text-sm font-bold rounded-md transition-colors bg-white text-gray-800 shadow-sm"
               >
                 Grams (g)
-              </button>
-              <button
-                type="button"
-                onClick={() => setCompleteForm({ ...completeForm, weight_unit: "kg" })}
-                className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              >
-                Kilogram (kg)
               </button>
             </div>
           </div>
@@ -1498,22 +1470,22 @@ const ProductionJobs = () => {
           {/* Live loss summary */}
           <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col gap-1.5">
             <div className="flex justify-between text-sm">
-              <span>Issued ({completeForm?.weight_unit || "g"}):</span>
-              <span>{parseFloat((issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+              <span>Issued (g):</span>
+              <span>{parseFloat(issVal.toFixed(10))}</span>
             </div>
             <div className="flex justify-between text-sm text-green-400">
               <span>- Total Return:</span>
-              <span>{parseFloat((retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+              <span>{parseFloat(retVal.toFixed(10))}</span>
             </div>
             <div className="flex justify-between text-sm text-yellow-400 mb-2">
               <span>- Scrap:</span>
-              <span>{parseFloat((scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+              <span>{parseFloat(scrVal.toFixed(10))}</span>
             </div>
             <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
               <span>{isLossNegative ? "Gain:" : "Loss:"}</span>
               <span className={isLossNegative ? "text-green-400" : "text-white"}>
                 {isLossNegative ? "+" : ""}
-                {parseFloat((Math.abs(liveLoss) / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}
+                {parseFloat(Math.abs(liveLoss).toFixed(10))}
               </span>
             </div>
           </div>
@@ -1590,7 +1562,6 @@ const ProductionJobs = () => {
                   }
                 >
                   <option value="g">g</option>
-                  <option value="kg">kg</option>
                 </select>
               </div>
             </div>
@@ -1838,12 +1809,12 @@ const ProductionJobs = () => {
 
                   <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col justify-center gap-1.5">
                     <div className="flex justify-between text-sm">
-                      <span>Issued ({editForm?.weight_unit || "g"}):</span>
+                      <span>Issued (g):</span>
                       <span>{editIssVal}</span>
                     </div>
                     <div className="flex justify-between text-sm text-green-400">
                       <span>- Total Return:</span>
-                      <span>{parseFloat((editRetWeight / (editForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+                      <span>{parseFloat(editRetWeight.toFixed(10))}</span>
                     </div>
                     <div className="flex justify-between text-sm text-yellow-400 mb-2">
                       <span>- Scrap:</span>
@@ -1853,7 +1824,7 @@ const ProductionJobs = () => {
                       <span>{editIsLossNegative ? "Gain:" : "Loss:"}</span>
                       <span className={editIsLossNegative ? "text-green-400" : "text-white"}>
                         {editIsLossNegative ? "+" : ""}
-                        {parseFloat((Math.abs(editLiveLoss) / (editForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}
+                        {parseFloat(Math.abs(editLiveLoss).toFixed(10))}
                       </span>
                     </div>
                   </div>
