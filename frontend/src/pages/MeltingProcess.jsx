@@ -301,14 +301,14 @@ const MeltingProcess = () => {
   const openEditModal = (melt) => {
     setSelectedMelt(melt);
     setEditForm({
-      issued_weight: parseFloat(melt.issue_weight.toFixed(10)),
+      issued_weight: parseFloat((parseFloat(melt.issue_weight) || 0).toFixed(10)),
       return_weight:
         melt.return_weight !== null
-          ? parseFloat(melt.return_weight.toFixed(10))
+          ? parseFloat((parseFloat(melt.return_weight) || 0).toFixed(10))
           : "",
       scrap_weight:
         melt.scrap_weight !== null
-          ? parseFloat(melt.scrap_weight.toFixed(10))
+          ? parseFloat((parseFloat(melt.scrap_weight) || 0).toFixed(10))
           : "",
       issue_pieces: melt.issue_pieces || "",
       return_pieces: melt.return_pieces || "",

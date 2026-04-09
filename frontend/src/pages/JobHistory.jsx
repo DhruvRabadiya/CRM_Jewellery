@@ -325,7 +325,7 @@ const JobHistory = () => {
         ? process.return_items.map((item) => ({
             category: item.category || "",
             return_weight: item.return_weight != null
-              ? parseFloat(item.return_weight.toFixed(10)).toString()
+              ? parseFloat((parseFloat(item.return_weight) || 0).toFixed(10)).toString()
               : "",
             return_pieces: item.return_pieces != null ? item.return_pieces.toString() : "",
             _isCustom: item.category
@@ -333,16 +333,16 @@ const JobHistory = () => {
               : false,
           }))
         : process.status === "COMPLETED" && process.return_weight != null
-        ? [{ category: process.category || "", return_weight: parseFloat(process.return_weight.toFixed(10)).toString(), return_pieces: (process.return_pieces || "").toString(), _isCustom: false }]
+        ? [{ category: process.category || "", return_weight: parseFloat((parseFloat(process.return_weight) || 0).toFixed(10)).toString(), return_pieces: (process.return_pieces || "").toString(), _isCustom: false }]
         : [{ category: "", return_weight: "", return_pieces: "" }];
 
     setEditForm({
       issued_weight: process.issued_weight
-        ? parseFloat(process.issued_weight.toFixed(10)).toString()
+        ? parseFloat((parseFloat(process.issued_weight) || 0).toFixed(10)).toString()
         : "",
       scrap_weight:
         process.scrap_weight !== null && process.scrap_weight !== undefined
-          ? parseFloat(process.scrap_weight.toFixed(10)).toString()
+          ? parseFloat((parseFloat(process.scrap_weight) || 0).toFixed(10)).toString()
           : "",
       issue_pieces: process.issue_pieces || "",
       weight_unit: "g",
