@@ -626,7 +626,7 @@ const ProductionJobs = () => {
     );
 
   return (
-    <div className="p-6 relative">
+    <div className="p-6 relative flex flex-col h-full overflow-hidden">
       {toast && (
         <Toast
           message={toast.message}
@@ -635,7 +635,7 @@ const ProductionJobs = () => {
         />
       )}
 
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 tracking-tight">
             Production Floor
@@ -710,7 +710,7 @@ const ProductionJobs = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6 flex flex-col flex-1 min-h-0">
         <div className="p-4 border-b border-gray-100 flex gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 text-gray-400" size={18} />
@@ -758,7 +758,7 @@ const ProductionJobs = () => {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 text-gray-500 text-sm uppercase tracking-wider">
@@ -789,60 +789,42 @@ const ProductionJobs = () => {
                   onClick={() => openViewModal(p.job_number)}
                   className="hover:bg-blue-50/80 transition-all cursor-pointer group/row border-b border-gray-100"
                 >
-                  <td className="p-4">
-                    <div className="font-bold text-gray-800 text-base">
+                  <td className="py-2 px-3">
+                    <div className="font-bold text-gray-800 text-sm">
                       {p.job_number}
                     </div>
-                    {/* {p.employee && (
-                      <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="10"
-                          height="10"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="inline mr-1"
-                        >
-                          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        {p.employee}
-                      </div>
-                    )} */}
                     {p.description && (
                       <div
-                        className="text-xs text-gray-500 mt-1.5 truncate max-w-[150px]"
+                        className="text-xs text-gray-500 truncate max-w-[140px]"
                         title={p.description}
                       >
                         {p.description}
                       </div>
                     )}
                   </td>
-                  <td className="p-4 font-bold text-blue-800">{p.stage}</td>
-                  <td className="p-4 flex flex-col items-start gap-1">
-                    <span
-                      className={`px-2 py-1 rounded-md text-xs font-bold ${p.metal_type === "Gold" ? "bg-yellow-100 text-yellow-800" : "bg-gray-200 text-gray-700"}`}
-                    >
-                      {p.metal_type}
-                    </span>
-                    <span className="text-xs font-semibold text-gray-500">
-                      {p.status === "COMPLETED" && p.return_items && p.return_items.length > 0
-                        ? [...new Set(p.return_items.map((item) => item.category).filter(Boolean))].join(", ")
-                        : p.category}
-                    </span>
+                  <td className="py-2 px-3 font-bold text-blue-800 text-sm">{p.stage}</td>
+                  <td className="py-2 px-3">
+                    <div className="flex flex-col items-start gap-0.5">
+                      <span
+                        className={`px-2 py-0.5 rounded text-xs font-bold ${p.metal_type === "Gold" ? "bg-yellow-100 text-yellow-800" : "bg-gray-200 text-gray-700"}`}
+                      >
+                        {p.metal_type}
+                      </span>
+                      <span className="text-xs font-semibold text-gray-500">
+                        {p.status === "COMPLETED" && p.return_items && p.return_items.length > 0
+                          ? [...new Set(p.return_items.map((item) => item.category).filter(Boolean))].join(", ")
+                          : p.category}
+                      </span>
+                    </div>
                   </td>
-                  <td className="p-4">
+                  <td className="py-2 px-3">
                     <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold border ${p.status === "PENDING" ? "bg-orange-50 text-orange-700 border-orange-200" : p.status === "RUNNING" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"}`}
+                      className={`px-2 py-0.5 rounded-full text-xs font-bold border ${p.status === "PENDING" ? "bg-orange-50 text-orange-700 border-orange-200" : p.status === "RUNNING" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"}`}
                     >
                       {p.status}
                     </span>
                   </td>
-                  <td className="p-4 text-sm font-mono text-gray-700 whitespace-nowrap">
+                  <td className="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
                     <div>
                       <span className="text-gray-400">Iss:</span>{" "}
                       {formatWeight(
@@ -863,79 +845,58 @@ const ProductionJobs = () => {
                       </>
                     )}
                   </td>
-                  <td className="p-4">
-                    <div className="flex flex-col items-center gap-2">
-                      {p.status === "COMPLETED" && (
-                        <CheckCircle size={20} className="text-green-500" />
-                      )}
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {p.status === "PENDING" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openStartModal(p);
-                            }}
-                            className="bg-orange-500 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                          >
-                            <PlayCircle size={14} /> Start Process
-                          </button>
-                        )}
-                        {p.status === "RUNNING" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openCompleteModal(p);
-                            }}
-                            className="bg-blue-600 text-white px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                          >
-                            <ArrowRightCircle size={14} /> Complete Process
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditModal(p);
-                            }}
-                            className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                          >
-                            <Edit size={14} /> Edit
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteProcess(p);
-                            }}
-                            className="bg-red-50 text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                          >
-                            <Trash2 size={14} /> Delete
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRevertProcess(p);
-                            }}
-                            className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                            title="Revert Step & Re-Balance Stock"
-                          >
-                            <ArrowDownLeft size={14} /> Revert
-                          </button>
-                        )}
+                  <td className="py-2 px-3">
+                    <div className="flex items-center flex-wrap gap-1.5">
+                      {p.status === "PENDING" && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openViewModal(p.job_number);
-                          }}
-                          className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
+                          onClick={(e) => { e.stopPropagation(); openStartModal(p); }}
+                          className="bg-orange-500 text-white px-2 py-1 rounded-lg text-xs font-bold hover:bg-orange-600 active:scale-95 flex items-center gap-1 whitespace-nowrap"
                         >
-                          <Eye size={14} /> View
+                          <PlayCircle size={12} /> Start
                         </button>
-                      </div>
+                      )}
+                      {p.status === "RUNNING" && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openCompleteModal(p); }}
+                          className="bg-blue-600 text-white px-2 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 active:scale-95 flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <ArrowRightCircle size={12} /> Complete
+                        </button>
+                      )}
+                      {p.status === "COMPLETED" && (
+                        <CheckCircle size={16} className="text-green-500 shrink-0" />
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openViewModal(p.job_number); }}
+                        className="bg-white border border-gray-200 text-gray-600 hover:text-gray-800 hover:bg-gray-50 active:scale-95 flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
+                      >
+                        <Eye size={12} /> View
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEditModal(p); }}
+                          className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <Edit size={12} /> Edit
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteProcess(p); }}
+                          className="bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRevertProcess(p); }}
+                          className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center gap-1 whitespace-nowrap"
+                          title="Revert Step & Re-Balance Stock"
+                        >
+                          <ArrowDownLeft size={12} /> Revert
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
