@@ -104,6 +104,9 @@ const ProductionJobs = () => {
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "job_number", direction: "asc" });
+  const [activeTab, setActiveTab] = useState("incomplete");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const [createForm, setCreateForm] = useState({
     stage: "",
@@ -577,6 +580,18 @@ const ProductionJobs = () => {
       (p.job_name || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
+  const incompleteProcesses = filteredProcesses.filter(
+    (p) => p.status === "PENDING" || p.status === "RUNNING",
+  );
+  const completedProcesses = filteredProcesses.filter(
+    (p) => p.status === "COMPLETED",
+  );
+
+  const tabProcesses = activeTab === "incomplete" ? incompleteProcesses : completedProcesses;
+  const totalPages = Math.max(1, Math.ceil(tabProcesses.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pagedProcesses = tabProcesses.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   const reqPieces = false;
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0
@@ -704,10 +719,45 @@ const ProductionJobs = () => {
               placeholder="Search by Job Number or Name..."
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             />
           </div>
         </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100">
+          <button
+            onClick={() => { setActiveTab("incomplete"); setCurrentPage(1); }}
+            className={`flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all border-b-2 ${
+              activeTab === "incomplete"
+                ? "border-orange-500 text-orange-600 bg-orange-50/50"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Incomplete
+            <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+              activeTab === "incomplete" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-500"
+            }`}>
+              {incompleteProcesses.length}
+            </span>
+          </button>
+          <button
+            onClick={() => { setActiveTab("completed"); setCurrentPage(1); }}
+            className={`flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all border-b-2 ${
+              activeTab === "completed"
+                ? "border-green-500 text-green-600 bg-green-50/50"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Completed
+            <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+              activeTab === "completed" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+            }`}>
+              {completedProcesses.length}
+            </span>
+          </button>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -733,7 +783,7 @@ const ProductionJobs = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredProcesses.map((p) => (
+              {pagedProcesses.map((p) => (
                 <tr
                   key={`${p.stage}-${p.id}`}
                   onClick={() => openViewModal(p.job_number)}
@@ -892,12 +942,50 @@ const ProductionJobs = () => {
               ))}
             </tbody>
           </table>
-          {filteredProcesses.length === 0 && (
+          {pagedProcesses.length === 0 && (
             <div className="p-8 text-center text-gray-400">
-              No processes found.
+              {activeTab === "incomplete" ? "No incomplete jobs found." : "No completed jobs found."}
             </div>
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+            <span className="text-xs text-gray-500">
+              Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, tabProcesses.length)} of {tabProcesses.length} jobs
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                disabled={safePage === 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                ← Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                    page === safePage
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                disabled={safePage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CREATE MODAL */}
