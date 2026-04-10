@@ -14,7 +14,7 @@ const createMelting = async (req, res) => {
       return formatResponse(res, 400, false, "Invalid input. Issue size must be greater than 0.");
     }
     if (!isValidMetalType(metal_type)) {
-      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold 22K', 'Gold 24K', or 'Silver'.");
     }
 
     const currentStock = await stockService.getStockByMetal(metal_type);

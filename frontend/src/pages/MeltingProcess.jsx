@@ -43,7 +43,7 @@ const MeltingProcess = () => {
 
   // Form States
   const [startForm, setStartForm] = useState({
-    metal_type: "Gold",
+    metal_type: "Gold 24K",
     issue_weight: "",
     issue_pieces: "",
     weight_unit: "g",
@@ -132,9 +132,6 @@ const MeltingProcess = () => {
     }
 
     let finalWeight = parseFloat(startForm.issue_weight);
-    if (startForm.weight_unit === "kg") {
-      finalWeight *= 1000;
-    }
     const pieces = parseInt(startForm.issue_pieces) || 0;
 
     try {
@@ -153,7 +150,7 @@ const MeltingProcess = () => {
       showToast("Melting Started Successfully!", "success");
       setIsStartModalOpen(false);
       setStartForm({
-        metal_type: "Gold",
+        metal_type: "Gold 24K",
         issue_weight: "",
         issue_pieces: "",
         weight_unit: "g",
@@ -173,11 +170,6 @@ const MeltingProcess = () => {
 
     let retWeight = parseFloat(completeForm.return_weight) || 0;
     let scrWeight = parseFloat(completeForm.scrap_weight) || 0;
-
-    if (completeForm.weight_unit === "kg") {
-      retWeight *= 1000;
-      scrWeight *= 1000;
-    }
 
     if (retWeight <= 0) {
       triggerError();
@@ -201,7 +193,7 @@ const MeltingProcess = () => {
         return_weight: "",
         scrap_weight: "",
         return_pieces: "",
-        weight_unit: selectedMelt.metal_type === "Silver" ? "kg" : "g",
+        weight_unit: "g",
         description: "",
       });
       setSelectedMelt(null);
@@ -218,7 +210,7 @@ const MeltingProcess = () => {
       return_weight: "",
       scrap_weight: "",
       return_pieces: "",
-      weight_unit: melt.metal_type === "Silver" ? "kg" : "g",
+      weight_unit: "g",
       description: melt.description || "",
     });
     setIsCompleteModalOpen(true);
@@ -270,9 +262,6 @@ const MeltingProcess = () => {
       showToast("Invalid edited weight", "error");
       return;
     }
-    const isKg = editForm.weight_unit === "kg";
-    if (isKg) issueW *= 1000;
-
     let payload = {
       issued_weight: issueW,
       issue_pieces: editForm.issue_pieces,
@@ -287,11 +276,6 @@ const MeltingProcess = () => {
     if (selectedMelt?.status === "COMPLETED") {
       let retW = parseFloat(editForm.return_weight) || 0;
       let scrW = parseFloat(editForm.scrap_weight) || 0;
-
-      if (isKg) {
-        retW *= 1000;
-        scrW *= 1000;
-      }
 
       // Safety check: is the loss negative on grammatical scale?
       if (issueW - retW - scrW < 0) {
@@ -316,21 +300,19 @@ const MeltingProcess = () => {
 
   const openEditModal = (melt) => {
     setSelectedMelt(melt);
-    const isSil = melt.metal_type === "Silver";
-    const div = isSil ? 1000 : 1;
     setEditForm({
-      issued_weight: parseFloat((melt.issue_weight / div).toFixed(10)),
+      issued_weight: parseFloat((parseFloat(melt.issue_weight) || 0).toFixed(10)),
       return_weight:
         melt.return_weight !== null
-          ? parseFloat((melt.return_weight / div).toFixed(10))
+          ? parseFloat((parseFloat(melt.return_weight) || 0).toFixed(10))
           : "",
       scrap_weight:
         melt.scrap_weight !== null
-          ? parseFloat((melt.scrap_weight / div).toFixed(10))
+          ? parseFloat((parseFloat(melt.scrap_weight) || 0).toFixed(10))
           : "",
       issue_pieces: melt.issue_pieces || "",
       return_pieces: melt.return_pieces || "",
-      weight_unit: isSil ? "kg" : "g",
+      weight_unit: "g",
       description: melt.description || "",
       employee: melt.employee || "",
     });
@@ -346,11 +328,6 @@ const MeltingProcess = () => {
   const issueW = selectedMelt ? parseFloat(selectedMelt.issue_weight) || 0 : 0;
   let returnW = parseFloat(completeForm.return_weight) || 0;
   let scrapW = parseFloat(completeForm.scrap_weight) || 0;
-
-  if (completeForm.weight_unit === "kg") {
-    returnW *= 1000;
-    scrapW *= 1000;
-  }
 
   // Calculate and format strictly to 3 decimals to avoid JS floating point bugs
   const liveLoss = parseFloat((issueW - (returnW + scrapW)).toFixed(10));
@@ -413,7 +390,7 @@ const MeltingProcess = () => {
                 className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative overflow-hidden group cursor-pointer"
               >
                 <div
-                  className={`absolute top-0 left-0 w-full h-1 ${melt.metal_type === "Gold" ? "bg-yellow-400" : "bg-gray-400"}`}
+                  className={`absolute top-0 left-0 w-full h-1 ${melt.metal_type?.startsWith("Gold") ? "bg-yellow-400" : "bg-gray-400"}`}
                 ></div>
 
                 <div className="flex justify-between items-start mb-4 mt-2">
@@ -422,7 +399,7 @@ const MeltingProcess = () => {
                       Process #{melt.id}
                     </p>
                     <h3
-                      className={`text-xl font-bold ${melt.metal_type === "Gold" ? "text-yellow-600" : "text-gray-600"}`}
+                      className={`text-xl font-bold ${melt.metal_type?.startsWith("Gold") ? "text-yellow-600" : "text-gray-600"}`}
                     >
                       {melt.metal_type} Melt
                     </h3>
@@ -494,7 +471,8 @@ const MeltingProcess = () => {
                     setStartForm({ ...startForm, metal_type: e.target.value })
                   }
                 >
-                  <option value="Gold">Gold</option>
+                  <option value="Gold 22K">Gold 22K</option>
+                  <option value="Gold 24K">Gold 24K</option>
                   <option value="Silver">Silver</option>
                 </select>
                 <ArrowDownLeft
@@ -527,7 +505,6 @@ const MeltingProcess = () => {
                   }
                 >
                   <option value="g">g</option>
-                  <option value="kg">kg</option>
                 </select>
               </div>
             </div>
@@ -619,13 +596,11 @@ const MeltingProcess = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               <div className="col-span-1 bg-blue-50 px-4 py-3 rounded-xl border border-blue-100 flex justify-between items-center h-full">
                 <span className="text-blue-800 font-bold text-xs uppercase tracking-wide">
-                  Total Issued ({completeForm?.weight_unit || "g"})
+                  Total Issued (g)
                 </span>
                 <span className="text-xl font-bold text-blue-900">
                   {parseFloat(
-                    (
-                      issueW / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(10),
+                    issueW.toFixed(10),
                   )}
                 </span>
               </div>
@@ -640,18 +615,9 @@ const MeltingProcess = () => {
                     onClick={() =>
                       setCompleteForm({ ...completeForm, weight_unit: "g" })
                     }
-                    className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                    className="flex-1 py-1.5 text-sm font-bold rounded-md transition-colors bg-white text-gray-800 shadow-sm"
                   >
                     Grams (g)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCompleteForm({ ...completeForm, weight_unit: "kg" })
-                    }
-                    className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                  >
-                    Kilogram (kg)
                   </button>
                 </div>
               </div>
@@ -752,10 +718,7 @@ const MeltingProcess = () => {
                   <span className="text-3xl font-extrabold text-center">
                     {isLossNegative ? "+" : ""}
                     {parseFloat(
-                      (
-                        Math.abs(liveLoss) /
-                        (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                      ).toFixed(10),
+                      Math.abs(liveLoss).toFixed(10),
                     )}
                   </span>
                 </div>
@@ -936,7 +899,6 @@ const MeltingProcess = () => {
                   }
                 >
                   <option value="g">g</option>
-                  <option value="kg">kg</option>
                 </select>
               </div>
             </div>

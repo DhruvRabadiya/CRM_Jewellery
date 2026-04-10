@@ -3,11 +3,9 @@ import { Save, ArrowDownLeft } from "lucide-react";
 import { editPurchase } from "../../api/stockService";
 
 const EditStockForm = ({ purchase, onSuccess, onCancel, showToast }) => {
-  const isSilver = purchase.metal_type === "Silver";
-  
   const [formData, setFormData] = useState({
-    weight: isSilver ? (purchase.weight / 1000).toString() : purchase.weight.toString(),
-    weight_unit: isSilver ? "kg" : "g",
+    weight: purchase.weight.toString(),
+    weight_unit: "g",
     description: purchase.description || "",
   });
   
@@ -24,9 +22,6 @@ const EditStockForm = ({ purchase, onSuccess, onCancel, showToast }) => {
     }
 
     let finalWeight = parseFloat(formData.weight);
-    if (formData.weight_unit === "kg") {
-      finalWeight *= 1000;
-    }
 
     setIsSubmitting(true);
     try {
@@ -87,7 +82,6 @@ const EditStockForm = ({ purchase, onSuccess, onCancel, showToast }) => {
             }
           >
             <option value="g">g</option>
-            <option value="kg">kg</option>
           </select>
         </div>
       </div>

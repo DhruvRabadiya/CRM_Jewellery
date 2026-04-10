@@ -4,7 +4,7 @@ import { addStock } from "../../api/stockService";
 
 const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
   const [formData, setFormData] = useState({
-    metal_type: "Gold",
+    metal_type: "Gold 24K",
     weight: "",
     weight_unit: "g",
     description: "",
@@ -22,9 +22,6 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
     }
 
     let finalWeight = parseFloat(formData.weight);
-    if (formData.weight_unit === "kg") {
-      finalWeight *= 1000;
-    }
 
     setIsSubmitting(true);
     try {
@@ -57,7 +54,8 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
               setFormData({ ...formData, metal_type: e.target.value })
             }
           >
-            <option value="Gold">Gold</option>
+            <option value="Gold 22K">Gold 22K</option>
+            <option value="Gold 24K">Gold 24K</option>
             <option value="Silver">Silver</option>
           </select>
           <ArrowDownLeft
@@ -90,7 +88,6 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
             }
           >
             <option value="g">g</option>
-            <option value="kg">kg</option>
           </select>
         </div>
       </div>

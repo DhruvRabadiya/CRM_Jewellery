@@ -14,7 +14,7 @@ const formatResponse = (res, statusCode, success, message, data = null) => {
   });
 };
 
-const VALID_METAL_TYPES = ["Gold", "Silver"];
+const VALID_METAL_TYPES = ["Gold 22K", "Gold 24K", "Silver"];
 
 const isValidMetalType = (metalType) => {
   return VALID_METAL_TYPES.includes(metalType);

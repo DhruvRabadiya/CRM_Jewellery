@@ -15,7 +15,7 @@ const StockManagement = () => {
   const [stock, setStock] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [ledger, setLedger] = useState([]);
-  const [activeTab, setActiveTab] = useState("Gold");
+  const [activeTab, setActiveTab] = useState("Gold 22K");
   const [loading, setLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -117,16 +117,40 @@ const StockManagement = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Gold Card */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Gold 22K Card */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 hover:border-amber-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group cursor-default">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-amber-600 font-black text-sm tracking-wide mb-2 uppercase">
+                Gold 22K Inventory
+              </p>
+              <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-amber-600 transition-colors">
+                {parseFloat((stock.gold_22k?.opening_stock || 0).toFixed(10))}{" "}
+                <span className="text-xl font-medium text-gray-400">g</span>
+              </h2>
+            </div>
+            <div className="p-4 bg-amber-50 rounded-2xl text-amber-500 group-hover:bg-amber-100 transition-colors">
+              <Coins size={32} />
+            </div>
+          </div>
+          <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
+            <span className="text-gray-500 font-bold">In Process</span>
+            <span className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
+              {parseFloat((stock.gold_22k?.inprocess_weight || 0).toFixed(10))} g
+            </span>
+          </div>
+        </div>
+
+        {/* Gold 24K Card */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 hover:border-yellow-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group cursor-default">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-yellow-600 font-black text-sm tracking-wide mb-2 uppercase">
-                Gold Inventory
+                Gold 24K Inventory
               </p>
               <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-yellow-600 transition-colors">
-                {parseFloat((stock.gold?.opening_stock || 0).toFixed(10))}{" "}
+                {parseFloat((stock.gold_24k?.opening_stock || 0).toFixed(10))}{" "}
                 <span className="text-xl font-medium text-gray-400">g</span>
               </h2>
             </div>
@@ -137,7 +161,7 @@ const StockManagement = () => {
           <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
             <span className="text-gray-500 font-bold">In Process</span>
             <span className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
-              {parseFloat((stock.gold?.inprocess_weight || 0).toFixed(10))} g
+              {parseFloat((stock.gold_24k?.inprocess_weight || 0).toFixed(10))} g
             </span>
           </div>
         </div>
@@ -151,9 +175,9 @@ const StockManagement = () => {
               </p>
               <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-blue-600 transition-colors">
                 {parseFloat(
-                  (stock.silver?.opening_stock / 1000 || 0).toFixed(10),
+                  (stock.silver?.opening_stock || 0).toFixed(10),
                 )}{" "}
-                <span className="text-xl font-medium text-gray-400">kg</span>
+                <span className="text-xl font-medium text-gray-400">g</span>
               </h2>
             </div>
             <div className="p-4 bg-gray-50 rounded-2xl text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
@@ -163,8 +187,8 @@ const StockManagement = () => {
           <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
             <span className="text-gray-500 font-bold">In Process</span>
             <span className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
-              {parseFloat((stock.silver?.inprocess_weight / 1000 || 0).toFixed(10))}{" "}
-              kg
+              {parseFloat((stock.silver?.inprocess_weight || 0).toFixed(10))}{" "}
+              g
             </span>
           </div>
         </div>
@@ -180,10 +204,16 @@ const StockManagement = () => {
           </div>
           <div className="flex bg-gray-100 rounded-lg p-1 text-sm font-semibold">
             <button
-              onClick={() => setActiveTab("Gold")}
-              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("Gold 22K")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 22K" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
-              Gold
+              Gold 22K
+            </button>
+            <button
+              onClick={() => setActiveTab("Gold 24K")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 24K" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Gold 24K
             </button>
             <button
               onClick={() => setActiveTab("Silver")}
@@ -234,10 +264,8 @@ const StockManagement = () => {
                       </td>
                       <td className="p-4 text-sm font-black text-green-600 text-right">
                         +
-                        {activeTab === "Gold"
-                          ? parseFloat((txn.weight || 0).toFixed(10))
-                          : parseFloat((txn.weight / 1000 || 0).toFixed(10))}{" "}
-                        {activeTab === "Gold" ? "g" : "kg"}
+                        {parseFloat((txn.weight || 0).toFixed(10))}{" "}
+                        g
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex justify-center gap-2">
@@ -271,10 +299,16 @@ const StockManagement = () => {
           </div>
           <div className="flex bg-gray-100 rounded-lg p-1 text-sm font-semibold">
             <button
-              onClick={() => setActiveTab("Gold")}
-              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("Gold 22K")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 22K" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
-              Gold
+              Gold 22K
+            </button>
+            <button
+              onClick={() => setActiveTab("Gold 24K")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 24K" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Gold 24K
             </button>
             <button
               onClick={() => setActiveTab("Silver")}
@@ -340,10 +374,8 @@ const StockManagement = () => {
                       </td>
                       <td className="p-4 text-sm font-black text-right text-red-600">
                         -
-                        {activeTab === "Gold"
-                          ? parseFloat((txn.weight || 0).toFixed(10))
-                          : parseFloat((txn.weight / 1000 || 0).toFixed(10))}{" "}
-                        {activeTab === "Gold" ? "g" : "kg"}
+                        {parseFloat((txn.weight || 0).toFixed(10))}{" "}
+                        g
                       </td>
                     </tr>
                   ))
