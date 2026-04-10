@@ -117,7 +117,7 @@ const FinishedGoods = () => {
               <span className={`w-2.5 h-8 rounded-full ${c.dot} flex-shrink-0`} />
               <div className="min-w-0">
                 <p className="text-xs font-bold text-gray-500 uppercase truncate">{metal}</p>
-                <p className="text-sm font-black text-gray-800">{pieces} <span className="text-gray-400 font-medium">pcs</span> · {weight.toFixed(2)}<span className="text-gray-400 text-xs">g</span></p>
+                <p className="text-sm font-black text-gray-800">{pieces} <span className="text-gray-400 font-medium">pcs</span> · {weight.toFixed(3)}<span className="text-gray-400 text-xs">g</span></p>
               </div>
             </div>
           );
@@ -159,11 +159,11 @@ const FinishedGoods = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="text-left py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Product</th>
-                    <th className="text-center py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Metal</th>
-                    <th className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Pieces</th>
-                    <th className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Total Weight</th>
-                    <th className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Avg. Weight</th>
+                    <th scope="col" className="text-left py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Product</th>
+                    <th scope="col" className="text-center py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Metal</th>
+                    <th scope="col" className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Pieces</th>
+                    <th scope="col" className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Total Weight</th>
+                    <th scope="col" className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Avg. Weight</th>
                   </tr>
                 </thead>
                 <tbody>

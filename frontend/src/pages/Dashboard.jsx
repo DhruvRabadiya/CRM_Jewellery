@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { getStockData, getLossStats } from "../api/stockService";
 import { getCombinedProcesses } from "../api/jobService";
 import {
@@ -10,6 +10,13 @@ import {
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
 import AddStockForm from "../components/forms/AddStockForm";
+
+const TAB_CONFIG = {
+  "Gold 22K": { dotClass: "bg-amber-400", activeTab: "bg-amber-100 text-amber-900 ring-2 ring-amber-300", stageText: "text-amber-800" },
+  "Gold 24K": { dotClass: "bg-yellow-400", activeTab: "bg-yellow-100 text-yellow-900 ring-2 ring-yellow-300", stageText: "text-yellow-800" },
+  Silver:     { dotClass: "bg-gray-400",   activeTab: "bg-gray-200 text-gray-900 ring-2 ring-gray-400",     stageText: "text-gray-800" },
+};
+const STAGES = ["Melting", "Rolling", "Press", "TPP", "Packing"];
 
 const Dashboard = () => {
   const [stock, setStock] = useState(null);
@@ -94,6 +101,20 @@ const Dashboard = () => {
 
   const fmtWeight = (v) => parseFloat((v || 0).toFixed(4));
 
+  const stockCards = useMemo(() => {
+    const gold22k = stock?.gold_22k || {};
+    const gold24k = stock?.gold_24k || {};
+    const silver = stock?.silver || {};
+    return [
+      { key: "Gold 22K", data: gold22k, dot: "bg-amber-400", bg: "from-amber-50 to-orange-50", border: "border-amber-200", text: "text-amber-700", hoverBorder: "hover:border-amber-400" },
+      { key: "Gold 24K", data: gold24k, dot: "bg-yellow-400", bg: "from-yellow-50 to-amber-50", border: "border-yellow-200", text: "text-yellow-700", hoverBorder: "hover:border-yellow-400" },
+      { key: "Silver",   data: silver,  dot: "bg-gray-400",   bg: "from-gray-50 to-slate-100",  border: "border-gray-200",   text: "text-gray-600",   hoverBorder: "hover:border-blue-400" },
+    ];
+  }, [stock]);
+
+  const currentTabCfg = TAB_CONFIG[activeTab];
+  const currentMetrics = processMetrics[activeTab] || initialStageMetrics();
+
   if (loading)
     return (
       <div className="p-10 text-center animate-pulse">
@@ -102,26 +123,6 @@ const Dashboard = () => {
     );
   if (!stock)
     return <div className="p-10 text-center text-red-500">API Error</div>;
-
-  const gold22k = stock.gold_22k || {};
-  const gold24k = stock.gold_24k || {};
-  const silver = stock.silver || {};
-
-  const stockCards = [
-    { key: "Gold 22K", data: gold22k, dot: "bg-amber-400", bg: "from-amber-50 to-orange-50", border: "border-amber-200", text: "text-amber-700", hoverBorder: "hover:border-amber-400" },
-    { key: "Gold 24K", data: gold24k, dot: "bg-yellow-400", bg: "from-yellow-50 to-amber-50", border: "border-yellow-200", text: "text-yellow-700", hoverBorder: "hover:border-yellow-400" },
-    { key: "Silver",   data: silver,  dot: "bg-gray-400",   bg: "from-gray-50 to-slate-100",  border: "border-gray-200",   text: "text-gray-600",   hoverBorder: "hover:border-blue-400" },
-  ];
-
-  const tabConfig = {
-    "Gold 22K": { accent: "amber", dotClass: "bg-amber-400", textClass: "text-amber-900", activeTab: "bg-amber-100 text-amber-900 ring-2 ring-amber-300", stageText: "text-amber-800" },
-    "Gold 24K": { accent: "yellow", dotClass: "bg-yellow-400", textClass: "text-yellow-900", activeTab: "bg-yellow-100 text-yellow-900 ring-2 ring-yellow-300", stageText: "text-yellow-800" },
-    Silver:     { accent: "gray",   dotClass: "bg-gray-400",   textClass: "text-gray-800",    activeTab: "bg-gray-200 text-gray-900 ring-2 ring-gray-400",     stageText: "text-gray-800" },
-  };
-
-  const stages = ["Melting", "Rolling", "Press", "TPP", "Packing"];
-  const currentTabCfg = tabConfig[activeTab];
-  const currentMetrics = processMetrics[activeTab] || initialStageMetrics();
 
   return (
     <div className="p-4 sm:p-6 relative max-w-7xl mx-auto">
@@ -188,17 +189,17 @@ const Dashboard = () => {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         {/* Tab bar */}
         <div className="flex items-center gap-1 px-4 pt-4 pb-2 border-b border-gray-100 bg-gray-50/50">
-          {Object.keys(tabConfig).map((tab) => (
+          {Object.keys(TAB_CONFIG).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
                 activeTab === tab
-                  ? tabConfig[tab].activeTab
+                  ? TAB_CONFIG[tab].activeTab
                   : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${tabConfig[tab].dotClass}`} />
+              <span className={`w-2 h-2 rounded-full ${TAB_CONFIG[tab].dotClass}`} />
               {tab}
             </button>
           ))}
@@ -221,7 +222,7 @@ const Dashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {stages.map((stage, i) => (
+                    {STAGES.map((stage, i) => (
                       <tr key={stage} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition-colors`}>
                         <td className={`py-2 px-3 font-bold ${currentTabCfg.stageText}`}>{stage}</td>
                         <td className="py-2 px-3 text-right font-semibold text-gray-700">{fmtWeight(currentMetrics[stage]?.pending)}g</td>
