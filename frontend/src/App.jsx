@@ -6,6 +6,7 @@ import StockManagement from "./pages/StockManagement";
 import ProductionJobs from "./pages/ProductionJobs";
 import FinishedGoods from "./pages/FinishedGoods";
 import JobHistory from "./pages/JobHistory";
+import MeltingProcess from "./pages/MeltingProcess";
 import Login from "./pages/Login";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import ModeSelection from "./pages/ModeSelection";
