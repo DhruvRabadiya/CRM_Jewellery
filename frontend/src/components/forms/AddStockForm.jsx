@@ -4,7 +4,7 @@ import { addStock } from "../../api/stockService";
 
 const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
   const [formData, setFormData] = useState({
-    metal_type: "Gold",
+    metal_type: "Gold 24K",
     weight: "",
     weight_unit: "g",
     description: "",
