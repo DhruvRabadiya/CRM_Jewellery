@@ -4,7 +4,7 @@ import { getFinishedGoods } from "../api/finishedGoodsService";
 import Toast from "../components/Toast";
 
 const FinishedGoods = () => {
-  const [inventory, setInventory] = useState({ Gold: [], Silver: [] });
+  const [inventory, setInventory] = useState({ "Gold 22K": [], "Gold 24K": [], Silver: [] });
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -18,7 +18,7 @@ const FinishedGoods = () => {
       const result = await getFinishedGoods();
       if (result.success) {
         // Group data by metal type
-        const grouped = { Gold: [], Silver: [] };
+        const grouped = { "Gold 22K": [], "Gold 24K": [], Silver: [] };
         result.data.forEach((item) => {
           if (grouped[item.metal_type]) {
             grouped[item.metal_type].push(item);
@@ -123,23 +123,48 @@ const FinishedGoods = () => {
         </div>
       </div>
 
-      {/* GOLD SECTION */}
+      {/* GOLD 22K SECTION */}
       <div className="mb-12">
-        <h2 className="text-xl font-black text-yellow-600 uppercase tracking-widest mb-6 flex items-center gap-2">
-          <div className="w-2 h-6 bg-yellow-400 rounded-full"></div> Gold
+        <h2 className="text-xl font-black text-amber-600 uppercase tracking-widest mb-6 flex items-center gap-2">
+          <div className="w-2 h-6 bg-amber-400 rounded-full"></div> Gold 22K
           Products
         </h2>
-        {inventory.Gold.length === 0 ? (
-          <div className="bg-yellow-50/50 p-8 rounded-2xl border border-dashed border-yellow-200 text-center text-yellow-700">
+        {inventory["Gold 22K"].length === 0 ? (
+          <div className="bg-amber-50/50 p-8 rounded-2xl border border-dashed border-amber-200 text-center text-amber-700">
             <p className="font-semibold">
-              No finished gold items currently in stock.
+              No finished Gold 22K items currently in stock.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {inventory.Gold.map((item, idx) => (
+            {inventory["Gold 22K"].map((item, idx) => (
               <ProductCard
-                key={`gold-${idx}`}
+                key={`gold22k-${idx}`}
+                item={item}
+                colorTheme="amber"
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* GOLD 24K SECTION */}
+      <div className="mb-12">
+        <h2 className="text-xl font-black text-yellow-600 uppercase tracking-widest mb-6 flex items-center gap-2">
+          <div className="w-2 h-6 bg-yellow-400 rounded-full"></div> Gold 24K
+          Products
+        </h2>
+        {inventory["Gold 24K"].length === 0 ? (
+          <div className="bg-yellow-50/50 p-8 rounded-2xl border border-dashed border-yellow-200 text-center text-yellow-700">
+            <p className="font-semibold">
+              No finished Gold 24K items currently in stock.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {inventory["Gold 24K"].map((item, idx) => (
+              <ProductCard
+                key={`gold24k-${idx}`}
                 item={item}
                 colorTheme="yellow"
               />

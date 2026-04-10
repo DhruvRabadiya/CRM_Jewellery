@@ -33,7 +33,23 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const sizeOptions = {
-  Gold: [
+  "Gold 22K": [
+    "0.05gm",
+    "0.100gm",
+    "0.250gm",
+    "0.500gm",
+    "1 gm",
+    "2 gm",
+    "5 gm",
+    "10 gm",
+    "20 gm",
+    "25 gm",
+    "50 gm",
+    "100 gm",
+    "Mix",
+    "Other",
+  ],
+  "Gold 24K": [
     "0.05gm",
     "0.100gm",
     "0.250gm",
@@ -804,7 +820,7 @@ const ProductionJobs = () => {
                   <td className="py-2 px-3">
                     <div className="flex flex-col items-start gap-0.5">
                       <span
-                        className={`px-2 py-0.5 rounded text-xs font-bold ${p.metal_type === "Gold" ? "bg-yellow-100 text-yellow-800" : "bg-gray-200 text-gray-700"}`}
+                        className={`px-2 py-0.5 rounded text-xs font-bold ${p.metal_type?.startsWith("Gold") ? "bg-yellow-100 text-yellow-800" : "bg-gray-200 text-gray-700"}`}
                       >
                         {p.metal_type}
                       </span>
@@ -1001,7 +1017,8 @@ const ProductionJobs = () => {
                   }
                 >
                   <option value="" disabled>Select Metal</option>
-                  <option value="Gold">Gold</option>
+                  <option value="Gold 22K">Gold 22K</option>
+                  <option value="Gold 24K">Gold 24K</option>
                   <option value="Silver">Silver</option>
                 </select>
             </div>

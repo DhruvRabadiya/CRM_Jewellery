@@ -1,6 +1,7 @@
 module.exports = {
   METAL_TYPES: {
-    GOLD: "Gold",
+    GOLD_22K: "Gold 22K",
+    GOLD_24K: "Gold 24K",
     SILVER: "Silver",
   },
   STATUS: {

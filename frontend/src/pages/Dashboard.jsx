@@ -25,7 +25,8 @@ const Dashboard = () => {
   });
 
   const [processMetrics, setProcessMetrics] = useState({
-    Gold: initialStageMetrics(),
+    "Gold 22K": initialStageMetrics(),
+    "Gold 24K": initialStageMetrics(),
     Silver: initialStageMetrics(),
   });
   const [loading, setLoading] = useState(true);
@@ -49,7 +50,8 @@ const Dashboard = () => {
       if (lossRes.success) setLossStats(lossRes.data);
       if (procRes.success) {
         const metrics = {
-          Gold: initialStageMetrics(),
+          "Gold 22K": initialStageMetrics(),
+          "Gold 24K": initialStageMetrics(),
           Silver: initialStageMetrics(),
         };
         procRes.data.forEach((p) => {
@@ -116,8 +118,15 @@ const Dashboard = () => {
   if (!stock)
     return <div className="p-10 text-center text-red-500">API Error</div>;
 
-  const gold = stock.gold || {};
+  const gold22k = stock.gold_22k || {};
+  const gold24k = stock.gold_24k || {};
   const silver = stock.silver || {};
+
+  const metalSections = [
+    { key: "Gold 22K", data: gold22k, label: "Gold 22K Reserves, Pools & Analytics", accent: "amber", barColor: "bg-amber-400", borderColor: "border-amber-100", hoverBorder: "hover:border-amber-400", gradient: "from-amber-50 to-orange-50", textColor: "text-amber-900", stockLabel: "text-amber-700" },
+    { key: "Gold 24K", data: gold24k, label: "Gold 24K Reserves, Pools & Analytics", accent: "yellow", barColor: "bg-yellow-400", borderColor: "border-yellow-100", hoverBorder: "hover:border-yellow-400", gradient: "from-yellow-50 to-orange-50", textColor: "text-yellow-900", stockLabel: "text-yellow-700" },
+    { key: "Silver", data: silver, label: "Silver Reserves, Pools & Analytics", accent: "gray", barColor: "bg-gray-400", borderColor: "border-gray-200", hoverBorder: "hover:border-blue-400", gradient: "from-gray-50 to-slate-100", textColor: "text-gray-800", stockLabel: "text-gray-500" },
+  ];
 
   return (
     <div className="p-6 relative max-w-7xl mx-auto">
@@ -158,187 +167,81 @@ const Dashboard = () => {
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8 mt-4">
-        {/* GOLD POOLS */}
-        <div className="bg-linear-to-br from-yellow-50 to-orange-50 p-6 rounded-3xl shadow-sm border-2 border-yellow-100 hover:border-yellow-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-yellow-400 w-3 h-8 rounded-full"></div>
-            <h2 className="text-xl font-black text-yellow-900 tracking-tight">
-              Gold Reserves, Pools & Analytics
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-yellow-200/50">
-              <p className="text-xs font-bold text-yellow-700 uppercase">
-                Opening Stock
-              </p>
-              <p className="text-2xl font-black text-gray-800">
-                {parseFloat((gold.opening_stock || 0).toFixed(10))}g
-              </p>
+        {metalSections.map((section) => (
+          <div key={section.key} className={`bg-linear-to-br ${section.gradient} p-6 rounded-3xl shadow-sm border-2 ${section.borderColor} ${section.hoverBorder} hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className={`${section.barColor} w-3 h-8 rounded-full`}></div>
+              <h2 className={`text-xl font-black ${section.textColor} tracking-tight`}>
+                {section.label}
+              </h2>
             </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
-              <p className="text-xs font-bold text-blue-800 uppercase">
-                In Process
-              </p>
-              <p className="text-2xl font-black text-blue-700">
-                {parseFloat((gold.inprocess_weight || 0).toFixed(10))}g
-              </p>
-            </div>
-
-          </div>
-          <p className="text-xs font-bold text-yellow-600 uppercase tracking-widest mb-3 mt-4">
-            Stage Analytics
-          </p>
-          <div className="space-y-3 mb-4">
-            {[
-              { stage: "Melting" },
-              { stage: "Rolling" },
-              { stage: "Press" },
-              { stage: "TPP" },
-              { stage: "Packing" },
-            ].map((s) => (
-              <div
-                key={s.stage}
-                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-yellow-200/50 hover:border-yellow-400 hover:bg-white transition-all cursor-default"
-              >
-                <div className="flex items-center justify-start pl-2 font-bold text-yellow-900 text-sm">
-                  {s.stage}
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-gray-500 font-bold">
-                    Pending
-                  </p>
-                  <p className="font-black text-gray-800 text-sm">
-                    {parseFloat(
-                      (processMetrics.Gold[s.stage]?.pending || 0).toFixed(10),
-                    )}
-                    g
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-blue-500 font-bold">
-                    Running
-                  </p>
-                  <p className="font-black text-blue-800 text-sm">
-                    {parseFloat(
-                      (processMetrics.Gold[s.stage]?.running || 0).toFixed(10),
-                    )}
-                    g
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-green-500 font-bold">
-                    Completed
-                  </p>
-                  <p className="font-black text-green-700 text-sm">
-                    {parseFloat(
-                      (processMetrics.Gold[s.stage]?.completed || 0).toFixed(10),
-                    )}
-                    g
-                  </p>
-                </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200/50">
+                <p className={`text-xs font-bold ${section.stockLabel} uppercase`}>
+                  Opening Stock
+                </p>
+                <p className="text-2xl font-black text-gray-800">
+                  {parseFloat((section.data.opening_stock || 0).toFixed(10))}g
+                </p>
               </div>
-            ))}
-          </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
-            Loss Analytics
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            {renderLossMetric("Day Loss", calculateLossFrame(1, "Gold"), false)}
-            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Gold"), false)}
-            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Gold"), false)}
-          </div>
-        </div>
-
-        {/* SILVER POOLS */}
-        <div className="bg-linear-to-br from-gray-50 to-slate-100 p-6 rounded-3xl shadow-sm border-2 border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-gray-400 w-3 h-8 rounded-full"></div>
-            <h2 className="text-xl font-black text-gray-800 tracking-tight">
-              Silver Reserves, Pools & Analytics
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200/50">
-              <p className="text-xs font-bold text-gray-500 uppercase">
-                Opening Stock
-              </p>
-              <p className="text-2xl font-black text-gray-700">
-                {parseFloat((silver.opening_stock || 0).toFixed(10))}g
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
-              <p className="text-xs font-bold text-blue-800 uppercase">
-                In Process
-              </p>
-              <p className="text-2xl font-black text-blue-700">
-                {parseFloat((silver.inprocess_weight || 0).toFixed(10))}g
-              </p>
-            </div>
-
-          </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
-            Stage Analytics
-          </p>
-          <div className="space-y-3 mb-4">
-            {[
-              { stage: "Melting" },
-              { stage: "Rolling" },
-              { stage: "Press" },
-              { stage: "TPP" },
-              { stage: "Packing" },
-            ].map((s) => (
-              <div
-                key={s.stage}
-                className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-gray-200/50 hover:border-blue-400 hover:bg-white transition-all cursor-default"
-              >
-                <div className="flex items-center justify-start pl-2 font-bold text-gray-800 text-sm">
-                  {s.stage}
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-gray-500 font-bold">
-                    Pending
-                  </p>
-                  <p className="font-black text-gray-700 text-sm">
-                    {parseFloat(
-                      (processMetrics.Silver[s.stage]?.pending || 0).toFixed(10),
-                    )}
-                    g
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-blue-500 font-bold">
-                    Running
-                  </p>
-                  <p className="font-black text-blue-800 text-sm">
-                    {parseFloat(
-                      (processMetrics.Silver[s.stage]?.running || 0).toFixed(10),
-                    )}
-                    g
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-green-500 font-bold">
-                    Completed
-                  </p>
-                  <p className="font-black text-green-700 text-sm">
-                    {parseFloat(
-                      (processMetrics.Silver[s.stage]?.completed || 0).toFixed(10),
-                    )}
-                    g
-                  </p>
-                </div>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
+                <p className="text-xs font-bold text-blue-800 uppercase">
+                  In Process
+                </p>
+                <p className="text-2xl font-black text-blue-700">
+                  {parseFloat((section.data.inprocess_weight || 0).toFixed(10))}g
+                </p>
               </div>
-            ))}
+            </div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
+              Stage Analytics
+            </p>
+            <div className="space-y-3 mb-4">
+              {[
+                { stage: "Melting" },
+                { stage: "Rolling" },
+                { stage: "Press" },
+                { stage: "TPP" },
+                { stage: "Packing" },
+              ].map((s) => (
+                <div
+                  key={s.stage}
+                  className="grid grid-cols-4 gap-2 text-center bg-white/60 p-3 rounded-xl border-2 border-gray-200/50 hover:border-blue-400 hover:bg-white transition-all cursor-default"
+                >
+                  <div className={`flex items-center justify-start pl-2 font-bold ${section.textColor} text-sm`}>
+                    {s.stage}
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-gray-500 font-bold">Pending</p>
+                    <p className="font-black text-gray-800 text-sm">
+                      {parseFloat((processMetrics[section.key]?.[s.stage]?.pending || 0).toFixed(10))}g
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-blue-500 font-bold">Running</p>
+                    <p className="font-black text-blue-800 text-sm">
+                      {parseFloat((processMetrics[section.key]?.[s.stage]?.running || 0).toFixed(10))}g
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-green-500 font-bold">Completed</p>
+                    <p className="font-black text-green-700 text-sm">
+                      {parseFloat((processMetrics[section.key]?.[s.stage]?.completed || 0).toFixed(10))}g
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
+              Loss Analytics
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {renderLossMetric("Day Loss", calculateLossFrame(1, section.key), false)}
+              {renderLossMetric("Wk Loss", calculateLossFrame(7, section.key), false)}
+              {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, section.key), false)}
+            </div>
           </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
-            Loss Analytics
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            {renderLossMetric("Day Loss", calculateLossFrame(1, "Silver"), false)}
-            {renderLossMetric("Wk Loss", calculateLossFrame(7, "Silver"), false)}
-            {renderLossMetric("All-Time Loss", calculateLossFrame(Infinity, "Silver"), false)}
-          </div>
-        </div>
+        ))}
       </div>
 
       <Modal

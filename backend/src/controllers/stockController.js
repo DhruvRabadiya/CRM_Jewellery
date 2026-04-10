@@ -4,18 +4,19 @@ const { MESSAGES, TRANSACTION_TYPES } = require("../utils/constants");
 
 const getStock = async (req, res) => {
   try {
+    const metalTypes = ["Gold 22K", "Gold 24K", "Silver"];
     // Recalculate all stock_master values from source-of-truth tables
-    await Promise.all([
-      stockService.recalculateOpeningStock("Gold"),
-      stockService.recalculateOpeningStock("Silver"),
-      stockService.recalculateInprocessWeight("Gold"),
-      stockService.recalculateInprocessWeight("Silver"),
-      stockService.recalculateTotalLoss("Gold"),
-      stockService.recalculateTotalLoss("Silver"),
-    ]);
+    await Promise.all(
+      metalTypes.flatMap((m) => [
+        stockService.recalculateOpeningStock(m),
+        stockService.recalculateInprocessWeight(m),
+        stockService.recalculateTotalLoss(m),
+      ])
+    );
 
-    const [goldStock, silverStock] = await Promise.all([
-      stockService.getStockByMetal("Gold"),
+    const [gold22kStock, gold24kStock, silverStock] = await Promise.all([
+      stockService.getStockByMetal("Gold 22K"),
+      stockService.getStockByMetal("Gold 24K"),
       stockService.getStockByMetal("Silver"),
     ]);
 
@@ -30,7 +31,8 @@ const getStock = async (req, res) => {
     });
 
     const data = {
-      gold: goldStock || defaultStock("Gold"),
+      "gold_22k": gold22kStock || defaultStock("Gold 22K"),
+      "gold_24k": gold24kStock || defaultStock("Gold 24K"),
       silver: silverStock || defaultStock("Silver"),
     };
 
@@ -51,7 +53,7 @@ const addStock = async (req, res) => {
     const { metal_type, weight, description } = req.body;
 
     if (!metal_type || !isValidMetalType(metal_type)) {
-      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold 22K', 'Gold 24K', or 'Silver'.");
     }
     if (!weight || weight <= 0) {
       return formatResponse(res, 400, false, MESSAGES.INVALID_INPUT);
@@ -153,22 +155,24 @@ const deleteStockPurchase = async (req, res) => {
 
 const recalculateStock = async (req, res) => {
   try {
-    await Promise.all([
-      stockService.recalculateOpeningStock("Gold"),
-      stockService.recalculateOpeningStock("Silver"),
-      stockService.recalculateInprocessWeight("Gold"),
-      stockService.recalculateInprocessWeight("Silver"),
-      stockService.recalculateTotalLoss("Gold"),
-      stockService.recalculateTotalLoss("Silver"),
-    ]);
+    const metalTypes = ["Gold 22K", "Gold 24K", "Silver"];
+    await Promise.all(
+      metalTypes.flatMap((m) => [
+        stockService.recalculateOpeningStock(m),
+        stockService.recalculateInprocessWeight(m),
+        stockService.recalculateTotalLoss(m),
+      ])
+    );
 
-    const [goldStock, silverStock] = await Promise.all([
-      stockService.getStockByMetal("Gold"),
+    const [gold22kStock, gold24kStock, silverStock] = await Promise.all([
+      stockService.getStockByMetal("Gold 22K"),
+      stockService.getStockByMetal("Gold 24K"),
       stockService.getStockByMetal("Silver"),
     ]);
 
     return formatResponse(res, 200, true, "Stock recalculated from source of truth", {
-      gold: goldStock,
+      "gold_22k": gold22kStock,
+      "gold_24k": gold24kStock,
       silver: silverStock,
     });
   } catch (error) {

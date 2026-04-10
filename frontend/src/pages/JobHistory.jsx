@@ -31,7 +31,22 @@ import { formatWeight } from "../utils/formatHelpers";
 import { useAuth } from "../context/AuthContext";
 
 const sizeOptions = {
-  Gold: [
+  "Gold 22K": [
+    "0.05gm",
+    "0.100gm",
+    "0.250gm",
+    "0.500gm",
+    "1 gm",
+    "2 gm",
+    "5 gm",
+    "10 gm",
+    "20 gm",
+    "25 gm",
+    "50 gm",
+    "100 gm",
+    "Other",
+  ],
+  "Gold 24K": [
     "0.05gm",
     "0.100gm",
     "0.250gm",
@@ -166,8 +181,8 @@ const JobHistory = () => {
   const [createForm, setCreateForm] = useState({
     stage: "Rolling",
     job_number: "",
-    metal_type: "Gold",
-    category: sizeOptions["Gold"][0],
+    metal_type: "Gold 24K",
+    category: sizeOptions["Gold 24K"][0],
     customCategory: "",
     issue_size: "",
     issue_pieces: "",
@@ -920,7 +935,8 @@ const JobHistory = () => {
                       })
                     }
                   >
-                    <option value="Gold">Gold</option>
+                    <option value="Gold 22K">Gold 22K</option>
+                    <option value="Gold 24K">Gold 24K</option>
                     <option value="Silver">Silver</option>
                   </select>
                 )}

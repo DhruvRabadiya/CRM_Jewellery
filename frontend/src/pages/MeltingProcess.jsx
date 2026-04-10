@@ -43,7 +43,7 @@ const MeltingProcess = () => {
 
   // Form States
   const [startForm, setStartForm] = useState({
-    metal_type: "Gold",
+    metal_type: "Gold 24K",
     issue_weight: "",
     issue_pieces: "",
     weight_unit: "g",
@@ -150,7 +150,7 @@ const MeltingProcess = () => {
       showToast("Melting Started Successfully!", "success");
       setIsStartModalOpen(false);
       setStartForm({
-        metal_type: "Gold",
+        metal_type: "Gold 24K",
         issue_weight: "",
         issue_pieces: "",
         weight_unit: "g",
@@ -390,7 +390,7 @@ const MeltingProcess = () => {
                 className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative overflow-hidden group cursor-pointer"
               >
                 <div
-                  className={`absolute top-0 left-0 w-full h-1 ${melt.metal_type === "Gold" ? "bg-yellow-400" : "bg-gray-400"}`}
+                  className={`absolute top-0 left-0 w-full h-1 ${melt.metal_type?.startsWith("Gold") ? "bg-yellow-400" : "bg-gray-400"}`}
                 ></div>
 
                 <div className="flex justify-between items-start mb-4 mt-2">
@@ -399,7 +399,7 @@ const MeltingProcess = () => {
                       Process #{melt.id}
                     </p>
                     <h3
-                      className={`text-xl font-bold ${melt.metal_type === "Gold" ? "text-yellow-600" : "text-gray-600"}`}
+                      className={`text-xl font-bold ${melt.metal_type?.startsWith("Gold") ? "text-yellow-600" : "text-gray-600"}`}
                     >
                       {melt.metal_type} Melt
                     </h3>
@@ -471,7 +471,8 @@ const MeltingProcess = () => {
                     setStartForm({ ...startForm, metal_type: e.target.value })
                   }
                 >
-                  <option value="Gold">Gold</option>
+                  <option value="Gold 22K">Gold 22K</option>
+                  <option value="Gold 24K">Gold 24K</option>
                   <option value="Silver">Silver</option>
                 </select>
                 <ArrowDownLeft

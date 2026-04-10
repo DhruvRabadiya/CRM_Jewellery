@@ -25,11 +25,29 @@ db.serialize(() => {
 
   // Initialize default rows if they don't exist
   db.run(
-    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold', 0, 0, 0, 0)`,
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold 22K', 0, 0, 0, 0)`,
+  );
+  db.run(
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold 24K', 0, 0, 0, 0)`,
   );
   db.run(
     `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Silver', 0, 0, 0, 0)`,
   );
+
+  // Migration: rename legacy 'Gold' metal_type to 'Gold 24K' across all tables
+  // Only runs if 'Gold' rows still exist (idempotent on re-run)
+  const migrateTables = [
+    'stock_master', 'stock_transactions', 'melting_process',
+    'rolling_processes', 'press_processes', 'tpp_processes',
+    'packing_processes', 'finished_goods', 'production_jobs',
+  ];
+  migrateTables.forEach((tbl) => {
+    db.run(`UPDATE ${tbl} SET metal_type = 'Gold 24K' WHERE metal_type = 'Gold'`, (err) => {
+      if (err) console.error(`Migration Gold->Gold 24K in ${tbl}:`, err.message);
+    });
+  });
+  // Remove the old 'Gold' stock_master row if Gold 24K now exists separately
+  db.run(`DELETE FROM stock_master WHERE metal_type = 'Gold' AND EXISTS (SELECT 1 FROM stock_master WHERE metal_type = 'Gold 24K')`);
 
   // Safe migration for total_loss column on existing databases
   db.all(`PRAGMA table_info(stock_master)`, (err, columns) => {
