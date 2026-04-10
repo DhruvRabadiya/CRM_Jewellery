@@ -52,16 +52,6 @@ export const getNextJobId = async () => {
   }
 };
 
-// Legacy support
-export const getActiveJobs = async () => {
-  try {
-    const response = await api.get(`/jobs/active`);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || error;
-  }
-};
-
 export const editProcess = async (stage, processId, payload) => {
   try {
     const endpoint = stage.toLowerCase();

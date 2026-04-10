@@ -1,14 +1,18 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { CheckCircle, AlertCircle, X } from "lucide-react";
 
 const Toast = ({ message, type = "success", onClose }) => {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
-    // Auto-close after 3 seconds
+    // Auto-close after 3 seconds. Uses a ref to avoid re-creating the
+    // timer when the onClose callback reference changes.
     const timer = setTimeout(() => {
-      onClose();
+      onCloseRef.current();
     }, 3000);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, []); // intentionally stable — onClose is accessed through ref
 
   const bgColors = {
     success: "bg-green-100 border-green-500 text-green-700",

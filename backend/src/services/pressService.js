@@ -98,22 +98,35 @@ const updatePressIssuedWeight = (processId, new_weight) => {
 
 const deletePressProcessById = (id) => {
   return new Promise((resolve, reject) => {
-    const query = `DELETE FROM press_processes WHERE id = ?`;
-    db.run(query, [id], function (err) {
-      if (err) reject(err);
-      resolve();
+    db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'press'`, [id], (err1) => {
+      if (err1) return reject(err1);
+      db.run(`DELETE FROM press_processes WHERE id = ?`, [id], function (err2) {
+        if (err2) return reject(err2);
+        resolve(this.changes);
+      });
     });
   });
 };
+
+const VALID_PRESS_COLUMNS = new Set([
+  'job_number', 'job_name', 'metal_type', 'unit', 'employee', 'issue_size',
+  'issue_pieces', 'issued_weight', 'category', 'status',
+  'return_weight', 'return_pieces', 'scrap_weight', 'loss_weight',
+  'description', 'start_time', 'end_time',
+]);
 
 const editPressProcessUniversal = (processId, updates) => {
   return new Promise((resolve, reject) => {
     const fields = [];
     const values = [];
     for (const [key, val] of Object.entries(updates)) {
+      if (!VALID_PRESS_COLUMNS.has(key)) {
+        return reject(new Error(`Invalid column name: ${key}`));
+      }
       fields.push(`${key} = ?`);
       values.push(val);
     }
+    if (fields.length === 0) return resolve(0);
     values.push(processId);
 
     const query = `UPDATE press_processes SET ${fields.join(", ")} WHERE id = ?`;

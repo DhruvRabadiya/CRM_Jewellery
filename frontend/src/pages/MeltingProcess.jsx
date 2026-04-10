@@ -380,7 +380,7 @@ const MeltingProcess = () => {
             Melting Process
           </h1>
           <p className="text-gray-500 mt-1">
-            Convert Raw Material to Pure Dhal
+            Convert Raw Material to Pure Metal
           </p>
         </div>
         <button
@@ -659,7 +659,7 @@ const MeltingProcess = () => {
               {/* Return Input */}
               <div className="col-span-1">
                 <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                  <Scale size={14} /> Pure Dhal
+                  <Scale size={14} /> Return Weight
                 </label>
                 <input
                   type="number"

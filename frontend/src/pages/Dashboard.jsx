@@ -17,10 +17,11 @@ const Dashboard = () => {
   const [stock, setStock] = useState(null);
   const [lossStats, setLossStats] = useState([]);
   const initialStageMetrics = () => ({
-    Rolling: { pending: 0, running: 0 },
-    Press: { pending: 0, running: 0 },
-    TPP: { pending: 0, running: 0 },
-    Packing: { pending: 0, running: 0 },
+    Melting: { pending: 0, running: 0, completed: 0 },
+    Rolling: { pending: 0, running: 0, completed: 0 },
+    Press: { pending: 0, running: 0, completed: 0 },
+    TPP: { pending: 0, running: 0, completed: 0 },
+    Packing: { pending: 0, running: 0, completed: 0 },
   });
 
   const [processMetrics, setProcessMetrics] = useState({
@@ -39,9 +40,9 @@ const Dashboard = () => {
   const fetchDashboard = useCallback(async () => {
     try {
       const [stockRes, lossRes, procRes] = await Promise.all([
-        getStockData(),
-        getLossStats().catch(() => ({ data: [] })),
-        getCombinedProcesses().catch(() => ({ data: [] })),
+        getStockData().catch(() => ({ success: false, data: null })),
+        getLossStats().catch(() => ({ success: false, data: [] })),
+        getCombinedProcesses().catch(() => ({ success: false, data: [] })),
       ]);
 
       if (stockRes.success) setStock(stockRes.data);
@@ -57,6 +58,8 @@ const Dashboard = () => {
               metrics[p.metal_type][p.stage].pending += Number(p.issue_size) || 0;
             if (p.status === "RUNNING")
               metrics[p.metal_type][p.stage].running += Number(p.issued_weight) || 0;
+            if (p.status === "COMPLETED")
+              metrics[p.metal_type][p.stage].completed += Number(p.return_weight) || 0;
           }
         });
         setProcessMetrics(metrics);
@@ -116,9 +119,6 @@ const Dashboard = () => {
   const gold = stock.gold || {};
   const silver = stock.silver || {};
 
-  const goldInProcess = Object.values(processMetrics.Gold).reduce((sum, s) => sum + s.running, 0);
-  const silverInProcess = Object.values(processMetrics.Silver).reduce((sum, s) => sum + s.running, 0);
-
   return (
     <div className="p-6 relative max-w-7xl mx-auto">
       {toast && (
@@ -166,21 +166,13 @@ const Dashboard = () => {
               Gold Reserves, Pools & Analytics
             </h2>
           </div>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-yellow-200/50">
               <p className="text-xs font-bold text-yellow-700 uppercase">
                 Opening Stock
               </p>
-              <p className="text-xl font-black text-gray-800">
+              <p className="text-2xl font-black text-gray-800">
                 {parseFloat((gold.opening_stock || 0).toFixed(10))}g
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-yellow-300">
-              <p className="text-xs font-bold text-yellow-800 uppercase">
-                Pure Dhal (Active)
-              </p>
-              <p className="text-2xl font-black text-green-700">
-                {parseFloat((gold.dhal_stock || 0).toFixed(10))}g
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
@@ -188,19 +180,21 @@ const Dashboard = () => {
                 In Process
               </p>
               <p className="text-2xl font-black text-blue-700">
-                {parseFloat(goldInProcess.toFixed(10))}g
+                {parseFloat((gold.inprocess_weight || 0).toFixed(10))}g
               </p>
             </div>
+
           </div>
           <p className="text-xs font-bold text-yellow-600 uppercase tracking-widest mb-3 mt-4">
             Stage Analytics
           </p>
           <div className="space-y-3 mb-4">
             {[
-              { stage: "Rolling", key: "rolling_stock" },
-              { stage: "Press", key: "press_stock" },
-              { stage: "TPP", key: "tpp_stock" },
-              { stage: "Packing", key: null },
+              { stage: "Melting" },
+              { stage: "Rolling" },
+              { stage: "Press" },
+              { stage: "TPP" },
+              { stage: "Packing" },
             ].map((s) => (
               <div
                 key={s.stage}
@@ -232,14 +226,14 @@ const Dashboard = () => {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase text-green-600 font-bold">
-                    {s.key ? "Pool (Completed)" : "Completed"}
+                  <p className="text-[10px] uppercase text-green-500 font-bold">
+                    Completed
                   </p>
                   <p className="font-black text-green-700 text-sm">
-                    {s.key
-                      ? parseFloat((gold[s.key] || 0).toFixed(10))
-                      : "N/A"}
-                    {s.key ? "g" : ""}
+                    {parseFloat(
+                      (processMetrics.Gold[s.stage]?.completed || 0).toFixed(10),
+                    )}
+                    g
                   </p>
                 </div>
               </div>
@@ -263,21 +257,13 @@ const Dashboard = () => {
               Silver Reserves, Pools & Analytics
             </h2>
           </div>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200/50">
               <p className="text-xs font-bold text-gray-500 uppercase">
                 Opening Stock
               </p>
-              <p className="text-xl font-black text-gray-700">
+              <p className="text-2xl font-black text-gray-700">
                 {parseFloat((silver.opening_stock / 1000).toFixed(10))}kg
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-300">
-              <p className="text-xs font-bold text-gray-800 uppercase">
-                Pure Dhal (Active)
-              </p>
-              <p className="text-2xl font-black text-green-700">
-                {parseFloat((silver.dhal_stock / 1000).toFixed(10))}kg
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-300">
@@ -285,19 +271,21 @@ const Dashboard = () => {
                 In Process
               </p>
               <p className="text-2xl font-black text-blue-700">
-                {parseFloat((silverInProcess / 1000).toFixed(10))}kg
+                {parseFloat((silver.inprocess_weight / 1000 || 0).toFixed(10))}kg
               </p>
             </div>
+
           </div>
           <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 mt-4">
             Stage Analytics
           </p>
           <div className="space-y-3 mb-4">
             {[
-              { stage: "Rolling", key: "rolling_stock" },
-              { stage: "Press", key: "press_stock" },
-              { stage: "TPP", key: "tpp_stock" },
-              { stage: "Packing", key: null },
+              { stage: "Melting" },
+              { stage: "Rolling" },
+              { stage: "Press" },
+              { stage: "TPP" },
+              { stage: "Packing" },
             ].map((s) => (
               <div
                 key={s.stage}
@@ -333,14 +321,16 @@ const Dashboard = () => {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase text-green-600 font-bold">
-                    {s.key ? "Pool (Completed)" : "Completed"}
+                  <p className="text-[10px] uppercase text-green-500 font-bold">
+                    Completed
                   </p>
                   <p className="font-black text-green-700 text-sm">
-                    {s.key
-                      ? parseFloat((silver[s.key] / 1000 || 0).toFixed(10))
-                      : "N/A"}
-                    {s.key ? "kg" : ""}
+                    {parseFloat(
+                      (
+                        (processMetrics.Silver[s.stage]?.completed || 0) / 1000
+                      ).toFixed(10),
+                    ) || "0"}
+                    kg
                   </p>
                 </div>
               </div>

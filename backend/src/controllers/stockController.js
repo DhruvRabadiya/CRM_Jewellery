@@ -1,9 +1,19 @@
 const stockService = require("../services/stockService");
-const { formatResponse } = require("../utils/common");
+const { formatResponse, isValidMetalType } = require("../utils/common");
 const { MESSAGES, TRANSACTION_TYPES } = require("../utils/constants");
 
 const getStock = async (req, res) => {
   try {
+    // Recalculate all stock_master values from source-of-truth tables
+    await Promise.all([
+      stockService.recalculateOpeningStock("Gold"),
+      stockService.recalculateOpeningStock("Silver"),
+      stockService.recalculateInprocessWeight("Gold"),
+      stockService.recalculateInprocessWeight("Silver"),
+      stockService.recalculateTotalLoss("Gold"),
+      stockService.recalculateTotalLoss("Silver"),
+    ]);
+
     const [goldStock, silverStock] = await Promise.all([
       stockService.getStockByMetal("Gold"),
       stockService.getStockByMetal("Silver"),
@@ -12,7 +22,7 @@ const getStock = async (req, res) => {
     const defaultStock = (metal) => ({
       metal_type: metal,
       opening_stock: 0,
-      dhal_stock: 0,
+      inprocess_weight: 0,
       rolling_stock: 0,
       press_stock: 0,
       tpp_stock: 0,
@@ -40,7 +50,10 @@ const addStock = async (req, res) => {
   try {
     const { metal_type, weight, description } = req.body;
 
-    if (!metal_type || !weight || weight <= 0) {
+    if (!metal_type || !isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type. Must be 'Gold' or 'Silver'.");
+    }
+    if (!weight || weight <= 0) {
       return formatResponse(res, 400, false, MESSAGES.INVALID_INPUT);
     }
 
@@ -109,15 +122,6 @@ const editStockPurchase = async (req, res) => {
 
     const diff = newWeight - purchase.weight;
     
-    // Check if we are reducing weight and if stock permits
-    if (diff < 0) {
-      const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-
-      if (!currentStock || Math.round((currentStock.opening_stock || 0) * 1000) < Math.round(Math.abs(diff) * 1000)) {
-        return formatResponse(res, 400, false, "Cannot reduce purchase weight: insufficient raw material available. Delete/revert dependent processes first.");
-      }
-    }
-
     if (diff > 0) {
       await stockService.updateOpeningStock(purchase.metal_type, diff, true);
     } else if (diff < 0) {
@@ -138,108 +142,35 @@ const deleteStockPurchase = async (req, res) => {
     const purchase = await stockService.getPurchaseById(id);
     if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
     
-    const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-
-    if (!currentStock || Math.round((currentStock.opening_stock || 0) * 1000) < Math.round(purchase.weight * 1000)) {
-      return formatResponse(res, 400, false, "Cannot delete purchase: insufficient raw material available. Revert dependent processes first.");
-    }
-
     await stockService.updateOpeningStock(purchase.metal_type, purchase.weight, false);
     await stockService.deletePurchase(id);
     
-    return formatResponse(res, 200, true, "Purchase deleted and stock refunded successfully");
+    return formatResponse(res, 200, true, "Purchase deleted and stock adjusted successfully");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }
 };
 
-const addDhalStock = async (req, res) => {
+const recalculateStock = async (req, res) => {
   try {
-    const { metal_type, weight, description } = req.body;
+    await Promise.all([
+      stockService.recalculateOpeningStock("Gold"),
+      stockService.recalculateOpeningStock("Silver"),
+      stockService.recalculateInprocessWeight("Gold"),
+      stockService.recalculateInprocessWeight("Silver"),
+      stockService.recalculateTotalLoss("Gold"),
+      stockService.recalculateTotalLoss("Silver"),
+    ]);
 
-    if (!metal_type || !weight || weight <= 0) {
-      return formatResponse(res, 400, false, MESSAGES.INVALID_INPUT);
-    }
+    const [goldStock, silverStock] = await Promise.all([
+      stockService.getStockByMetal("Gold"),
+      stockService.getStockByMetal("Silver"),
+    ]);
 
-    await stockService.updateDhalStock(metal_type, weight, true);
-
-    const transactionId = await stockService.logTransaction(
-      metal_type,
-      "DHAL_ADDITION",
-      weight,
-      description || "Manual Dhal Addition",
-    );
-
-    return formatResponse(res, 201, true, "Pure Dhal added successfully", {
-      transactionId,
+    return formatResponse(res, 200, true, "Stock recalculated from source of truth", {
+      gold: goldStock,
+      silver: silverStock,
     });
-  } catch (error) {
-    return formatResponse(res, 500, false, error.message);
-  }
-};
-
-const getDhalPurchases = async (req, res) => {
-  try {
-    const purchases = await stockService.getDhalPurchases();
-    return formatResponse(res, 200, true, "Dhal Purchases fetched", purchases);
-  } catch (error) {
-    return formatResponse(res, 500, false, error.message);
-  }
-};
-
-const editDhalPurchase = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { weight, description } = req.body;
-    
-    const purchase = await stockService.getPurchaseById(id);
-    if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
-    
-    const newWeight = parseFloat(weight);
-    if (isNaN(newWeight) || newWeight <= 0) {
-      return formatResponse(res, 400, false, "Invalid weight");
-    }
-
-    const diff = newWeight - purchase.weight;
-    
-    if (diff < 0) {
-      const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-
-      if (!currentStock || Math.round((currentStock.dhal_stock || 0) * 1000) < Math.round(Math.abs(diff) * 1000)) {
-        return formatResponse(res, 400, false, "Cannot reduce pure dhal weight: insufficient pure dhal available. Revert dependent processes first.");
-      }
-    }
-
-    if (diff > 0) {
-      await stockService.updateDhalStock(purchase.metal_type, diff, true);
-    } else if (diff < 0) {
-      await stockService.updateDhalStock(purchase.metal_type, Math.abs(diff), false);
-    }
-
-    await stockService.editPurchase(id, newWeight, description || "");
-    return formatResponse(res, 200, true, "Dhal Purchase updated successfully");
-  } catch (error) {
-    return formatResponse(res, 500, false, error.message);
-  }
-};
-
-const deleteDhalPurchase = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const purchase = await stockService.getPurchaseById(id);
-    if (!purchase) return formatResponse(res, 404, false, "Purchase not found");
-    
-    const currentStock = await stockService.getStockByMetal(purchase.metal_type);
-
-    if (!currentStock || Math.round((currentStock.dhal_stock || 0) * 1000) < Math.round(purchase.weight * 1000)) {
-      return formatResponse(res, 400, false, "Cannot delete pure dhal purchase: insufficient pure dhal available. Revert dependent processes first.");
-    }
-
-    await stockService.updateDhalStock(purchase.metal_type, purchase.weight, false);
-    await stockService.deletePurchase(id);
-    
-    return formatResponse(res, 200, true, "Dhal Purchase deleted and stock refunded successfully");
   } catch (error) {
     return formatResponse(res, 500, false, error.message);
   }
@@ -253,8 +184,5 @@ module.exports = {
   getDetailedScrapAndLoss,
   editStockPurchase,
   deleteStockPurchase,
-  addDhalStock,
-  getDhalPurchases,
-  editDhalPurchase,
-  deleteDhalPurchase,
+  recalculateStock,
 };

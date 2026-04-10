@@ -5,8 +5,6 @@ import {
   getPurchases,
   getDetailedScrapAndLoss,
   deletePurchase,
-  getDhalPurchases,
-  deleteDhalPurchase,
 } from "../api/stockService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
@@ -16,17 +14,13 @@ import EditStockForm from "../components/forms/EditStockForm";
 const StockManagement = () => {
   const [stock, setStock] = useState(null);
   const [purchases, setPurchases] = useState([]);
-  const [dhalPurchases, setDhalPurchases] = useState([]);
   const [ledger, setLedger] = useState([]);
   const [activeTab, setActiveTab] = useState("Gold");
-  const [historyType, setHistoryType] = useState("RAW_MATERIAL"); // "RAW_MATERIAL" or "PURE_DHAL"
   const [loading, setLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDhalModalOpen, setIsDhalModalOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDhalEditModalOpen, setIsDhalEditModalOpen] = useState(false);
   
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, onConfirm: null });
@@ -38,15 +32,13 @@ const StockManagement = () => {
 
   const fetchStock = useCallback(async () => {
     try {
-      const [result, purchaseResult, dhalResult, ledgerResult] = await Promise.all([
+      const [result, purchaseResult, ledgerResult] = await Promise.all([
         getStockData(),
         getPurchases(),
-        getDhalPurchases(),
         getDetailedScrapAndLoss(),
       ]);
       if (result.success) setStock(result.data);
       if (purchaseResult.success) setPurchases(purchaseResult.data);
-      if (dhalResult.success) setDhalPurchases(dhalResult.data);
       if (ledgerResult.success) setLedger(ledgerResult.data);
     } catch (error) {
       showToast("Connection Error", "error");
@@ -61,24 +53,19 @@ const StockManagement = () => {
 
   const handleSuccess = () => {
     setIsModalOpen(false);
-    setIsDhalModalOpen(false);
     fetchStock();
   };
 
-  const handleDeletePurchase = async (purchase, isDhal) => {
+  const handleDeletePurchase = async (purchase) => {
     setConfirmModal({
       isOpen: true,
-      title: isDhal ? "Delete Dhal Addition" : "Delete Stock Purchase",
+      title: "Delete Stock Purchase",
       message: `Are you sure you want to delete this entry? This will permanently deduct the added weight from your stock.`,
       isDestructive: true,
       confirmText: "Yes, Delete",
       onConfirm: async () => {
         try {
-          if (isDhal) {
-            await deleteDhalPurchase(purchase.id);
-          } else {
-            await deletePurchase(purchase.id);
-          }
+          await deletePurchase(purchase.id);
           showToast("Entry deleted successfully!", "success");
           fetchStock();
         } catch (error) {
@@ -88,13 +75,9 @@ const StockManagement = () => {
     });
   };
 
-  const openEditModal = (purchase, isDhal) => {
+  const openEditModal = (purchase) => {
     setSelectedPurchase(purchase);
-    if (isDhal) {
-      setIsDhalEditModalOpen(true);
-    } else {
-      setIsEditModalOpen(true);
-    }
+    setIsEditModalOpen(true);
   };
 
   if (loading)
@@ -121,16 +104,9 @@ const StockManagement = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Stock Management</h1>
-          <p className="text-gray-500 mt-1">Manage raw material and pure dhal inventory</p>
+          <p className="text-gray-500 mt-1">Manage raw material inventory</p>
         </div>
         <div className="flex gap-4">
-          <button
-            onClick={() => setIsDhalModalOpen(true)}
-            className="flex items-center gap-2 bg-indigo-50 text-indigo-700 border-2 border-indigo-200 px-6 py-3.5 rounded-xl hover:bg-indigo-100 shadow-sm active:scale-95 transition-all hover:border-indigo-300 font-black"
-          >
-            <PlusCircle size={22} />{" "}
-            <span className="font-bold">Add Pure Dhal</span>
-          </button>
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 bg-blue-600 text-white px-8 py-3.5 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all hover:ring-4 hover:ring-blue-500/20 font-black"
@@ -159,9 +135,9 @@ const StockManagement = () => {
             </div>
           </div>
           <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
-            <span className="text-gray-500 font-bold">Pure Dhal</span>
-            <span className="bg-yellow-100 text-yellow-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-yellow-200">
-              {parseFloat((stock.gold?.dhal_stock || 0).toFixed(10))} g
+            <span className="text-gray-500 font-bold">In Process</span>
+            <span className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
+              {parseFloat((stock.gold?.inprocess_weight || 0).toFixed(10))} g
             </span>
           </div>
         </div>
@@ -185,9 +161,9 @@ const StockManagement = () => {
             </div>
           </div>
           <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
-            <span className="text-gray-500 font-bold">Pure Dhal</span>
-            <span className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-gray-200">
-              {parseFloat((stock.silver?.dhal_stock / 1000 || 0).toFixed(10))}{" "}
+            <span className="text-gray-500 font-bold">In Process</span>
+            <span className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
+              {parseFloat((stock.silver?.inprocess_weight / 1000 || 0).toFixed(10))}{" "}
               kg
             </span>
           </div>
@@ -197,42 +173,24 @@ const StockManagement = () => {
       <div className="mt-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-xl font-bold text-gray-800">
-              {historyType === "RAW_MATERIAL" ? "Last Purchases" : "Pure Dhal Additions"}
-            </h2>
+            <h2 className="text-xl font-bold text-gray-800">Last Purchases</h2>
             <p className="text-sm font-medium text-gray-500 mt-1">
-              Recent inbound {historyType === "RAW_MATERIAL" ? "raw material" : "pure dhal"} logs
+              Recent inbound raw material logs
             </p>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <div className="flex bg-indigo-50/50 rounded-lg p-1 text-sm font-semibold border border-indigo-100">
-              <button
-                onClick={() => setHistoryType("RAW_MATERIAL")}
-                className={`px-4 py-1.5 rounded-md transition-colors ${historyType === "RAW_MATERIAL" ? "bg-white text-indigo-700 shadow-sm border border-indigo-200" : "text-gray-500 hover:text-indigo-600"}`}
-              >
-                Raw Material
-              </button>
-              <button
-                onClick={() => setHistoryType("PURE_DHAL")}
-                className={`px-4 py-1.5 rounded-md transition-colors ${historyType === "PURE_DHAL" ? "bg-white text-indigo-700 shadow-sm border border-indigo-200" : "text-gray-500 hover:text-indigo-600"}`}
-              >
-                Pure Dhal
-              </button>
-            </div>
-            <div className="flex bg-gray-100 rounded-lg p-1 text-sm font-semibold">
-              <button
-                onClick={() => setActiveTab("Gold")}
-                className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              >
-                Gold
-              </button>
-              <button
-                onClick={() => setActiveTab("Silver")}
-                className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Silver" ? "bg-white text-gray-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              >
-                Silver
-              </button>
-            </div>
+          <div className="flex bg-gray-100 rounded-lg p-1 text-sm font-semibold">
+            <button
+              onClick={() => setActiveTab("Gold")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Gold
+            </button>
+            <button
+              onClick={() => setActiveTab("Silver")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Silver" ? "bg-white text-gray-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Silver
+            </button>
           </div>
         </div>
 
@@ -247,18 +205,17 @@ const StockManagement = () => {
               </tr>
             </thead>
             <tbody>
-              {(historyType === "RAW_MATERIAL" ? purchases : dhalPurchases).filter((p) => p.metal_type === activeTab).length ===
-              0 ? (
+              {purchases.filter((p) => p.metal_type === activeTab).length === 0 ? (
                 <tr>
                   <td
                     colSpan="4"
                     className="p-8 text-center text-gray-400 font-medium"
                   >
-                    No history found for {activeTab} {historyType === "RAW_MATERIAL" ? "raw material" : "pure dhal"}.
+                    No history found for {activeTab} raw material.
                   </td>
                 </tr>
               ) : (
-                (historyType === "RAW_MATERIAL" ? purchases : dhalPurchases)
+                purchases
                   .filter((p) => p.metal_type === activeTab)
                   .map((txn, index) => (
                     <tr
@@ -273,7 +230,7 @@ const StockManagement = () => {
                         })}
                       </td>
                       <td className="p-4 text-sm font-medium text-gray-600">
-                        {txn.description || `Manual ${historyType === "RAW_MATERIAL" ? "Stock" : "Dhal"} Addition`}
+                        {txn.description || "Manual Stock Addition"}
                       </td>
                       <td className="p-4 text-sm font-black text-green-600 text-right">
                         +
@@ -284,10 +241,10 @@ const StockManagement = () => {
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex justify-center gap-2">
-                          <button onClick={() => openEditModal(txn, historyType === "PURE_DHAL")} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                          <button onClick={() => openEditModal(txn)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                             <Edit2 size={16} />
                           </button>
-                          <button onClick={() => handleDeletePurchase(txn, historyType === "PURE_DHAL")} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <button onClick={() => handleDeletePurchase(txn)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -409,19 +366,6 @@ const StockManagement = () => {
       </Modal>
 
       <Modal
-        isOpen={isDhalModalOpen}
-        onClose={() => setIsDhalModalOpen(false)}
-        title="Add Pure Dhal"
-      >
-        <AddStockForm
-          isDhal={true}
-          onSuccess={handleSuccess}
-          onCancel={() => setIsDhalModalOpen(false)}
-          showToast={showToast}
-        />
-      </Modal>
-
-      <Modal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         title="Edit Stock Purchase"
@@ -431,22 +375,6 @@ const StockManagement = () => {
             purchase={selectedPurchase}
             onSuccess={() => { setIsEditModalOpen(false); fetchStock(); }}
             onCancel={() => setIsEditModalOpen(false)}
-            showToast={showToast}
-          />
-        )}
-      </Modal>
-
-      <Modal
-        isOpen={isDhalEditModalOpen}
-        onClose={() => setIsDhalEditModalOpen(false)}
-        title="Edit Dhal Addition"
-      >
-        {selectedPurchase && (
-          <EditStockForm
-            isDhal={true}
-            purchase={selectedPurchase}
-            onSuccess={() => { setIsDhalEditModalOpen(false); fetchStock(); }}
-            onCancel={() => setIsDhalEditModalOpen(false)}
             showToast={showToast}
           />
         )}

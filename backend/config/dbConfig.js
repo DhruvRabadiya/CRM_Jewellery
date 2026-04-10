@@ -12,12 +12,11 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 db.serialize(() => {
-  // 1. STOCK MASTER (Raw Material, Dhal, and Pooled Stages)
+  // 1. STOCK MASTER (Raw Material and Pooled Stages)
   db.run(`CREATE TABLE IF NOT EXISTS stock_master (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         metal_type TEXT UNIQUE, -- 'Gold' or 'Silver'
         opening_stock REAL DEFAULT 0, -- Raw Material
-        dhal_stock REAL DEFAULT 0,    -- Pure metal (Source for Rolling)
         rolling_stock REAL DEFAULT 0, -- Completed Rolling (Source for Press)
         press_stock REAL DEFAULT 0,   -- Completed Press (Source for TPP)
         tpp_stock REAL DEFAULT 0,     -- Completed TPP (Source for Packing)
@@ -25,16 +24,11 @@ db.serialize(() => {
     )`);
 
   // Initialize default rows if they don't exist
-  // By using INSERT OR IGNORE, if rows already exist they aren't overridden,
-  // but if we modified the table we might need to add columns safely in real prod,
-  // here since SQLite IF NOT EXISTS is on create table, it won't add new columns to existing tables automatically.
-  // For simplicity, we assume we might drop/recreate db locally or alter table manually if needed,
-  // but let's at least keep the insert valid.
   db.run(
-    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold', 0, 0, 0, 0, 0)`,
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Gold', 0, 0, 0, 0)`,
   );
   db.run(
-    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, dhal_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Silver', 0, 0, 0, 0, 0)`,
+    `INSERT OR IGNORE INTO stock_master (metal_type, opening_stock, rolling_stock, press_stock, tpp_stock) VALUES ('Silver', 0, 0, 0, 0)`,
   );
 
   // Safe migration for total_loss column on existing databases
@@ -54,6 +48,16 @@ db.serialize(() => {
 
   // Fix any negative total_loss values (clamp to 0)
   db.run(`UPDATE stock_master SET total_loss = 0 WHERE total_loss < 0`);
+
+  // Migration: move any leftover dhal_stock into opening_stock and zero it out
+  db.all(`PRAGMA table_info(stock_master)`, (err, columns) => {
+    if (!err && columns && columns.some((col) => col.name === "dhal_stock")) {
+      db.run(`UPDATE stock_master SET opening_stock = opening_stock + dhal_stock, dhal_stock = 0 WHERE dhal_stock > 0`, (alterErr) => {
+        if (alterErr) console.error("Error migrating dhal_stock:", alterErr.message);
+        else console.log("Migrated any remaining dhal_stock into opening_stock");
+      });
+    }
+  });
 
   // 2. STOCK TRANSACTIONS (Ledger for Audit)
   db.run(`CREATE TABLE IF NOT EXISTS stock_transactions (
@@ -171,13 +175,66 @@ db.serialize(() => {
         end_time DATETIME
     )`);
 
-  // 5. FINISHED GOODS (Final Inventory)
+  // 5. PRODUCTION JOBS (Job Tracking)
+  db.run(`CREATE TABLE IF NOT EXISTS production_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_number TEXT,
+      metal_type TEXT,
+      target_product TEXT,
+      current_step TEXT,
+      status TEXT DEFAULT 'PENDING',
+      issue_weight REAL DEFAULT 0,
+      current_weight REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 6. JOB STEPS (Step Logs)
+  db.run(`CREATE TABLE IF NOT EXISTS job_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER,
+      step_name TEXT,
+      issue_weight REAL DEFAULT 0,
+      return_weight REAL DEFAULT 0,
+      scrap_weight REAL DEFAULT 0,
+      loss_weight REAL DEFAULT 0,
+      return_pieces INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (job_id) REFERENCES production_jobs(id)
+  )`);
+
+  // 7. FINISHED GOODS (Final Inventory)
   db.run(`CREATE TABLE IF NOT EXISTS finished_goods (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       metal_type TEXT,
       target_product TEXT,
       pieces INTEGER,
       weight REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 5b. PRODUCTION JOBS (Legacy job tracking system)
+  db.run(`CREATE TABLE IF NOT EXISTS production_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_number TEXT UNIQUE,
+      metal_type TEXT,
+      target_product TEXT,
+      current_step TEXT,
+      status TEXT DEFAULT 'PENDING',
+      issue_weight REAL,
+      current_weight REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 5c. JOB STEPS (Legacy step logging)
+  db.run(`CREATE TABLE IF NOT EXISTS job_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER,
+      step_name TEXT,
+      issue_weight REAL,
+      return_weight REAL,
+      scrap_weight REAL,
+      loss_weight REAL,
+      return_pieces INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -203,32 +260,74 @@ db.serialize(() => {
   processTables.forEach((tableName) => {
     db.all(`PRAGMA table_info(${tableName})`, (err, columns) => {
       if (!err && columns) {
-          // Migrate Description
-          if (!columns.some((col) => col.name === "description")) {
-            db.run(
-              `ALTER TABLE ${tableName} ADD COLUMN description TEXT DEFAULT ''`,
-              (alterErr) => {
-                if (alterErr)
-                  console.error(`Error migrating description for ${tableName}:`, alterErr.message);
-                else
-                  console.log(`Successfully added description column to ${tableName}`);
-              },
-            );
-          }
-          // Migrate Employee Tracker
-          if (!columns.some((col) => col.name === "employee")) {
-            db.run(
-              `ALTER TABLE ${tableName} ADD COLUMN employee TEXT DEFAULT 'Unknown'`,
-              (alterErr) => {
-                if (alterErr)
-                  console.error(`Error migrating employee tracker for ${tableName}:`, alterErr.message);
-                else
-                  console.log(`Successfully added employee column to ${tableName}`);
-              },
-            );
-          }
+        // Migrate Description
+        if (!columns.some((col) => col.name === "description")) {
+          db.run(
+            `ALTER TABLE ${tableName} ADD COLUMN description TEXT DEFAULT ''`,
+            (alterErr) => {
+              if (alterErr)
+                console.error(`Error migrating description for ${tableName}:`, alterErr.message);
+              else
+                console.log(`Successfully added description column to ${tableName}`);
+            },
+          );
+        }
+        // Migrate Employee Tracker
+        if (!columns.some((col) => col.name === "employee")) {
+          db.run(
+            `ALTER TABLE ${tableName} ADD COLUMN employee TEXT DEFAULT 'Unknown'`,
+            (alterErr) => {
+              if (alterErr)
+                console.error(`Error migrating employee tracker for ${tableName}:`, alterErr.message);
+              else
+                console.log(`Successfully added employee column to ${tableName}`);
+            },
+          );
+        }
       }
     });
+  });
+
+  // Migration: add inprocess_weight to stock_master
+  db.all(`PRAGMA table_info(stock_master)`, (err, columns) => {
+    if (!err && columns && !columns.some((col) => col.name === "inprocess_weight")) {
+      db.run(`ALTER TABLE stock_master ADD COLUMN inprocess_weight REAL DEFAULT 0`, (alterErr) => {
+        if (alterErr) console.error("Error migrating inprocess_weight:", alterErr.message);
+        else console.log("Successfully added inprocess_weight column to stock_master");
+      });
+    }
+  });
+
+  // process_return_items table for multiple return rows per job
+  db.run(`CREATE TABLE IF NOT EXISTS process_return_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      process_id INTEGER NOT NULL,
+      process_type TEXT NOT NULL,
+      category TEXT DEFAULT '',
+      return_weight REAL DEFAULT 0,
+      return_pieces INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Migration: add extra columns to melting_process for PENDING/RUNNING/COMPLETED support
+  db.all(`PRAGMA table_info(melting_process)`, (err, columns) => {
+    if (!err && columns) {
+      const addCol = (col, def) => {
+        if (!columns.some((c) => c.name === col)) {
+          db.run(`ALTER TABLE melting_process ADD COLUMN ${col} ${def}`, (alterErr) => {
+            if (alterErr) console.error(`Error adding ${col} to melting_process:`, alterErr.message);
+            else console.log(`Added ${col} to melting_process`);
+          });
+        }
+      };
+      addCol("job_number", "TEXT");
+      addCol("job_name", "TEXT");
+      addCol("category", "TEXT DEFAULT ''");
+      addCol("issued_weight", "REAL DEFAULT 0");
+      addCol("issue_size", "REAL DEFAULT 0");
+      addCol("start_time", "DATETIME");
+      addCol("end_time", "DATETIME");
+    }
   });
 
   // 6. USERS (Authentication & Authorization)
@@ -239,31 +338,71 @@ db.serialize(() => {
       role TEXT CHECK( role IN ('ADMIN', 'EMPLOYEE') ) NOT NULL DEFAULT 'EMPLOYEE',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`, (err) => {
-      if (!err) {
-         // Check if any users exist, if not seed the default ADMIN
-         db.get("SELECT COUNT(*) as count FROM users", async (err, row) => {
-             if (!err && row.count === 0) {
-                 try {
-                     const bcrypt = require("bcryptjs");
-                     const salt = await bcrypt.genSalt(10);
-                     const hashed = await bcrypt.hash("admin123", salt);
-                     
-                     db.run(`INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'ADMIN')`, ['admin', hashed], (insertErr) => {
-                         if (insertErr) {
-                             console.error("Failed to seed default admin user:", insertErr.message);
-                         } else {
-                             console.log("Successfully seeded default Admin account (username: admin)");
-                         }
-                     });
-                 } catch (hashError) {
-                     console.error("Failed to hash default admin password:", hashError.message);
-                 }
-             }
-         });
-      } else {
-          console.error("Failed to create users table:", err.message);
-      }
+    if (!err) {
+      // Check if any users exist, if not seed the default ADMIN
+      db.get("SELECT COUNT(*) as count FROM users", async (err, row) => {
+        if (!err && row.count === 0) {
+          try {
+            const bcrypt = require("bcryptjs");
+            const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
+            if (!process.env.DEFAULT_ADMIN_PASSWORD) {
+              console.warn("WARNING: DEFAULT_ADMIN_PASSWORD environment variable is not set. Using default password 'admin123'. Set DEFAULT_ADMIN_PASSWORD in your environment for production use.");
+            }
+            const salt = await bcrypt.genSalt(10);
+            const hashed = await bcrypt.hash(defaultPassword, salt);
+
+            db.run(`INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'ADMIN')`, ['admin', hashed], (insertErr) => {
+              if (insertErr) {
+                console.error("Failed to seed default admin user:", insertErr.message);
+              } else {
+                console.log("Successfully seeded default Admin account (username: admin)");
+              }
+            });
+          } catch (hashError) {
+            console.error("Failed to hash default admin password:", hashError.message);
+          }
+        }
+      });
+    } else {
+      console.error("Failed to create users table:", err.message);
+    }
   });
 });
+
+// Helper to run multiple operations inside a SQLite transaction.
+// Usage: await runTransaction(async (run, get) => { ... });
+// `run` and `get` are promisified wrappers around db.run/db.get that execute
+// within the same BEGIN/COMMIT/ROLLBACK block.
+db.runTransaction = (fn) => {
+  return new Promise((resolve, reject) => {
+    db.run("BEGIN TRANSACTION", async (beginErr) => {
+      if (beginErr) return reject(beginErr);
+      try {
+        const run = (sql, params = []) =>
+          new Promise((res, rej) => {
+            db.run(sql, params, function (err) {
+              if (err) return rej(err);
+              res({ lastID: this.lastID, changes: this.changes });
+            });
+          });
+        const get = (sql, params = []) =>
+          new Promise((res, rej) => {
+            db.get(sql, params, (err, row) => {
+              if (err) return rej(err);
+              res(row);
+            });
+          });
+
+        const result = await fn(run, get);
+        db.run("COMMIT", (commitErr) => {
+          if (commitErr) return reject(commitErr);
+          resolve(result);
+        });
+      } catch (error) {
+        db.run("ROLLBACK", () => reject(error));
+      }
+    });
+  });
+};
 
 module.exports = db;

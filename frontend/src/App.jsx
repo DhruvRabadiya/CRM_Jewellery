@@ -3,7 +3,6 @@ import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import StockManagement from "./pages/StockManagement";
-import MeltingProcess from "./pages/MeltingProcess";
 import ProductionJobs from "./pages/ProductionJobs";
 import FinishedGoods from "./pages/FinishedGoods";
 import JobHistory from "./pages/JobHistory";
@@ -18,7 +17,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 // Guard wrapper to ensure user is logged in
 const ProtectedRoute = ({ children, requireAdmin }) => {
   const { user, loading, isAdmin } = useAuth();
-  
+
   if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (requireAdmin && !isAdmin) return <Navigate to="/" replace />; // Lock out employees from admin pages
@@ -39,7 +38,7 @@ function App() {
 
           {/* Protected Routes inside MainLayout (Production Mode) */}
           <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-            
+
             {/* Standard Employee/Admin Routes */}
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/stock" element={<StockManagement />} />

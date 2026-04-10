@@ -3,13 +3,8 @@ module.exports = {
     GOLD: "Gold",
     SILVER: "Silver",
   },
-  JOB_STEPS: {
-    ROLLING: "Rolling",
-    PRESS: "Press",
-    TPP: "TPP",
-    PACKING: "Packing",
-  },
   STATUS: {
+    PENDING: "PENDING",
     RUNNING: "RUNNING",
     IN_PROGRESS: "IN_PROGRESS",
     COMPLETED: "COMPLETED",
@@ -24,7 +19,6 @@ module.exports = {
   },
   MESSAGES: {
     INSUFFICIENT_STOCK: "Insufficient Opening Stock available.",
-    INSUFFICIENT_DHAL: "Insufficient Dhal Stock available.",
     JOB_NOT_FOUND: "Job not found.",
     STEP_ALREADY_COMPLETED: "This step is already completed.",
     INVALID_INPUT: "Invalid input data provided.",

@@ -1,132 +1,21 @@
 const db = require("../../config/dbConfig");
-const { STATUS, JOB_STEPS } = require("../utils/constants");
 
-// Update createJob to accept and save weights
-const createJob = (
-  job_number,
-  metal_type,
-  target_product,
-  current_step,
-  issue_weight,
-) => {
-  return new Promise((resolve, reject) => {
-    const query = `INSERT INTO production_jobs (job_number, metal_type, target_product, current_step, status, issue_weight, current_weight) VALUES (?, ?, ?, ?, 'PENDING', ?, ?)`;
-    db.run(
-      query,
-      [
-        job_number,
-        metal_type,
-        target_product,
-        current_step,
-        issue_weight,
-        issue_weight,
-      ],
-      function (err) {
-        if (err) reject(err);
-        resolve(this.lastID);
-      },
-    );
-  });
-};
-
-// Update updateJobStep to also update the current_weight
-const updateJobStep = (job_id, next_step, status, new_current_weight) => {
-  return new Promise((resolve, reject) => {
-    const query = `UPDATE production_jobs SET current_step = ?, status = ?, current_weight = ? WHERE id = ?`;
-    db.run(
-      query,
-      [next_step, status, new_current_weight, job_id],
-      function (err) {
-        if (err) reject(err);
-        resolve();
-      },
-    );
-  });
-};
-const logJobStep = (
-  jobId,
-  stepName,
-  issueWeight,
-  returnWeight,
-  scrapWeight,
-  lossWeight,
-  returnPieces = 0,
-) => {
-  return new Promise((resolve, reject) => {
-    const query = `INSERT INTO job_steps (job_id, step_name, issue_weight, return_weight, scrap_weight, loss_weight, return_pieces) 
-                       VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    db.run(
-      query,
-      [
-        jobId,
-        stepName,
-        issueWeight,
-        returnWeight,
-        scrapWeight,
-        lossWeight,
-        returnPieces,
-      ],
-      function (err) {
-        if (err) reject(err);
-        resolve(this.lastID);
-      },
-    );
-  });
-};
-
-const getJobById = (jobId) => {
-  return new Promise((resolve, reject) => {
-    const query = `SELECT * FROM production_jobs WHERE id = ?`;
-    db.get(query, [jobId], (err, row) => {
-      if (err) reject(err);
-      resolve(row);
-    });
-  });
-};
-
-const getLastStep = (jobId) => {
-  return new Promise((resolve, reject) => {
-    const query = `SELECT * FROM job_steps WHERE job_id = ? ORDER BY id DESC LIMIT 1`;
-    db.get(query, [jobId], (err, row) => {
-      if (err) reject(err);
-      resolve(row);
-    });
-  });
-};
-
-// Save completed job into finished goods
-const addFinishedGoods = (metal_type, target_product, pieces, weight) => {
-  return new Promise((resolve, reject) => {
-    const query = `INSERT INTO finished_goods (metal_type, target_product, pieces, weight) VALUES (?, ?, ?, ?)`;
-    db.run(query, [metal_type, target_product, pieces, weight], function (err) {
-      if (err) reject(err);
-      resolve(this.lastID);
-    });
-  });
-};
-
-const getActiveJobs = () => {
-  return new Promise((resolve, reject) => {
-    const query = `SELECT * FROM production_jobs WHERE status IN ('IN_PROGRESS', 'PENDING') ORDER BY id DESC`;
-    db.all(query, [], (err, rows) => {
-      if (err) reject(err);
-      resolve(rows);
-    });
-  });
-};
 // Get the next serial Job Number (e.g., JOB-0001, JOB-0002)
 const getNextJobNumber = () => {
   return new Promise((resolve, reject) => {
-    // Find the absolute last job created across all processes
+    // Find the absolute last job created across all process tables that have job_number.
+    // Note: melting_process does not have a job_number column (melting is standalone).
     const query = `
       SELECT job_number FROM (
-        SELECT job_number FROM rolling_processes
+        SELECT job_number FROM melting_process WHERE job_number IS NOT NULL
         UNION ALL
-        SELECT job_number FROM press_processes
+        SELECT job_number FROM rolling_processes WHERE job_number IS NOT NULL
         UNION ALL
-        SELECT job_number FROM tpp_processes
+        SELECT job_number FROM press_processes WHERE job_number IS NOT NULL
         UNION ALL
-        SELECT job_number FROM packing_processes
+        SELECT job_number FROM tpp_processes WHERE job_number IS NOT NULL
+        UNION ALL
+        SELECT job_number FROM packing_processes WHERE job_number IS NOT NULL
       ) ORDER BY job_number DESC LIMIT 1
     `;
     db.get(query, [], (err, row) => {
@@ -149,40 +38,52 @@ const getNextJobNumber = () => {
   });
 };
 
-// Group and fetch all finished goods
+// Compute finished goods from completed packing processes and their return items (source of truth)
 const getFinishedGoodsInventory = () => {
   return new Promise((resolve, reject) => {
     const query = `
-            SELECT metal_type, target_product, SUM(pieces) as total_pieces, SUM(weight) as total_weight 
-            FROM finished_goods 
-            GROUP BY metal_type, target_product
-            ORDER BY metal_type, target_product
-        `;
+      SELECT metal_type, target_product, SUM(total_pieces) as total_pieces, SUM(total_weight) as total_weight
+      FROM (
+        -- Multi-category entries via process_return_items
+        SELECT pp.metal_type, pri.category AS target_product,
+               SUM(pri.return_pieces) as total_pieces,
+               SUM(pri.return_weight) as total_weight
+        FROM process_return_items pri
+        INNER JOIN packing_processes pp ON pri.process_id = pp.id AND pri.process_type = 'packing'
+        WHERE pp.status = 'COMPLETED'
+        GROUP BY pp.metal_type, pri.category
+
+        UNION ALL
+
+        -- Fallback: completed packing processes without process_return_items (legacy single-category)
+        SELECT pp.metal_type, pp.category AS target_product,
+               pp.return_pieces as total_pieces,
+               pp.return_weight as total_weight
+        FROM packing_processes pp
+        WHERE pp.status = 'COMPLETED' AND (pp.return_weight > 0 OR pp.return_pieces > 0)
+          AND NOT EXISTS (
+            SELECT 1 FROM process_return_items pri
+            WHERE pri.process_id = pp.id AND pri.process_type = 'packing'
+          )
+      )
+      GROUP BY metal_type, target_product
+      HAVING MAX(SUM(total_weight), 0) > 0 OR MAX(SUM(total_pieces), 0) > 0
+      ORDER BY metal_type, target_product
+    `;
     db.all(query, [], (err, rows) => {
       if (err) reject(err);
-      resolve(rows || []);
+      // Clamp negative values to 0
+      const sanitized = (rows || []).map(r => ({
+        ...r,
+        total_pieces: Math.max(r.total_pieces || 0, 0),
+        total_weight: Math.max(r.total_weight || 0, 0),
+      }));
+      resolve(sanitized);
     });
   });
 };
 
-const startJobStep = (job_id) => {
-  return new Promise((resolve, reject) => {
-    const query = `UPDATE production_jobs SET status = 'IN_PROGRESS' WHERE id = ?`;
-    db.run(query, [job_id], function (err) {
-      if (err) reject(err);
-      resolve();
-    });
-  });
-};
 module.exports = {
-  createJob,
-  logJobStep,
-  updateJobStep,
-  getJobById,
-  getLastStep,
-  addFinishedGoods,
-  getActiveJobs,
   getNextJobNumber,
   getFinishedGoodsInventory,
-  startJobStep,
 };

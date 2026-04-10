@@ -10,9 +10,9 @@ import {
   PlayCircle,
   Hammer,
   Trash2,
-  ArrowRightCircle,
   PlusCircle,
   Printer,
+  Edit,
 } from "lucide-react";
 import {
   getCombinedProcesses,
@@ -63,6 +63,15 @@ const sizeOptions = {
     "500 gm",
     "Other",
   ],
+};
+
+const formatCategoryDisplay = (categories, customCategory) => {
+  if (!categories || categories.length === 0) return "Select categories...";
+  const standard = categories.filter(c => c !== "Other");
+  const custom = categories.includes("Other") && customCategory ? customCategory : "";
+  const parts = [...standard];
+  if (custom) parts.push(custom);
+  return parts.join(", ");
 };
 
 const JobHistory = () => {
@@ -137,9 +146,8 @@ const JobHistory = () => {
   });
 
   const [completeForm, setCompleteForm] = useState({
-    return_weight: "",
+    return_items: [{ category: "", return_weight: "", return_pieces: "" }],
     scrap_weight: "",
-    return_pieces: "",
     weight_unit: "g",
     description: "",
   });
@@ -148,12 +156,13 @@ const JobHistory = () => {
     issued_weight: "",
     weight_unit: "g",
     description: "",
-    category: "",
+    categories: [],
     customCategory: "",
+    return_items: [{ category: "", return_weight: "", return_pieces: "" }],
+    scrap_weight: "",
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isNextStep, setIsNextStep] = useState(false);
   const [createForm, setCreateForm] = useState({
     stage: "Rolling",
     job_number: "",
@@ -217,10 +226,13 @@ const JobHistory = () => {
 
   const openCompleteModal = (process) => {
     setSelectedProcess(process);
+    const cats = (process.category || "").split(",").map(c => c.trim()).filter(Boolean);
+    const initialItems = cats.length > 1
+      ? cats.map(cat => ({ category: cat, return_weight: "", return_pieces: "" }))
+      : [{ category: process.category || "", return_weight: "", return_pieces: "" }];
     setCompleteForm({
-      return_weight: "",
+      return_items: initialItems,
       scrap_weight: "",
-      return_pieces: "",
       weight_unit: process.metal_type === "Silver" ? "kg" : "g",
       description: "",
     });
@@ -229,31 +241,39 @@ const JobHistory = () => {
 
   const handleCompleteProcess = async (e) => {
     e.preventDefault();
-    const issW = parseFloat(selectedProcess.issued_weight);
-    let retW = parseFloat(completeForm.return_weight) || 0;
+
+    const div = completeForm.weight_unit === "kg" ? 1000 : 1;
+
+    const returnItems = completeForm.return_items
+      .filter(item => parseFloat(item.return_weight) > 0)
+      .map(item => ({
+        category: item.category || selectedProcess.category || "",
+        return_weight: parseFloat(parseFloat(item.return_weight * div).toFixed(8)),
+        return_pieces: parseInt(item.return_pieces) || 0,
+      }));
+
+    const totalRetW = returnItems.reduce((sum, item) => sum + item.return_weight, 0);
     let scrW = parseFloat(completeForm.scrap_weight) || 0;
-
-    if (completeForm.weight_unit === "kg") {
-      retW *= 1000;
-      scrW *= 1000;
-    }
-
-    retW = parseFloat(retW.toFixed(8));
+    if (completeForm.weight_unit === "kg") scrW *= 1000;
     scrW = parseFloat(scrW.toFixed(8));
 
-    const liveLoss = issW - retW - scrW;
-
-    if (retW <= 0) {
+    if (totalRetW <= 0) {
       triggerError();
-      return showToast("Return must be > 0", "error");
+      return showToast("At least one return weight must be > 0", "error");
+    }
+
+    if (scrW < 0) {
+      triggerError();
+      return showToast("Scrap weight cannot be negative", "error");
     }
 
     try {
       await completeProcess(selectedProcess.stage, {
         process_id: selectedProcess.id,
-        return_weight: retW,
+        return_items: returnItems,
+        return_weight: totalRetW,
         scrap_weight: scrW,
-        return_pieces: parseInt(completeForm.return_pieces) || 0,
+        return_pieces: returnItems.reduce((sum, item) => sum + item.return_pieces, 0),
         description: completeForm.description || "",
       });
       showToast("Completed!", "success");
@@ -307,25 +327,56 @@ const JobHistory = () => {
     setSelectedProcess(process);
     const isSil = process.metal_type === "Silver";
     const div = isSil ? 1000 : 1;
+
+    // Pre-populate return_items from process_return_items if available (COMPLETED)
+    const prefilledReturnItems =
+      process.return_items && process.return_items.length > 0
+        ? process.return_items.map((item) => ({
+            category: item.category || "",
+            return_weight: item.return_weight != null
+              ? parseFloat((item.return_weight / div).toFixed(10)).toString()
+              : "",
+            return_pieces: item.return_pieces != null ? item.return_pieces.toString() : "",
+            _isCustom: item.category
+              ? !(sizeOptions[process.metal_type] || []).includes(item.category)
+              : false,
+          }))
+        : process.status === "COMPLETED" && process.return_weight != null
+        ? [{ category: process.category || "", return_weight: parseFloat((process.return_weight / div).toFixed(10)).toString(), return_pieces: (process.return_pieces || "").toString(), _isCustom: false }]
+        : [{ category: "", return_weight: "", return_pieces: "" }];
+
     setEditForm({
       issued_weight: process.issued_weight
         ? parseFloat((process.issued_weight / div).toFixed(10)).toString()
         : "",
-      return_weight:
-        process.return_weight !== null && process.return_weight !== undefined
-          ? parseFloat((process.return_weight / div).toFixed(10)).toString()
-          : "",
       scrap_weight:
         process.scrap_weight !== null && process.scrap_weight !== undefined
           ? parseFloat((process.scrap_weight / div).toFixed(10)).toString()
           : "",
       issue_pieces: process.issue_pieces || "",
-      return_pieces: process.return_pieces || "",
       weight_unit: isSil ? "kg" : "g",
-      category: sizeOptions[process.metal_type].includes(process.category) ? process.category : (process.category ? "Other" : ""),
-      customCategory: sizeOptions[process.metal_type].includes(process.category) ? "" : (process.category || ""),
+      categories: (() => {
+        if (!process.category) return [];
+        const parts = process.category.split(", ");
+        const metalOpts = sizeOptions[process.metal_type] || [];
+        const cats = [];
+        const customParts = [];
+        parts.forEach(p => {
+          if (metalOpts.includes(p)) cats.push(p);
+          else customParts.push(p);
+        });
+        if (customParts.length > 0) cats.push("Other");
+        return cats.length > 0 ? cats : [];
+      })(),
+      customCategory: (() => {
+        if (!process.category) return "";
+        const parts = process.category.split(", ");
+        const metalOpts = sizeOptions[process.metal_type] || [];
+        return parts.filter(p => !metalOpts.includes(p)).join(", ");
+      })(),
       description: process.description || "",
       employee: process.employee || "",
+      return_items: prefilledReturnItems,
     });
     setIsEditModalOpen(true);
   };
@@ -340,7 +391,13 @@ const JobHistory = () => {
     let payload = {
       issued_weight: issueW,
       issue_pieces: parseInt(editForm.issue_pieces) || 0,
-      category: editForm.category === "Other" ? editForm.customCategory : editForm.category,
+      category: (() => {
+        let cats = editForm.categories.filter(c => c !== "Other");
+        if (editForm.categories.includes("Other") && editForm.customCategory) {
+          cats.push(editForm.customCategory);
+        }
+        return cats.join(", ");
+      })(),
     };
     if (editForm.description !== undefined) {
       payload.description = editForm.description;
@@ -353,15 +410,23 @@ const JobHistory = () => {
       selectedProcess?.status === "COMPLETED" ||
       selectedProcess?.status === "RUNNING"
     ) {
-      let retW = parseFloat(editForm.return_weight) || 0;
+      const div = isKg ? 1000 : 1;
+      const returnItems = (editForm.return_items || [])
+        .filter(item => parseFloat(item.return_weight) > 0)
+        .map(item => ({
+          category: item.category || selectedProcess.category || "",
+          return_weight: parseFloat(parseFloat(item.return_weight * div).toFixed(8)),
+          return_pieces: parseInt(item.return_pieces) || 0,
+        }));
+
       let scrW = parseFloat(editForm.scrap_weight) || 0;
-      if (isKg) {
-        retW *= 1000;
-        scrW *= 1000;
-      }
-      payload.return_weight = parseFloat(retW.toFixed(8));
-      payload.scrap_weight = parseFloat(scrW.toFixed(8));
-      payload.return_pieces = parseInt(editForm.return_pieces) || 0;
+      if (isKg) scrW *= 1000;
+      scrW = parseFloat(scrW.toFixed(8));
+
+      payload.return_items = returnItems;
+      payload.return_weight = parseFloat(returnItems.reduce((s, i) => s + i.return_weight, 0).toFixed(8));
+      payload.return_pieces = returnItems.reduce((s, i) => s + i.return_pieces, 0);
+      payload.scrap_weight = scrW;
     }
 
     try {
@@ -373,30 +438,6 @@ const JobHistory = () => {
       triggerError();
       showToast(error.message || "Failed to edit job", "error");
     }
-  };
-
-  const openNextStepModal = (process, remainingWeight) => {
-    let nextStage = "Rolling";
-    if (process.stage === "Rolling") nextStage = "Press";
-    if (process.stage === "Press") nextStage = "TPP";
-    if (process.stage === "TPP") nextStage = "Packing";
-
-    setCreateForm({
-      stage: nextStage,
-      job_number: process.job_number,
-      metal_type: process.metal_type,
-      category: sizeOptions[process.metal_type].includes(process.category) ? process.category : (process.category ? "Other" : ""),
-      customCategory: sizeOptions[process.metal_type].includes(process.category) ? "" : (process.category || ""),
-      issue_size:
-        process.metal_type === "Silver"
-          ? parseFloat((remainingWeight / 1000).toFixed(10)).toString()
-          : parseFloat(remainingWeight.toFixed(10)).toString(),
-      issue_pieces: process.return_pieces || "",
-      weight_unit: process.metal_type === "Silver" ? "kg" : "g",
-      description: process.description || "",
-    });
-    setIsNextStep(true);
-    setIsCreateModalOpen(true);
   };
 
   const openViewModal = (process) => {
@@ -435,22 +476,17 @@ const JobHistory = () => {
     fetchHistory();
   }, [fetchHistory]);
 
-  const reqPieces = false;
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0
     : 0;
-  let retVal = parseFloat(completeForm.return_weight) || 0;
-  let scrVal = parseFloat(completeForm.scrap_weight) || 0;
-
-  if (completeForm?.weight_unit === "kg") {
-    retVal *= 1000;
-    scrVal *= 1000;
-  }
+  const div = completeForm?.weight_unit === "kg" ? 1000 : 1;
+  let retVal = (completeForm.return_items || []).reduce((sum, item) => sum + (parseFloat(item.return_weight) || 0), 0) * div;
+  let scrVal = (parseFloat(completeForm.scrap_weight) || 0) * div;
   const liveLoss = parseFloat((issVal - retVal - scrVal).toFixed(10));
   const isLossNegative = liveLoss < 0;
 
   const editIssVal = parseFloat(editForm.issued_weight) || 0;
-  let editRetWeight = parseFloat(editForm.return_weight) || 0;
+  let editRetWeight = (editForm.return_items || []).reduce((s, i) => s + (parseFloat(i.return_weight) || 0), 0);
   let editScrWeight = parseFloat(editForm.scrap_weight) || 0;
   if (editForm?.weight_unit === "kg") {
     editRetWeight *= 1000;
@@ -464,54 +500,6 @@ const JobHistory = () => {
     ).toFixed(10),
   );
   const editIsLossNegative = editLiveLoss < 0;
-
-  const getRemainingStockForRow = (row, historyItems, allItems) => {
-    let nextStage = null;
-    if (row.stage === "Rolling") nextStage = "Press";
-    if (row.stage === "Press") nextStage = "TPP";
-    if (row.stage === "TPP") nextStage = "Packing";
-    if (!nextStage) return 0;
-
-    let stageReturns = historyItems
-      .filter((p) => p.stage === row.stage && p.status === "COMPLETED")
-      .map((p) => ({ ...p, remaining: parseFloat(p.return_weight) || 0 }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    let consumedItems = allItems
-      .filter((p) => p.stage === nextStage && p.job_number === row.job_number)
-      .map((p) => parseFloat(p.issued_weight || p.issue_size || 0));
-
-    for (let i = 0; i < consumedItems.length; i++) {
-      let c = consumedItems[i];
-      if (c <= 0) continue;
-
-      let exactMatchIndex = stageReturns.findIndex(
-        (r) => Math.abs(r.remaining - c) < 0.001,
-      );
-      if (exactMatchIndex !== -1) {
-        stageReturns[exactMatchIndex].remaining = 0;
-        consumedItems[i] = 0;
-      }
-    }
-
-    let totalConsumed = consumedItems.reduce((sum, c) => sum + c, 0);
-
-    for (let r of stageReturns) {
-      if (totalConsumed <= 0) break;
-      if (r.remaining <= 0) continue;
-
-      if (totalConsumed >= r.remaining) {
-        totalConsumed -= r.remaining;
-        r.remaining = 0;
-      } else {
-        r.remaining -= totalConsumed;
-        totalConsumed = 0;
-      }
-    }
-
-    const targetRow = stageReturns.find((r) => r.id === row.id);
-    return targetRow ? parseFloat(targetRow.remaining.toFixed(10)) : 0;
-  };
 
   if (loading)
     return (
@@ -667,7 +655,7 @@ const JobHistory = () => {
                       </td>
                       <td className="p-4 text-sm font-bold text-gray-700">
                         <span className="bg-gray-100 px-2 py-1 rounded text-[10px] uppercase border border-gray-200">
-                          {h.category || "N/A"}
+                          {h.status === "COMPLETED" && h.return_items && h.return_items.length > 0 ? [...new Set(h.return_items.map((item) => item.category).filter(Boolean))].join(", ") : h.category || "N/A"}
                         </span>
                       </td>
                       <td className="p-4 text-gray-500 text-sm whitespace-nowrap">
@@ -746,34 +734,9 @@ const JobHistory = () => {
                         )}
 
                         {h.status === "COMPLETED" && (
-                          <>
-                            {h.stage !== "Packing" &&
-                              getRemainingStockForRow(
-                                h,
-                                history,
-                                allProcesses,
-                              ) > 0.001 && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openNextStepModal(
-                                      h,
-                                      getRemainingStockForRow(
-                                        h,
-                                        history,
-                                        allProcesses,
-                                      ),
-                                    );
-                                  }}
-                                  className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-200 active:scale-95 flex items-center justify-center gap-1 whitespace-nowrap"
-                                >
-                                  <ArrowRightCircle size={14} /> Start Next
-                                </button>
-                              )}
-                            <div className="w-8 flex justify-center items-center text-green-500">
-                              <CheckCircle size={20} />
-                            </div>
-                          </>
+                          <div className="w-8 flex justify-center items-center text-green-500">
+                            <CheckCircle size={20} />
+                          </div>
                         )}
                         {isAdmin && (
                           <button
@@ -848,7 +811,7 @@ const JobHistory = () => {
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Stage
                 </label>
-                {isNextStep || true ? (
+                {true ? (
                   <input
                     type="text"
                     className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
@@ -913,7 +876,7 @@ const JobHistory = () => {
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Job Number
                 </label>
-                {isNextStep || createForm.stage === "Rolling" ? (
+                {createForm.stage === "Rolling" ? (
                   <input
                     type="text"
                     className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-mono text-blue-800 font-bold outline-none cursor-not-allowed"
@@ -960,7 +923,7 @@ const JobHistory = () => {
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Metal
                 </label>
-                {isNextStep || true ? (
+                {true ? (
                   <input
                     type="text"
                     className="w-full bg-gray-100 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-gray-600 outline-none cursor-not-allowed"
@@ -1212,169 +1175,211 @@ const JobHistory = () => {
           isOpen={isCompleteModalOpen}
           onClose={() => setIsCompleteModalOpen(false)}
           title={`Complete ${selectedProcess?.stage}`}
+          maxWidth="max-w-2xl"
         >
           <form
             onSubmit={handleCompleteProcess}
-            className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+            className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
           >
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex justify-between items-center mb-2">
-                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
-                  Category
-                </span>
-                <span className="text-sm font-black text-indigo-900">
-                  {selectedProcess?.category || "N/A"}
-                </span>
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">
-                  Weight Unit
-                </label>
-                <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCompleteForm({ ...completeForm, weight_unit: "g" })
-                    }
-                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                  >
-                    Grams (g)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCompleteForm({ ...completeForm, weight_unit: "kg" })
-                    }
-                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                  >
-                    Kilogram (kg)
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-green-700 mb-1 uppercase">
-                  Good Output
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  required
-                  className="w-full bg-green-50 border-2 border-green-200 py-3 px-4 rounded-lg font-bold text-xl outline-none vivid-focus-green transition-all"
-                  value={completeForm.return_weight}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      return_weight: e.target.value,
-                    })
-                  }
-                  placeholder="0.000"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">
-                  Scrap/Dust
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  className="w-full bg-yellow-50/50 border-2 border-yellow-200 py-3 px-4 rounded-lg font-bold text-xl outline-none vivid-focus-yellow transition-all"
-                  value={completeForm.scrap_weight}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      scrap_weight: e.target.value,
-                    })
-                  }
-                  placeholder="0.000"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-purple-700 mb-1 uppercase">
-                  Final Pieces {reqPieces ? "" : "(Optional)"}
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  required={reqPieces}
-                  className="w-full bg-purple-50 border-2 border-purple-200 py-3 px-4 rounded-lg font-bold text-xl outline-none vivid-focus-purple transition-all"
-                  value={completeForm.return_pieces}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      return_pieces: e.target.value,
-                    })
-                  }
-                  placeholder={reqPieces ? "0" : "0 (Optional)"}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">
-                  Description / Notes (Optional)
-                </label>
-                <textarea
-                  className="w-full bg-gray-50 border-2 border-blue-200 py-3 px-4 rounded-lg outline-none vivid-focus-blue min-h-20 transition-all font-medium"
-                  value={completeForm.description}
-                  onChange={(e) =>
-                    setCompleteForm({
-                      ...completeForm,
-                      description: e.target.value,
-                    })
-                  }
-                  placeholder="Add completion notes or issues..."
-                />
-              </div>
-            </div>
-            <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner mt-4">
-              <div className="flex justify-between text-sm mb-1">
-                <span>Issued ({completeForm?.weight_unit || "g"}):</span>
-                <span>
-                  {parseFloat(
-                    (
-                      issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(10),
-                  )}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm mb-1 text-green-400">
-                <span>- Return:</span>
-                <span>
-                  {parseFloat(
-                    (
-                      retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(10),
-                  )}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm mb-3 text-yellow-400">
-                <span>- Scrap:</span>
-                <span>
-                  {parseFloat(
-                    (
-                      scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(10),
-                  )}
-                </span>
-              </div>
-              <div className="border-t border-gray-600 pt-3 flex justify-between font-bold">
-                <span>{isLossNegative ? "Gain:" : "Loss:"}</span>
-                <span
-                  className={isLossNegative ? "text-green-400" : "text-white"}
+            {/* Weight Unit Toggle */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                Weight Unit
+              </label>
+              <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setCompleteForm({ ...completeForm, weight_unit: "g" })}
+                  className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "g" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 >
+                  Grams (g)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompleteForm({ ...completeForm, weight_unit: "kg" })}
+                  className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors ${completeForm?.weight_unit === "kg" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  Kilogram (kg)
+                </button>
+              </div>
+            </div>
+
+            {/* Return Items */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-bold text-green-700 uppercase tracking-wide">
+                  Return Weights (by Size)
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCompleteForm({
+                      ...completeForm,
+                      return_items: [
+                        ...completeForm.return_items,
+                        { category: "", return_weight: "", return_pieces: "" },
+                      ],
+                    })
+                  }
+                  className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-200"
+                >
+                  + Add Row
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {/* Column labels */}
+                <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                  <div className="col-span-4">Category / Size</div>
+                  <div className="col-span-4">Weight ({completeForm.weight_unit})</div>
+                  <div className="col-span-3">Pieces</div>
+                  <div className="col-span-1"></div>
+                </div>
+                {completeForm.return_items.map((item, idx) => {
+                  const metalSizes = sizeOptions[selectedProcess?.metal_type] || [];
+                  const isStandardCategory = metalSizes.includes(item.category);
+                  const isCustom = item._isCustom || (!isStandardCategory && item.category !== "");
+                  const selectValue = isCustom ? "Other" : item.category;
+
+                  return (
+                  <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-green-50 border border-green-200 p-2 rounded-lg">
+                    <div className="col-span-4">
+                      <select
+                        value={selectValue}
+                        onChange={(e) => {
+                          const newItems = [...completeForm.return_items];
+                          if (e.target.value === "Other") {
+                            newItems[idx] = { ...newItems[idx], category: "", _isCustom: true };
+                          } else {
+                            newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: false };
+                          }
+                          setCompleteForm({ ...completeForm, return_items: newItems });
+                        }}
+                        className="w-full bg-white border border-green-200 py-2 px-2 rounded text-sm font-medium outline-none"
+                      >
+                        <option value="">Select Size</option>
+                        {metalSizes.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      {isCustom && (
+                        <input
+                          type="text"
+                          placeholder="Enter custom category..."
+                          value={item.category}
+                          onChange={(e) => {
+                            const newItems = [...completeForm.return_items];
+                            newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: true };
+                            setCompleteForm({ ...completeForm, return_items: newItems });
+                          }}
+                          className="w-full mt-1 bg-white border border-blue-200 py-1.5 px-2 rounded text-xs font-medium outline-none"
+                        />
+                      )}
+                    </div>
+                    <div className="col-span-4">
+                      <input
+                        type="number"
+                        step="0.001"
+                        placeholder={`0.000`}
+                        value={item.return_weight}
+                        onChange={(e) => {
+                          const newItems = [...completeForm.return_items];
+                          newItems[idx] = { ...newItems[idx], return_weight: e.target.value };
+                          setCompleteForm({ ...completeForm, return_items: newItems });
+                        }}
+                        className="w-full bg-white border border-green-200 py-2 px-2 rounded text-xl font-bold outline-none"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        step="1"
+                        placeholder="0"
+                        value={item.return_pieces}
+                        onChange={(e) => {
+                          const newItems = [...completeForm.return_items];
+                          newItems[idx] = { ...newItems[idx], return_pieces: e.target.value };
+                          setCompleteForm({ ...completeForm, return_items: newItems });
+                        }}
+                        className="w-full bg-white border border-green-200 py-2 px-2 rounded text-sm font-bold outline-none"
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-center">
+                      {completeForm.return_items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItems = completeForm.return_items.filter((_, i) => i !== idx);
+                            setCompleteForm({ ...completeForm, return_items: newItems });
+                          }}
+                          className="text-red-400 hover:text-red-600 font-bold text-lg leading-none"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Scrap */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+                Scrap/Dust ({completeForm.weight_unit})
+              </label>
+              <input
+                type="number"
+                step="0.001"
+                className="w-full bg-yellow-50/50 border-2 border-yellow-200 py-2.5 px-3 rounded-lg font-bold text-xl outline-none transition-all"
+                value={completeForm.scrap_weight}
+                onChange={(e) => setCompleteForm({ ...completeForm, scrap_weight: e.target.value })}
+                placeholder="0.000"
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+                Description / Notes (Optional)
+              </label>
+              <textarea
+                className="w-full bg-gray-50 border-2 border-blue-200 py-2.5 px-3 rounded-lg outline-none min-h-16 text-sm transition-all font-medium"
+                value={completeForm.description || ""}
+                onChange={(e) => setCompleteForm({ ...completeForm, description: e.target.value })}
+                placeholder="Add completion notes..."
+              />
+            </div>
+
+            {/* Live loss summary */}
+            <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col gap-1.5">
+              <div className="flex justify-between text-sm">
+                <span>Issued ({completeForm?.weight_unit || "g"}):</span>
+                <span>{parseFloat((issVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+              </div>
+              <div className="flex justify-between text-sm text-green-400">
+                <span>- Total Return:</span>
+                <span>{parseFloat((retVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+              </div>
+              <div className="flex justify-between text-sm text-yellow-400 mb-2">
+                <span>- Scrap:</span>
+                <span>{parseFloat((scrVal / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
+              </div>
+              <div className="border-t border-gray-600 pt-3 flex justify-between font-bold text-lg">
+                <span>{isLossNegative ? "Gain:" : "Loss:"}</span>
+                <span className={isLossNegative ? "text-green-400" : "text-white"}>
                   {isLossNegative ? "+" : ""}
-                  {parseFloat(
-                    (
-                      Math.abs(liveLoss) /
-                      (completeForm?.weight_unit === "kg" ? 1000 : 1)
-                    ).toFixed(10),
-                  )}
+                  {parseFloat((Math.abs(liveLoss) / (completeForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}
                 </span>
               </div>
             </div>
+
             <button
               type="submit"
-              className="w-full mt-4 bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700"
+              className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition-colors"
             >
               Complete Process
             </button>
@@ -1389,21 +1394,24 @@ const JobHistory = () => {
         >
           <form
             onSubmit={handleEditProcess}
-            className={`space-y-4 ${isShaking ? "animate-shake" : ""}`}
+            className={`space-y-5 ${isShaking ? "animate-shake" : ""}`}
           >
-            <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mb-4 flex gap-3 items-start">
+            <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 flex gap-3 items-start">
               <div className="text-yellow-600 mt-0.5">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <path
-                    fillRule="evenodd"
-                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                    clipRule="evenodd"
-                  />
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
               </div>
               <div>
@@ -1416,30 +1424,72 @@ const JobHistory = () => {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               <div className="col-span-1">
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Category
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                  Issue Weight
                 </label>
-                <select
-                  className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-md font-semibold text-sm outline-none focus:border-blue-500 focus:bg-white transition-colors"
-                  value={editForm.category}
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      category: e.target.value,
-                    })
-                  }
-                >
-                  {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex bg-gray-50 border border-gray-200 rounded-lg focus-within:border-blue-500 transition-colors overflow-hidden">
+                  <input
+                    type="number"
+                    step="0.001"
+                    className="w-full bg-transparent text-gray-700 py-2.5 px-3 outline-none font-bold"
+                    value={editForm.issued_weight}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, issued_weight: e.target.value })
+                    }
+                    required
+                  />
+                  <select
+                    className="bg-gray-100 border-l border-gray-200 px-3 font-bold text-gray-600 outline-none"
+                    value={editForm.weight_unit}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, weight_unit: e.target.value })
+                    }
+                  >
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                  </select>
+                </div>
               </div>
 
-              {editForm.category === "Other" && (
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                  Category <span className="text-gray-400 font-normal">(Multi)</span>
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, _catOpen: !editForm._catOpen })}
+                    className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none cursor-pointer text-left text-sm truncate"
+                  >
+                    {formatCategoryDisplay(editForm.categories, editForm.customCategory)}
+                  </button>
+                  {editForm._catOpen && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                      {sizeOptions[selectedProcess?.metal_type]?.map((c) => (
+                        <label key={c} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm font-medium">
+                          <input
+                            type="checkbox"
+                            checked={editForm.categories.includes(c)}
+                            onChange={(e) => {
+                              const updated = e.target.checked
+                                ? [...editForm.categories, c]
+                                : editForm.categories.filter(cat => cat !== c);
+                              setEditForm({ ...editForm, categories: updated });
+                            }}
+                            className="accent-blue-600 w-4 h-4"
+                          />
+                          {c}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {editForm.categories.includes("Other") && (
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-blue-700 mb-1.5 uppercase tracking-wide">
                     Custom Category Name
@@ -1458,45 +1508,17 @@ const JobHistory = () => {
                   />
                 </div>
               )}
-              <div className="col-span-1">
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  New Issue Weight
-                </label>
-                <div className="flex bg-gray-50 border border-gray-200 rounded-md focus-within:border-blue-500 focus-within:bg-white transition-colors overflow-hidden">
-                  <input
-                    type="number"
-                    step="0.001"
-                    className="w-full bg-transparent text-gray-700 py-2.5 px-3 text-sm outline-none font-bold"
-                    value={editForm.issued_weight}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        issued_weight: e.target.value,
-                      })
-                    }
-                    required
-                  />
-                  <select
-                    className="bg-gray-100 border-l border-gray-200 px-2 text-xs font-bold text-gray-600 outline-none"
-                    value={editForm.weight_unit}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, weight_unit: e.target.value })
-                    }
-                  >
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                  </select>
-                </div>
-              </div>
 
-              <div className="col-span-2">
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Issue Pieces{" "}
-                  <span className="text-gray-400 font-normal">(Optional)</span>
+                  <span className="text-gray-400 font-normal tracking-normal">
+                    (Optional)
+                  </span>
                 </label>
                 <input
                   type="number"
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 text-sm rounded-md outline-none font-bold focus:border-blue-500 focus:bg-white transition-colors"
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
                   value={editForm.issue_pieces}
                   onChange={(e) =>
                     setEditForm({ ...editForm, issue_pieces: e.target.value })
@@ -1505,115 +1527,152 @@ const JobHistory = () => {
                 />
               </div>
 
-              {/* <div className="col-span-2">
-                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                  Assigned Employee{" "}
-                  <span className="text-gray-400 font-normal tracking-normal">
-                    (Optional)
-                  </span>
-                </label>
-                <select
-                  className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold outline-none focus:border-blue-500 transition-colors cursor-pointer"
-                  value={editForm.employee || ""}
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      employee: e.target.value,
-                    })
-                  }
-                >
-                  <option value="" disabled>
-                    Select Employee
-                  </option>
-                  {users
-                    .filter((u) => u.role === "EMPLOYEE")
-                    .map((u) => (
-                      <option key={u.id} value={u.username}>
-                        {u.username}
-                      </option>
-                    ))}
-                </select>
-              </div> */}
+              {selectedProcess?.status === "COMPLETED" ||
+              selectedProcess?.status === "RUNNING" ? (
+                <>
+                  <div className="col-span-2 border-t border-gray-100 pt-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                        Output Adjustments (by Size)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditForm({
+                            ...editForm,
+                            return_items: [
+                              ...(editForm.return_items || []),
+                              { category: "", return_weight: "", return_pieces: "" },
+                            ],
+                          })
+                        }
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors border border-blue-200"
+                      >
+                        + Add Row
+                      </button>
+                    </div>
 
-              {(selectedProcess?.status === "COMPLETED" ||
-                selectedProcess?.status === "RUNNING") && (
-                <div className="col-span-2 grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 mt-1">
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
-                      Completion Data
-                    </p>
-                  </div>
+                    {/* Column labels */}
+                    <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                      <div className="col-span-4">Category / Size</div>
+                      <div className="col-span-4">Weight ({editForm.weight_unit})</div>
+                      <div className="col-span-3">Pieces</div>
+                      <div className="col-span-1"></div>
+                    </div>
 
-                  <div className="col-span-1">
-                    <label className="flex items-center gap-1 text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                      Return Weight
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      className="w-full bg-blue-50 border border-blue-200 text-blue-900 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
-                      value={editForm.return_weight}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          return_weight: e.target.value,
-                        })
-                      }
-                      placeholder={`0.000 ${editForm.weight_unit}`}
-                    />
-                  </div>
+                    {(editForm.return_items || []).map((item, idx) => {
+                      const metalSizes = sizeOptions[selectedProcess?.metal_type] || [];
+                      const isStandardCategory = metalSizes.includes(item.category);
+                      const isCustom = item._isCustom || (!isStandardCategory && item.category !== "");
+                      const selectValue = isCustom ? "Other" : item.category;
+                      return (
+                        <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-green-50 border border-green-200 p-2 rounded-lg">
+                          <div className="col-span-4">
+                            <select
+                              value={selectValue}
+                              onChange={(e) => {
+                                const newItems = [...(editForm.return_items || [])];
+                                if (e.target.value === "Other") {
+                                  newItems[idx] = { ...newItems[idx], category: "", _isCustom: true };
+                                } else {
+                                  newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: false };
+                                }
+                                setEditForm({ ...editForm, return_items: newItems });
+                              }}
+                              className="w-full bg-white border border-green-200 py-1.5 px-2 rounded text-sm font-medium outline-none"
+                            >
+                              <option value="">Select Size</option>
+                              {metalSizes.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                            {isCustom && (
+                              <input
+                                type="text"
+                                placeholder="Custom category..."
+                                value={item.category}
+                                onChange={(e) => {
+                                  const newItems = [...(editForm.return_items || [])];
+                                  newItems[idx] = { ...newItems[idx], category: e.target.value, _isCustom: true };
+                                  setEditForm({ ...editForm, return_items: newItems });
+                                }}
+                                className="w-full mt-1 bg-white border border-blue-200 py-1 px-2 rounded text-xs font-medium outline-none"
+                              />
+                            )}
+                          </div>
+                          <div className="col-span-4">
+                            <input
+                              type="number"
+                              step="0.001"
+                              placeholder="0.000"
+                              value={item.return_weight}
+                              onChange={(e) => {
+                                const newItems = [...(editForm.return_items || [])];
+                                newItems[idx] = { ...newItems[idx], return_weight: e.target.value };
+                                setEditForm({ ...editForm, return_items: newItems });
+                              }}
+                              className="w-full bg-white border border-green-200 py-1.5 px-2 rounded text-base font-bold outline-none"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="number"
+                              step="1"
+                              placeholder="0"
+                              value={item.return_pieces}
+                              onChange={(e) => {
+                                const newItems = [...(editForm.return_items || [])];
+                                newItems[idx] = { ...newItems[idx], return_pieces: e.target.value };
+                                setEditForm({ ...editForm, return_items: newItems });
+                              }}
+                              className="w-full bg-white border border-green-200 py-1.5 px-2 rounded text-sm font-bold outline-none"
+                            />
+                          </div>
+                          <div className="col-span-1 flex justify-center">
+                            {(editForm.return_items || []).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newItems = (editForm.return_items || []).filter((_, i) => i !== idx);
+                                  setEditForm({ ...editForm, return_items: newItems });
+                                }}
+                                className="text-red-400 hover:text-red-600 font-bold text-lg leading-none"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
 
-                  <div className="col-span-1">
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                      Return Pieces
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      min="0"
-                      className="w-full bg-blue-50 border border-blue-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
-                      value={editForm.return_pieces}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          return_pieces: e.target.value,
-                        })
-                      }
-                      placeholder="0"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        Scrap / Dust
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-lg outline-none font-bold focus:border-blue-500 transition-colors"
+                        value={editForm.scrap_weight}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            scrap_weight: e.target.value,
+                          })
+                        }
+                        placeholder="0.000"
+                      />
+                    </div>
 
-                  <div className="col-span-1">
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                      Scrap / Dust
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      className="w-full bg-gray-50 border border-gray-200 py-2.5 px-3 rounded-lg font-bold text-lg outline-none focus:bg-white focus:border-blue-500 transition-colors"
-                      value={editForm.scrap_weight}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          scrap_weight: e.target.value,
-                        })
-                      }
-                      placeholder={`0.000 ${editForm.weight_unit}`}
-                    />
-                  </div>
-
-                  <div className="col-span-1 flex flex-col">
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                      Live Loss Calculation
-                    </label>
-                    <div className="flex-1 bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col justify-center gap-1.5">
+                    <div className="bg-gray-800 text-gray-200 p-4 rounded-xl font-mono shadow-inner flex flex-col justify-center gap-1.5">
                       <div className="flex justify-between text-sm">
                         <span>Issued ({editForm?.weight_unit || "g"}):</span>
                         <span>{editIssVal}</span>
                       </div>
                       <div className="flex justify-between text-sm text-green-400">
-                        <span>- Return:</span>
-                        <span>{parseFloat(editForm.return_weight || 0)}</span>
+                        <span>- Total Return:</span>
+                        <span>{parseFloat((editRetWeight / (editForm?.weight_unit === "kg" ? 1000 : 1)).toFixed(10))}</span>
                       </div>
                       <div className="flex justify-between text-sm text-yellow-400 mb-2">
                         <span>- Scrap:</span>
@@ -1628,18 +1687,24 @@ const JobHistory = () => {
                       </div>
                     </div>
                   </div>
+                </>
+              ) : (
+                <div className="col-span-1 border-l border-gray-100 pl-6 flex items-center justify-center text-sm text-gray-400 italic">
+                  <p>Job is PENDING. Output fields are locked.</p>
                 </div>
               )}
 
-              <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
-                <label className="block text-xs font-bold text-blue-800 mb-1.5 uppercase tracking-wide">
+              <div
+                className={`col-span-1 flex flex-col ${selectedProcess?.status === "COMPLETED" || selectedProcess?.status === "RUNNING" ? "mt-4" : ""}`}
+              >
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Description / Notes{" "}
-                  <span className="text-blue-600/70 font-normal tracking-normal">
+                  <span className="text-gray-400 font-normal tracking-normal">
                     (Optional)
                   </span>
                 </label>
                 <textarea
-                  className="w-full bg-white border border-blue-200 py-2 px-3 text-sm rounded-lg outline-none focus:border-blue-500 min-h-20 transition-colors"
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2 px-3 text-sm rounded-lg outline-none focus:border-blue-500 transition-colors flex-1 min-h-20"
                   value={editForm.description}
                   onChange={(e) =>
                     setEditForm({ ...editForm, description: e.target.value })
@@ -1651,9 +1716,9 @@ const JobHistory = () => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white font-bold py-3.5 text-sm rounded-xl hover:bg-blue-700 shadow flex items-center justify-center gap-2 active:scale-95 transition-all mt-2"
+              className="w-full bg-blue-600 text-white font-bold py-3.5 text-sm rounded-xl hover:bg-blue-700 transition-all mt-2 flex items-center justify-center gap-2"
             >
-              Update Process Database
+              <Edit size={16} /> Update Process Database
             </button>
           </form>
         </Modal>

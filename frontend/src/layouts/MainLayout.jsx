@@ -3,7 +3,6 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
   Coins,
-  Flame,
   Hammer,
   Package,
   LogOut,
@@ -22,7 +21,6 @@ const MainLayout = () => {
   const menuItems = [
     { path: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     ...(isAdmin ? [{ path: "/stock", label: "Stock Management", icon: <Coins size={20} /> }] : []),
-    { path: "/melting", label: "Melting Process", icon: <Flame size={20} /> },
     {
       path: "/production",
       label: "Production Jobs",
