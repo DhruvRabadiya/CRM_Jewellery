@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { PackageSearch, Weight, Layers, ArrowLeftRight, X } from "lucide-react";
+import { Store, Weight, Layers, ArrowLeftRight, X, RefreshCw } from "lucide-react";
 import { getCounterInventory, returnFromCounter } from "../api/counterService";
 import Toast from "../components/Toast";
 
@@ -15,9 +15,37 @@ const parseUnitWeight = (category) => {
   return match ? parseFloat(match[1]) : null;
 };
 
+const TAB_CONFIG = {
+  "Gold 22K": {
+    dot: "bg-amber-400",
+    activeBg: "bg-amber-100 text-amber-900 ring-2 ring-amber-300",
+    border: "border-amber-100",
+    badge: "bg-amber-50 text-amber-700 border-amber-100",
+    iconBg: "bg-amber-50 text-amber-600",
+    empty: "bg-amber-50/50 border-amber-200 text-amber-700",
+  },
+  "Gold 24K": {
+    dot: "bg-yellow-400",
+    activeBg: "bg-yellow-100 text-yellow-900 ring-2 ring-yellow-300",
+    border: "border-yellow-100",
+    badge: "bg-yellow-50 text-yellow-700 border-yellow-100",
+    iconBg: "bg-yellow-50 text-yellow-600",
+    empty: "bg-yellow-50/50 border-yellow-200 text-yellow-700",
+  },
+  Silver: {
+    dot: "bg-gray-400",
+    activeBg: "bg-gray-200 text-gray-900 ring-2 ring-gray-400",
+    border: "border-gray-200",
+    badge: "bg-gray-100 text-gray-600 border-gray-200",
+    iconBg: "bg-gray-100 text-gray-500",
+    empty: "bg-gray-50 border-gray-300 text-gray-500",
+  },
+};
+
 const SellingCounter = () => {
   const [inventory, setInventory] = useState({ "Gold 22K": [], "Gold 24K": [], Silver: [] });
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("Gold 22K");
   const [toast, setToast] = useState(null);
 
   // Return to finished goods modal state
@@ -32,16 +60,15 @@ const SellingCounter = () => {
   };
 
   const fetchInventory = useCallback(async () => {
+    setLoading(true);
     try {
       const result = await getCounterInventory();
       if (result.success) {
         const grouped = { "Gold 22K": [], "Gold 24K": [], Silver: [] };
         result.data.forEach((item) => {
-          // Calculate weight from category name
           const unitWeight = parseUnitWeight(item.target_product);
           const calculatedWeight = unitWeight != null ? item.total_pieces * unitWeight : null;
           const enriched = { ...item, calculated_weight: calculatedWeight, unit_weight: unitWeight };
-
           if (grouped[item.metal_type]) {
             grouped[item.metal_type].push(enriched);
           }
@@ -96,119 +123,144 @@ const SellingCounter = () => {
     }
   };
 
-  if (loading) {
+  if (loading)
     return (
-      <div className="p-8 text-center animate-pulse text-indigo-400 font-bold text-xl mt-20">
+      <div className="p-8 text-center animate-pulse text-gray-500">
         Loading Counter Inventory...
       </div>
     );
-  }
 
-  const ProductCard = ({ item, colorTheme }) => {
-    const hasWeight = item.calculated_weight != null;
-    return (
-      <div className={`bg-white rounded-3xl p-6 shadow-lg shadow-${colorTheme}-100/50 border border-${colorTheme}-100 hover:shadow-xl hover:shadow-${colorTheme}-200/50 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1`}>
+  const cfg = TAB_CONFIG[activeTab];
+  const items = inventory[activeTab] || [];
+  const totalPieces = items.reduce((s, i) => s + (i.total_pieces || 0), 0);
+  const totalWeight = items.reduce((s, i) => s + (i.calculated_weight || 0), 0);
 
-        <div className="flex justify-between items-start mb-6 z-10 relative">
-          <h3 className="text-2xl font-black text-slate-800 leading-tight">
-            {item.target_product}
-          </h3>
-          <span className={`bg-${colorTheme}-50 text-${colorTheme}-700 px-3 py-1 rounded-full text-xs font-bold border border-${colorTheme}-200/50 uppercase tracking-widest`}>
-            {item.metal_type}
-          </span>
+  return (
+    <div className="p-4 sm:p-6 relative max-w-7xl mx-auto">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight flex items-center gap-2">
+            <Store className="text-indigo-600" size={24} /> Selling Counter
+          </h1>
+          <p className="text-gray-500 text-sm mt-0.5">Items at the counter ready for sale</p>
         </div>
+        <button
+          onClick={fetchInventory}
+          className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-600 font-semibold text-sm px-3 py-2 rounded-lg hover:bg-gray-50 hover:border-indigo-400 shadow-sm active:scale-95 transition-all"
+        >
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
 
-        <div className="flex flex-col gap-3 relative z-10">
-          <div className="bg-slate-50 p-4 rounded-2xl flex items-center justify-between border border-slate-100">
-            <div className="flex items-center gap-2 text-slate-500 font-bold text-sm">
-              <Layers size={18} /> Pieces
+      {/* Summary stats */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        {Object.entries(TAB_CONFIG).map(([metal, c]) => {
+          const metalItems = inventory[metal] || [];
+          const pieces = metalItems.reduce((s, i) => s + (i.total_pieces || 0), 0);
+          const weight = metalItems.reduce((s, i) => s + (i.calculated_weight || 0), 0);
+          return (
+            <div key={metal} className={`bg-white rounded-xl border ${c.border} p-3 flex items-center gap-3`}>
+              <span className={`w-2.5 h-8 rounded-full ${c.dot} flex-shrink-0`} />
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-500 uppercase truncate">{metal}</p>
+                <p className="text-sm font-black text-gray-800">{pieces} <span className="text-gray-400 font-medium">pcs</span> · {weight.toFixed(2)}<span className="text-gray-400 text-xs">g</span></p>
+              </div>
             </div>
-            <span className="text-2xl font-black text-slate-800">
-              {item.total_pieces}
-            </span>
-          </div>
+          );
+        })}
+      </div>
 
-          <div className={`bg-${colorTheme}-50 p-4 rounded-2xl flex items-center justify-between border border-${colorTheme}-100`}>
-            <div className={`flex items-center gap-2 text-${colorTheme}-600 font-bold text-sm`}>
-              <Weight size={18} /> Calculated Weight
-            </div>
-            <span className={`text-xl font-black text-${colorTheme}-900`}>
-              {hasWeight ? (
-                <>
-                  {item.calculated_weight.toFixed(2)}
-                  <span className="text-sm font-bold opacity-70 ml-1">g</span>
-                </>
-              ) : (
-                <span className="text-sm font-bold opacity-50">N/A</span>
-              )}
-            </span>
-          </div>
-
-          {hasWeight && item.unit_weight != null && (
-            <div className="text-xs text-slate-400 font-semibold text-center mt-1">
-              {item.total_pieces} pcs × {item.unit_weight}g = {item.calculated_weight.toFixed(2)}g
+      {/* Tab bar + content */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-1 px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50/50">
+          {Object.keys(TAB_CONFIG).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                activeTab === tab ? TAB_CONFIG[tab].activeBg : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${TAB_CONFIG[tab].dot}`} />
+              {tab}
+              <span className="text-xs font-semibold opacity-70 ml-0.5">({(inventory[tab] || []).length})</span>
+            </button>
+          ))}
+          {items.length > 0 && (
+            <div className="ml-auto flex items-center gap-3 text-xs text-gray-500 pr-1">
+              <span className="flex items-center gap-1"><Layers size={12} /><strong className="text-gray-700">{totalPieces}</strong> pcs</span>
+              <span className="flex items-center gap-1"><Weight size={12} /><strong className="text-gray-700">{totalWeight.toFixed(2)}</strong>g</span>
             </div>
           )}
         </div>
 
-        {/* Return button */}
-        <div className="mt-4 relative z-10">
-          <button
-            onClick={() => handleOpenReturn(item)}
-            className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95"
-          >
-            <ArrowLeftRight size={14} /> Return to Finished Goods
-          </button>
-        </div>
-
-        {/* Visual flair */}
-        <div className={`absolute -bottom-6 -right-6 w-32 h-32 bg-${colorTheme}-50 rounded-full blur-2xl opacity-50 group-hover:scale-150 transition-transform duration-700 pointer-events-none`}></div>
-      </div>
-    );
-  };
-
-  const metalSections = [
-    { key: "Gold 22K", label: "Gold 22K Collection", colorTheme: "amber", dotColor: "bg-amber-400", dotShadow: "shadow-amber-200" },
-    { key: "Gold 24K", label: "Gold 24K Collection", colorTheme: "yellow", dotColor: "bg-yellow-400", dotShadow: "shadow-yellow-200" },
-    { key: "Silver", label: "Sterling Silver Collection", colorTheme: "slate", dotColor: "bg-slate-300", dotShadow: "shadow-slate-200" },
-  ];
-
-  return (
-    <div className="relative pb-12">
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
-      <div className="mb-10 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight flex items-center justify-center sm:justify-start gap-3">
-            <PackageSearch className="text-indigo-600" size={32} /> Selling Counter
-          </h2>
-          <p className="text-slate-500 mt-2 font-medium">
-            Items sent from production, ready for sale. Weight is calculated from quantity.
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-12">
-        {metalSections.map(({ key, label, colorTheme, dotColor, dotShadow }) => (
-          <section key={key}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className={`w-2 h-8 ${dotColor} rounded-full shadow-sm ${dotShadow}`}></div>
-              <h3 className="text-2xl font-black text-slate-800 tracking-tight">{label}</h3>
+        <div className="p-4">
+          {items.length === 0 ? (
+            <div className={`${cfg.empty} p-8 rounded-xl border border-dashed text-center`}>
+              <Store size={32} className="mx-auto mb-2 opacity-40" />
+              <p className="font-semibold text-sm">No {activeTab} items at the counter.</p>
             </div>
-
-            {(inventory[key] || []).length === 0 ? (
-              <div className="bg-slate-50 p-12 rounded-3xl border-2 border-dashed border-slate-200 text-center">
-                <p className="text-slate-400 font-bold text-lg">No {key} items in the counter.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {inventory[key].map((item, idx) => (
-                  <ProductCard key={`${key}-${idx}`} item={item} colorTheme={colorTheme} />
-                ))}
-              </div>
-            )}
-          </section>
-        ))}
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-gray-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th scope="col" className="text-left py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Category</th>
+                    <th scope="col" className="text-center py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Metal</th>
+                    <th scope="col" className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Pieces</th>
+                    <th scope="col" className="text-right py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Weight</th>
+                    <th scope="col" className="text-center py-2.5 px-4 font-bold text-gray-500 text-xs uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, idx) => (
+                    <tr
+                      key={idx}
+                      className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-indigo-50/30 transition-colors`}
+                    >
+                      <td className="py-2.5 px-4 font-bold text-gray-800 flex items-center gap-2">
+                        <div className={`p-1.5 rounded-lg ${cfg.iconBg}`}>
+                          <Store size={14} />
+                        </div>
+                        {item.target_product}
+                      </td>
+                      <td className="py-2.5 px-4 text-center">
+                        <span className={`${cfg.badge} border text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide`}>
+                          {item.metal_type}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-black text-gray-800">{item.total_pieces}</td>
+                      <td className="py-2.5 px-4 text-right font-semibold text-gray-700">
+                        {item.calculated_weight != null ? `${item.calculated_weight.toFixed(2)}g` : "—"}
+                      </td>
+                      <td className="py-2.5 px-4 text-center">
+                        <button
+                          onClick={() => handleOpenReturn(item)}
+                          className="inline-flex items-center gap-1 bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 font-bold text-xs px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                          title="Return to Finished Goods"
+                        >
+                          <ArrowLeftRight size={12} /> Return
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-100 border-t border-gray-200">
+                    <td className="py-2 px-4 font-black text-gray-700 text-xs uppercase">Total</td>
+                    <td></td>
+                    <td className="py-2 px-4 text-right font-black text-gray-800">{totalPieces}</td>
+                    <td className="py-2 px-4 text-right font-black text-gray-800">{totalWeight.toFixed(2)}g</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Return to Finished Goods Modal */}
@@ -221,7 +273,7 @@ const SellingCounter = () => {
               <div>
                 <h3 className="text-xl font-black text-gray-800">Return to Finished Goods</h3>
                 <p className="text-gray-500 text-sm mt-1">
-                  Return pieces from the counter back to finished goods.
+                  Return pieces from the counter back to production.
                 </p>
               </div>
               <button
@@ -236,7 +288,10 @@ const SellingCounter = () => {
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Selected Item</p>
               <p className="text-lg font-black text-gray-800">{selectedItem.target_product}</p>
               <p className="text-sm text-gray-500 mt-1">
-                <span className="font-bold">{selectedItem.metal_type}</span> · In Counter: <span className="font-black text-gray-800">{selectedItem.total_pieces}</span> pcs
+                <span className="font-bold">{selectedItem.metal_type}</span> · Available: <span className="font-black text-gray-800">{selectedItem.total_pieces}</span> pcs
+                {selectedItem.calculated_weight != null && (
+                  <> · <span className="font-black text-gray-800">{selectedItem.calculated_weight.toFixed(2)}g</span></>
+                )}
               </p>
             </div>
 
@@ -256,6 +311,12 @@ const SellingCounter = () => {
                   required
                   autoFocus
                 />
+                {returnPieces && selectedItem.unit_weight != null && parseInt(returnPieces) > 0 && (
+                  <p className="mt-2 text-xs font-bold text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
+                    Weight: <span className="text-gray-800">{(parseInt(returnPieces) * selectedItem.unit_weight).toFixed(2)}g</span>
+                    <span className="text-gray-400 ml-1">({returnPieces} × {selectedItem.unit_weight}g)</span>
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3 pt-2 border-t border-gray-100">

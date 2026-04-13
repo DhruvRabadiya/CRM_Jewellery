@@ -8,7 +8,8 @@ import {
   LogOut,
   Users,
   Menu,
-  ChevronLeft
+  ChevronLeft,
+  Home
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -19,6 +20,7 @@ const MainLayout = () => {
 
   // Menu Items Configuration (Conditionally rendered)
   const menuItems = [
+    { path: "/", label: "Home", icon: <Home size={20} /> },
     { path: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     ...(isAdmin ? [{ path: "/stock", label: "Stock Management", icon: <Coins size={20} /> }] : []),
     {
