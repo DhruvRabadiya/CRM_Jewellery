@@ -51,10 +51,12 @@ const sendToCounter = async (req, res) => {
       return formatResponse(res, 400, false, "Insufficient finished goods available for transfer");
     }
 
-    // Calculate weight to deduct proportionally from finished goods
-    const weightToDeduct = available.total_pieces > 0
-      ? (piecesToSend / available.total_pieces) * available.total_weight
-      : 0;
+    // Calculate weight to deduct: use parsed unit weight for consistency with counter display,
+    // fall back to proportional calculation for unparseable categories (Mix, Other)
+    const unitWeight = parseUnitWeight(target_product);
+    const weightToDeduct = unitWeight != null
+      ? piecesToSend * unitWeight
+      : (available.total_pieces > 0 ? (piecesToSend / available.total_pieces) * available.total_weight : 0);
 
     // Deduct from finished goods (insert negative adjustment)
     await packingService.addFinishedGoods(metal_type, target_product, -piecesToSend, -weightToDeduct);
@@ -95,9 +97,23 @@ const returnFromCounter = async (req, res) => {
       return formatResponse(res, 400, false, "Insufficient items in counter to return");
     }
 
-    // Calculate weight to return based on unit weight from category name
+    // Calculate weight to return using the same logic as send:
+    // parsed unit weight for standard categories, proportional for Mix/Other
     const unitWeight = parseUnitWeight(target_product);
-    const weightToReturn = unitWeight != null ? piecesToReturn * unitWeight : 0;
+    // For unparseable categories, attempt proportional estimate from finished goods
+    let weightToReturn = 0;
+    if (unitWeight != null) {
+      weightToReturn = piecesToReturn * unitWeight;
+    } else {
+      // Fallback: estimate from current finished goods average weight per piece
+      const finishedGoods = await jobService.getFinishedGoodsInventory();
+      const fgItem = finishedGoods.find(
+        (item) => item.metal_type === metal_type && item.target_product === target_product
+      );
+      if (fgItem && fgItem.total_pieces > 0) {
+        weightToReturn = (piecesToReturn / fgItem.total_pieces) * fgItem.total_weight;
+      }
+    }
 
     // Deduct from counter (insert negative adjustment)
     await counterService.addCounterInventory(metal_type, target_product, -piecesToReturn);
