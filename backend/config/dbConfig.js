@@ -241,7 +241,16 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // 6. SVG INVENTORY (Sales Vault)
+  // 6a. COUNTER INVENTORY (Selling Counter)
+  db.run(`CREATE TABLE IF NOT EXISTS counter_inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metal_type TEXT,
+      target_product TEXT,
+      pieces INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 6b. SVG INVENTORY (Sales Vault)
   db.run(`CREATE TABLE IF NOT EXISTS svg_inventory (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       metal_type TEXT,
