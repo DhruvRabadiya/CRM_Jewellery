@@ -8,7 +8,8 @@ import {
   LogOut,
   Users,
   Menu,
-  ChevronLeft
+  ChevronLeft,
+  ArrowLeft
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -37,9 +38,18 @@ const MainLayout = () => {
         {/* Logo Area */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-100 py-2">
           {isSidebarOpen && (
-            <h1 className="text-2xl font-bold text-blue-900 tracking-wider">
-              JEWEL<span className="text-blue-500">CRM</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <Link 
+                to="/" 
+                className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 px-2 py-1.5 rounded-lg transition-colors border border-gray-200 hover:border-blue-200"
+                title="Modes"
+              >
+                <ArrowLeft size={16} /> Modes
+              </Link>
+              <h1 className="text-xl font-bold text-blue-900 tracking-wider ml-1">
+                JEWEL<span className="text-blue-500">CRM</span>
+              </h1>
+            </div>
           )}
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
