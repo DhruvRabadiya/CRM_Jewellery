@@ -13,6 +13,7 @@ import ModeSelection from "./pages/ModeSelection";
 import SellingLayout from "./layouts/SellingLayout";
 import SellingCounter from "./pages/SellingCounter";
 import SvgCounter from "./pages/SvgCounter";
+import Customers from "./pages/Customers";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 // Guard wrapper to ensure user is logged in
@@ -57,6 +58,7 @@ function App() {
             <Route index element={<Navigate to="stocks" replace />} />
             <Route path="stocks" element={<SellingCounter />} />
             <Route path="svg" element={<SvgCounter />} />
+            <Route path="customers" element={<Customers />} />
           </Route>
 
           {/* Fallback */}

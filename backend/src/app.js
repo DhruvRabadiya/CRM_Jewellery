@@ -14,6 +14,7 @@ const tppRoutes = require("./routes/tppRoutes");
 const packingRoutes = require("./routes/packingRoutes");
 const svgRoutes = require("./routes/svgRoutes");
 const counterRoutes = require("./routes/counterRoutes");
+const customerRoutes = require("./routes/customerRoutes");
 const authRoutes = require("./routes/authRoutes");
 const { authenticateToken } = require("./middleware/authMiddleware");
 
@@ -36,6 +37,7 @@ app.use("/api/tpp", authenticateToken, tppRoutes);
 app.use("/api/packing", authenticateToken, packingRoutes);
 app.use("/api/svg", authenticateToken, svgRoutes);
 app.use("/api/counter", authenticateToken, counterRoutes);
+app.use("/api/customers", authenticateToken, customerRoutes);
 
 app.get("/", (req, res) => {
   res.send("Jewelry CRM Backend is Running");

@@ -260,6 +260,19 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // 7. CUSTOMERS (Selling Counter Accounts)
+  db.run(`CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      party_name TEXT NOT NULL,
+      firm_name TEXT NOT NULL,
+      address TEXT NOT NULL,
+      city TEXT NOT NULL,
+      phone_no TEXT NOT NULL,
+      telephone_no TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Safe migration for description and employee columns across all process tables
   const processTables = [
     "melting_process",
