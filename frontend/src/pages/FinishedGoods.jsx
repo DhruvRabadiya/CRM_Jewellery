@@ -8,20 +8,6 @@ import { sendToCounter } from "../api/counterService";
 import Toast from "../components/Toast";
 
 const TAB_CONFIG = {
-  "Gold 22K": {
-    dot: "bg-amber-400",
-    activeBg: "bg-amber-50 text-amber-900 ring-2 ring-amber-300",
-    border: "border-amber-100",
-    topBar: "bg-amber-400",
-    iconBg: "bg-amber-50 text-amber-600",
-    badge: "bg-amber-50 text-amber-700 border-amber-100",
-    wt: "bg-amber-50 border-amber-100 text-amber-900",
-    wtLabel: "text-amber-600",
-    empty: "bg-amber-50/50 border-amber-200 text-amber-700",
-    gradient: "from-amber-500 to-orange-500",
-    statBg: "bg-gradient-to-br from-amber-50 to-orange-50",
-    statBorder: "border-amber-200/60",
-  },
   "Gold 24K": {
     dot: "bg-yellow-400",
     activeBg: "bg-yellow-50 text-yellow-900 ring-2 ring-yellow-300",
@@ -50,12 +36,26 @@ const TAB_CONFIG = {
     statBg: "bg-gradient-to-br from-slate-50 to-gray-100",
     statBorder: "border-slate-200/60",
   },
+  "Gold 22K": {
+    dot: "bg-amber-400",
+    activeBg: "bg-amber-50 text-amber-900 ring-2 ring-amber-300",
+    border: "border-amber-100",
+    topBar: "bg-amber-400",
+    iconBg: "bg-amber-50 text-amber-600",
+    badge: "bg-amber-50 text-amber-700 border-amber-100",
+    wt: "bg-amber-50 border-amber-100 text-amber-900",
+    wtLabel: "text-amber-600",
+    empty: "bg-amber-50/50 border-amber-200 text-amber-700",
+    gradient: "from-amber-500 to-orange-500",
+    statBg: "bg-gradient-to-br from-amber-50 to-orange-50",
+    statBorder: "border-amber-200/60",
+  },
 };
 
 const FinishedGoods = () => {
-  const [inventory, setInventory] = useState({ "Gold 22K": [], "Gold 24K": [], Silver: [] });
+  const [inventory, setInventory] = useState({ "Gold 24K": [], Silver: [], "Gold 22K": [] });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("Gold 22K");
+  const [activeTab, setActiveTab] = useState("Gold 24K");
   const [toast, setToast] = useState(null);
 
   // Send to counter modal state
@@ -74,7 +74,7 @@ const FinishedGoods = () => {
     try {
       const result = await getFinishedGoods();
       if (result.success) {
-        const grouped = { "Gold 22K": [], "Gold 24K": [], Silver: [] };
+        const grouped = { "Gold 24K": [], Silver: [], "Gold 22K": [] };
         result.data.forEach((item) => {
           if (grouped[item.metal_type]) grouped[item.metal_type].push(item);
         });
@@ -119,10 +119,31 @@ const FinishedGoods = () => {
       if (result.success) {
         showToast(result.message, "success");
         setShowSendModal(false);
+
+        // Optimistically remove / decrement the item so the Send button disappears
+        // immediately while the background refetch completes.
+        const metal = selectedItem.metal_type;
+        setInventory((prev) => {
+          const updated = (prev[metal] || [])
+            .map((item) => {
+              if (item.target_product !== selectedItem.target_product) return item;
+              const remaining = item.total_pieces - pieces;
+              if (remaining <= 0) return null;
+              const unitWeight = item.total_pieces > 0 ? item.total_weight / item.total_pieces : 0;
+              return {
+                ...item,
+                total_pieces: remaining,
+                total_weight: Math.max(0, item.total_weight - unitWeight * pieces),
+              };
+            })
+            .filter(Boolean);
+          return { ...prev, [metal]: updated };
+        });
+
         fetchInventory();
       }
     } catch (error) {
-      showToast(error.message || "Failed to send to counter", "error");
+      showToast(error.response?.data?.message || error.message || "Failed to send to counter", "error");
     } finally {
       setIsSubmitting(false);
     }

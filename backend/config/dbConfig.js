@@ -11,6 +11,64 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
+// ─── OB Labour Rates seed helper (matches screenshot data) ───────────────────
+// Called on fresh DB and on migration from old size structure.
+function _seedObRates(db) {
+  // [size_label, size_value, lc_pp_retail, lc_pp_showroom, lc_pp_wholesale, is_custom, sort_order]
+  const gold24kSizes = [
+    ['0.05g',  0.05,  380, 250, 250, 0,  1],
+    ['0.1g',   0.1,   300, 250, 250, 0,  2],
+    ['0.25g',  0.25,  300, 250, 250, 0,  3],
+    ['0.5g',   0.5,   500, 330, 330, 0,  4],
+    ['1g',     1.0,   500, 330, 330, 0,  5],
+    ['2g',     2.0,   720, 400, 400, 0,  6],
+    ['5g',     5.0,   950, 500, 500, 0,  7],
+    ['10g',   10.0,  1200, 600, 600, 0,  8],
+    ['20g',   20.0,  2400,1200,1200, 0,  9],
+    ['25g',   25.0,  3000,1700,1700, 0, 10],
+    ['50g',   50.0,  5000,2500,2500, 0, 11],
+    ['100g', 100.0,  6000,4000,4000, 0, 12],
+  ];
+  const gold22kSizes = [
+    ['0.05g',  0.05,  380, 250, 250, 0,  1],
+    ['0.1g',   0.1,   300, 250, 250, 0,  2],
+    ['0.25g',  0.25,  300, 250, 250, 0,  3],
+    ['0.5g',   0.5,   500, 330, 330, 0,  4],
+    ['1g',     1.0,   500, 330, 330, 0,  5],
+    ['2g',     2.0,   720, 400, 400, 0,  6],
+    ['5g',     5.0,   950, 500, 500, 0,  7],
+    ['10g',   10.0,  1200, 600, 600, 0,  8],
+    ['20g',   20.0,  2400,1200,1200, 0,  9],
+    ['25g',   25.0,  3000,1700,1700, 0, 10],
+    ['50g',   50.0,  5000,2500,2500, 0, 11],
+    ['100g', 100.0,  6000,4000,4000, 0, 12],
+  ];
+  const silverSizes = [
+    ['1g-Bar',     null,  380, 250, 250, 0,  1],
+    ['2g-bar',     null,  300, 250, 250, 0,  2],
+    ['5g-C|B',     null,  300, 250, 250, 0,  3],
+    ['10g-C|B',    null,  500, 330, 330, 0,  4],
+    ['10g Colour', null,  500, 330, 330, 0,  5],
+    ['20g Colour', null,  720, 400, 400, 0,  6],
+    ['50g Colour', null,  950, 500, 500, 0,  7],
+    ['20g-C|B',    null, 1200, 600, 600, 0,  8],
+    ['25g-C|B',    null, 2400,1200,1200, 0,  9],
+    ['50g-C|B',    null, 3000,1700,1700, 0, 10],
+    ['100g-C|B',   null, 5000,2500,2500, 0, 11],
+    ['200g Bar',   null, 5000,5000,5000, 0, 12],
+    ['500g-Bar',   null, 6000,6000,6000, 0, 13],
+  ];
+  const stmt = db.prepare(
+    `INSERT OR IGNORE INTO ob_labour_rates
+      (metal_type, size_label, size_value, lc_pp_retail, lc_pp_showroom, lc_pp_wholesale, is_custom, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  gold24kSizes.forEach(([sl, sv, r, s, w, ic, so]) => stmt.run(['Gold 24K', sl, sv, r, s, w, ic, so]));
+  gold22kSizes.forEach(([sl, sv, r, s, w, ic, so]) => stmt.run(['Gold 22K', sl, sv, r, s, w, ic, so]));
+  silverSizes.forEach(([sl, sv, r, s, w, ic, so])   => stmt.run(['Silver',   sl, sv, r, s, w, ic, so]));
+  stmt.finalize(() => console.log('Seeded OB labour rates (Gold 24K + Gold 22K + Silver)'));
+}
+
 db.serialize(() => {
   // 1. STOCK MASTER (Raw Material and Pooled Stages)
   db.run(`CREATE TABLE IF NOT EXISTS stock_master (
@@ -391,6 +449,347 @@ db.serialize(() => {
     } else {
       console.error("Failed to create users table:", err.message);
     }
+  });
+
+  // 8. LABOUR CHARGES (Admin-configurable per metal type + category + size, with 3-tier pricing)
+  // Schema: Metal Type -> Category -> Size -> (Retail, Showroom, Wholesale) rates
+  const LABOUR_CHARGES_SEED = [
+    // [metal_type, category, size_label, size_value, retail, showroom, wholesale, sort]
+    // Gold 24K / Standard
+    ['Gold 24K', 'Standard', '0.05g',   0.05,   380,  250,  250, 1],
+    ['Gold 24K', 'Standard', '0.1g',    0.1,    300,  250,  250, 2],
+    ['Gold 24K', 'Standard', '0.25g',   0.25,   300,  250,  250, 3],
+    ['Gold 24K', 'Standard', '0.5g',    0.5,    500,  330,  330, 4],
+    ['Gold 24K', 'Standard', '1g',      1,      500,  330,  330, 5],
+    ['Gold 24K', 'Standard', '2g',      2,      720,  400,  400, 6],
+    ['Gold 24K', 'Standard', '5g',      5,      950,  500,  500, 7],
+    ['Gold 24K', 'Standard', '10g',     10,     1200, 600,  600, 8],
+    ['Gold 24K', 'Standard', '20g',     20,     2400, 1200, 1200, 9],
+    ['Gold 24K', 'Standard', '25g',     25,     3000, 1700, 1700, 10],
+    ['Gold 24K', 'Standard', '50g',     50,     5000, 2500, 2500, 11],
+    ['Gold 24K', 'Standard', '100g',    100,    6000, 4000, 4000, 12],
+    // Gold 22K / Standard
+    ['Gold 22K', 'Standard', '0.05g',   0.05,   400,  300,  300, 1],
+    ['Gold 22K', 'Standard', '0.1g',    0.1,    400,  300,  300, 2],
+    ['Gold 22K', 'Standard', '0.25g',   0.25,   400,  300,  300, 3],
+    ['Gold 22K', 'Standard', '0.5g',    0.5,    550,  400,  400, 4],
+    ['Gold 22K', 'Standard', '1g',      1,      600,  400,  400, 5],
+    ['Gold 22K', 'Standard', '2g',      2,      800,  450,  450, 6],
+    ['Gold 22K', 'Standard', '5g',      5,      1000, 550,  550, 7],
+    ['Gold 22K', 'Standard', '10g',     10,     1300, 700,  700, 8],
+    ['Gold 22K', 'Standard', '20g',     20,     2500, 1300, 1300, 9],
+    ['Gold 22K', 'Standard', '25g',     25,     3200, 1900, 1900, 10],
+    ['Gold 22K', 'Standard', '50g',     50,     5500, 5500, 3200, 11],
+    ['Gold 22K', 'Standard', '100g',    100,    6300, 4300, 4300, 12],
+    // Silver / Bar
+    ['Silver',   'Bar',      '1g',      1,      380,  250,  250, 1],
+    ['Silver',   'Bar',      '2g',      2,      300,  250,  250, 2],
+    ['Silver',   'Bar',      '200g',    200,    5000, 5000, 5000, 3],
+    ['Silver',   'Bar',      '500g',    500,    6000, 6000, 6000, 4],
+    // Silver / C|B
+    ['Silver',   'C|B',      '5g',      5,      300,  250,  250, 1],
+    ['Silver',   'C|B',      '10g',     10,     500,  330,  330, 2],
+    ['Silver',   'C|B',      '20g',     20,     1200, 600,  600, 3],
+    ['Silver',   'C|B',      '25g',     25,     2400, 1200, 1200, 4],
+    ['Silver',   'C|B',      '50g',     50,     3000, 1700, 1700, 5],
+    ['Silver',   'C|B',      '100g',    100,    5000, 2500, 2500, 6],
+    // Silver / Colour
+    ['Silver',   'Colour',   '10g',     10,     500,  330,  330, 1],
+    ['Silver',   'Colour',   '20g',     20,     720,  400,  400, 2],
+    ['Silver',   'Colour',   '50g',     50,     950,  500,  500, 3],
+  ];
+
+  const seedLabourCharges = () => {
+    const stmt = db.prepare(
+      `INSERT OR IGNORE INTO labour_charges
+        (metal_type, category, size_label, size_value, lc_pp_retail, lc_pp_showroom, lc_pp_wholesale, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    LABOUR_CHARGES_SEED.forEach((row) => stmt.run(row));
+    stmt.finalize(() => console.log('Seeded default labour charges (Metal -> Category -> Size, 3-tier)'));
+  };
+
+  // Check if new schema exists by looking at labour_charges columns.
+  db.all(`PRAGMA table_info(labour_charges)`, (pragmaErr, existingCols) => {
+    const hasNewSchema =
+      existingCols &&
+      existingCols.some((c) => c.name === 'size_label') &&
+      existingCols.some((c) => c.name === 'lc_pp_retail');
+
+    if (existingCols && existingCols.length > 0 && !hasNewSchema) {
+      // Migrate: rename old table, create new, seed, then drop old.
+      db.serialize(() => {
+        db.run(`DROP TABLE IF EXISTS labour_charges_old`);
+        db.run(`ALTER TABLE labour_charges RENAME TO labour_charges_old`, (rnErr) => {
+          if (rnErr) console.error('labour_charges rename failed:', rnErr.message);
+          db.run(
+            `CREATE TABLE IF NOT EXISTS labour_charges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                metal_type TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'Standard',
+                size_label TEXT NOT NULL,
+                size_value REAL,
+                lc_pp_retail REAL DEFAULT 0,
+                lc_pp_showroom REAL DEFAULT 0,
+                lc_pp_wholesale REAL DEFAULT 0,
+                sort_order INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(metal_type, category, size_label)
+            )`,
+            (cErr) => {
+              if (cErr) console.error('labour_charges recreate failed:', cErr.message);
+              else {
+                seedLabourCharges();
+                db.run(`DROP TABLE IF EXISTS labour_charges_old`);
+                console.log('Migrated labour_charges to new 3-tier schema');
+              }
+            }
+          );
+        });
+      });
+    } else {
+      // Create fresh if missing
+      db.run(
+        `CREATE TABLE IF NOT EXISTS labour_charges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            metal_type TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'Standard',
+            size_label TEXT NOT NULL,
+            size_value REAL,
+            lc_pp_retail REAL DEFAULT 0,
+            lc_pp_showroom REAL DEFAULT 0,
+            lc_pp_wholesale REAL DEFAULT 0,
+            sort_order INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(metal_type, category, size_label)
+        )`,
+        (err) => {
+          if (!err) {
+            db.get('SELECT COUNT(*) as count FROM labour_charges', [], (seedErr, row) => {
+              if (!seedErr && row && row.count === 0) seedLabourCharges();
+            });
+          }
+        }
+      );
+    }
+  });
+
+  // 10. SELLING BILLS (Selling Counter POS Bills)
+  db.run(`CREATE TABLE IF NOT EXISTS selling_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_no INTEGER UNIQUE NOT NULL,
+      date TEXT NOT NULL,
+      customer_id INTEGER REFERENCES customers(id),
+      customer_name TEXT DEFAULT '',
+      customer_type TEXT DEFAULT 'Retail',
+      payment_mode TEXT DEFAULT 'Cash',
+      cash_amount REAL DEFAULT 0,
+      online_amount REAL DEFAULT 0,
+      metal_payment_type TEXT DEFAULT '',
+      metal_purity TEXT DEFAULT '',
+      metal_weight REAL DEFAULT 0,
+      metal_rate REAL DEFAULT 0,
+      metal_value REAL DEFAULT 0,
+      subtotal REAL DEFAULT 0,
+      total_lc REAL DEFAULT 0,
+      discount REAL DEFAULT 0,
+      total_amount REAL DEFAULT 0,
+      amount_paid REAL DEFAULT 0,
+      outstanding_amount REAL DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 11. SELLING BILL ITEMS
+  db.run(`CREATE TABLE IF NOT EXISTS selling_bill_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_id INTEGER NOT NULL REFERENCES selling_bills(id) ON DELETE CASCADE,
+      metal_type TEXT NOT NULL,
+      category TEXT NOT NULL,
+      custom_label TEXT DEFAULT '',
+      size REAL,
+      pieces INTEGER DEFAULT 0,
+      weight REAL DEFAULT 0,
+      rate_per_gram REAL DEFAULT 0,
+      metal_value REAL DEFAULT 0,
+      lc_pp REAL DEFAULT 0,
+      t_lc REAL DEFAULT 0,
+      sort_order INTEGER DEFAULT 0
+  )`);
+
+  // 12. SELLING BILL METAL PAYMENTS (multi-metal payment entries per bill)
+  db.run(`CREATE TABLE IF NOT EXISTS selling_bill_metal_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_id INTEGER NOT NULL REFERENCES selling_bills(id) ON DELETE CASCADE,
+      metal_type TEXT NOT NULL,
+      purity TEXT NOT NULL DEFAULT '99.99',
+      weight REAL DEFAULT 0,
+      rate REAL DEFAULT 0,
+      metal_value REAL DEFAULT 0
+  )`);
+
+  // Migration: add customer_type and outstanding_balance to customers table
+  db.all(`PRAGMA table_info(customers)`, (err, columns) => {
+    if (!err && columns) {
+      if (!columns.some((c) => c.name === 'customer_type')) {
+        db.run(`ALTER TABLE customers ADD COLUMN customer_type TEXT DEFAULT 'Retail'`, (e) => {
+          if (e) console.error('Error adding customer_type:', e.message);
+          else console.log('Added customer_type to customers');
+        });
+      }
+      if (!columns.some((c) => c.name === 'outstanding_balance')) {
+        db.run(`ALTER TABLE customers ADD COLUMN outstanding_balance REAL DEFAULT 0`, (e) => {
+          if (e) console.error('Error adding outstanding_balance:', e.message);
+          else console.log('Added outstanding_balance to customers');
+        });
+      }
+    }
+  });
+
+  // Migration: add discount column to selling_bills
+  db.all(`PRAGMA table_info(selling_bills)`, (err, columns) => {
+    if (!err && columns && !columns.some((c) => c.name === 'discount')) {
+      db.run(`ALTER TABLE selling_bills ADD COLUMN discount REAL DEFAULT 0`, (e) => {
+        if (e) console.error('Error adding discount to selling_bills:', e.message);
+        else console.log('Added discount to selling_bills');
+      });
+    }
+  });
+
+  // 13. OB LABOUR RATES (per-metal, per-size, per-customer-type rates for Order Bills)
+  db.run(`CREATE TABLE IF NOT EXISTS ob_labour_rates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metal_type TEXT NOT NULL,
+      size_label TEXT NOT NULL,
+      size_value REAL,
+      lc_pp_retail REAL DEFAULT 0,
+      lc_pp_showroom REAL DEFAULT 0,
+      lc_pp_wholesale REAL DEFAULT 0,
+      is_custom INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      UNIQUE(metal_type, size_label)
+  )`, (err) => {
+    if (!err) {
+      db.get('SELECT COUNT(*) as count FROM ob_labour_rates', [], (seedErr, row) => {
+        if (!seedErr && row && row.count === 0) {
+          _seedObRates(db);
+        }
+      });
+    }
+  });
+
+  // 14. ORDER BILLS (OB — Order Book bills from Selling Counter)
+  db.run(`CREATE TABLE IF NOT EXISTS order_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ob_no INTEGER UNIQUE NOT NULL,
+      date TEXT NOT NULL,
+      product TEXT DEFAULT '',
+      products TEXT DEFAULT '["Gold 24K"]',
+      customer_name TEXT DEFAULT '',
+      customer_city TEXT DEFAULT '',
+      customer_phone TEXT DEFAULT '',
+      customer_type TEXT DEFAULT 'Retail',
+      fine_jama REAL DEFAULT 0,
+      rate_10g REAL DEFAULT 0,
+      amt_jama REAL DEFAULT 0,
+      total_pcs INTEGER DEFAULT 0,
+      total_weight REAL DEFAULT 0,
+      labour_total REAL DEFAULT 0,
+      fine_diff REAL DEFAULT 0,
+      gold_rs REAL DEFAULT 0,
+      subtotal REAL DEFAULT 0,
+      amt_baki REAL DEFAULT 0,
+      ofg_status TEXT DEFAULT 'OF.G HDF',
+      fine_carry REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 15. ORDER BILL ITEMS (line items for each OB bill)
+  db.run(`CREATE TABLE IF NOT EXISTS order_bill_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_id INTEGER NOT NULL REFERENCES order_bills(id) ON DELETE CASCADE,
+      metal_type TEXT DEFAULT 'Gold 24K',
+      size_label TEXT NOT NULL,
+      size_value REAL DEFAULT 0,
+      pcs INTEGER DEFAULT 0,
+      weight REAL DEFAULT 0,
+      lc_pp REAL DEFAULT 0,
+      t_lc REAL DEFAULT 0,
+      is_custom INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0
+  )`);
+
+  // Migration: order_bills rate_tier → customer_type (R1→Retail, R2→Showroom, R3→Wholesale)
+  //            + add 'products' column if missing (multi-metal JSON array)
+  db.all(`PRAGMA table_info(order_bills)`, (err, columns) => {
+    if (!err && columns) {
+      const hasCustType = columns.some((c) => c.name === 'customer_type');
+      const hasRateTier = columns.some((c) => c.name === 'rate_tier');
+      const hasProducts = columns.some((c) => c.name === 'products');
+      if (!hasCustType) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN customer_type TEXT DEFAULT 'Retail'`, (e) => {
+          if (e) { console.error('Migration customer_type:', e.message); return; }
+          if (hasRateTier) {
+            db.run(`UPDATE order_bills SET customer_type =
+              CASE rate_tier
+                WHEN 'R1' THEN 'Retail'
+                WHEN 'R2' THEN 'Showroom'
+                WHEN 'R3' THEN 'Wholesale'
+                ELSE 'Retail'
+              END`, (ue) => {
+              if (ue) console.error('Migration rate_tier values:', ue.message);
+              else console.log('Migrated order_bills rate_tier → customer_type');
+            });
+          }
+        });
+      }
+      if (!hasProducts) {
+        db.run(
+          `ALTER TABLE order_bills ADD COLUMN products TEXT DEFAULT '["Gold 24K"]'`,
+          (e) => {
+            if (e) console.error('Migration products:', e.message);
+            else {
+              console.log('Added products column to order_bills');
+              // Backfill existing rows from legacy single `product` column when present
+              const hasProduct = columns.some((c) => c.name === 'product');
+              if (hasProduct) {
+                db.run(
+                  `UPDATE order_bills
+                     SET products = CASE
+                       WHEN product IS NULL OR TRIM(product) = '' THEN '["Gold 24K"]'
+                       ELSE '["' || product || '"]'
+                     END
+                   WHERE products IS NULL OR products = '' OR products = '["Gold 24K"]'`,
+                  (ue) => {
+                    if (ue) console.error('Backfill products from product:', ue.message);
+                    else console.log('Backfilled products from legacy product column');
+                  }
+                );
+              }
+            }
+          }
+        );
+      }
+    }
+  });
+
+  // Migration: ob_labour_rates 'Gold' → 'Gold 24K' (idempotent)
+  db.run(`UPDATE ob_labour_rates SET metal_type = 'Gold 24K' WHERE metal_type = 'Gold'`, (err) => {
+    if (err && !err.message.includes('no such table'))
+      console.error('Migration ob_labour_rates Gold→Gold 24K:', err.message);
+  });
+
+  // Migration: reseed if old size labels detected (e.g., '0.10g' or '2.5g' present)
+  // or if Gold 22K is missing entirely. Ensures screenshot-exact initial data.
+  db.get(`SELECT id FROM ob_labour_rates WHERE metal_type='Gold 24K' AND size_label='0.05g'`, [], (err, row) => {
+    if (err || row) return; // already on new structure, or table error
+    console.log('Reseeding ob_labour_rates with updated size structure...');
+    db.run(`DELETE FROM ob_labour_rates`, [], (delErr) => {
+      if (delErr) return console.error('Failed to clear ob_labour_rates for reseed:', delErr.message);
+      _seedObRates(db);
+    });
   });
 
   // Migration: rename legacy 'Gold' metal_type to 'Gold 24K' across all tables

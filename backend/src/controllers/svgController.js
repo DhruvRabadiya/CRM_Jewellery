@@ -120,8 +120,19 @@ const removeFromSvg = async (req, res) => {
   }
 };
 
+const getHistory = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const history = await svgService.getSvgHistory(limit);
+    return formatResponse(res, 200, true, "SVG history fetched", history);
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 module.exports = {
   getInventory,
   addToSvg,
   removeFromSvg,
+  getHistory,
 };

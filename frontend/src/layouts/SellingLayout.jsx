@@ -1,13 +1,13 @@
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { Store, LogOut, ArrowLeft, ShieldCheck, Users } from "lucide-react";
+import { Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings, BookOpen } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const SellingLayout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const location = useLocation();
 
-  const navItems = [
+  const allNavItems = [
     {
       to: "/selling/stocks",
       icon: <Store size={20} />,
@@ -26,7 +26,22 @@ const SellingLayout = () => {
       label: "Customers",
       match: (path) => path.includes("/selling/customers"),
     },
+    {
+      to: "/selling/order-bills",
+      icon: <BookOpen size={20} />,
+      label: "Order Bills",
+      match: (path) => path.includes("/selling/order-bills"),
+    },
+    {
+      to: "/selling/admin",
+      icon: <Settings size={20} />,
+      label: "Admin",
+      match: (path) => path.includes("/selling/admin"),
+      adminOnly: true,
+    },
   ];
+
+  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">

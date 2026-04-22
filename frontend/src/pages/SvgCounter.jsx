@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  ShieldCheck, Weight, Layers, ArrowRight, Lock, X,
-  RefreshCw, PackageCheck, Store, Search,
+  ShieldCheck, Store, ArrowRight, X, RefreshCw,
+  Search, Clock, ArrowUpCircle, ArrowDownCircle, Plus, Minus,
 } from "lucide-react";
-import { getSvgInventory, removeFromSvg } from "../api/svgService";
+import { getSvgInventory, removeFromSvg, getSvgHistory } from "../api/svgService";
 import Toast from "../components/Toast";
 
-/**
- * Parse the unit weight (grams) from a category/target_product string.
- */
 const parseUnitWeight = (category) => {
   if (!category) return null;
   const trimmed = category.trim();
@@ -17,430 +14,368 @@ const parseUnitWeight = (category) => {
   return match ? parseFloat(match[1]) : null;
 };
 
-const METAL_CONFIG = {
-  "Gold 22K": {
-    colorTheme: "amber",
-    gradient: "from-amber-500 to-orange-500",
-    bgGradient: "from-amber-600 to-orange-600",
-    tagBg: "bg-amber-900/30 text-amber-300 border-amber-700/40",
-    cardBorder: "border-amber-500/20 hover:border-amber-400/40",
-    pieceBg: "bg-amber-950/50 border-amber-800/30",
-    pieceColor: "text-amber-300",
-    weightBg: "bg-amber-900/40 border-amber-700/30",
-    weightColor: "text-amber-200",
-    statBg: "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200/60",
-  },
-  "Gold 24K": {
-    colorTheme: "yellow",
-    gradient: "from-yellow-400 to-amber-500",
-    bgGradient: "from-yellow-500 to-amber-600",
-    tagBg: "bg-yellow-900/30 text-yellow-300 border-yellow-700/40",
-    cardBorder: "border-yellow-500/20 hover:border-yellow-400/40",
-    pieceBg: "bg-yellow-950/50 border-yellow-800/30",
-    pieceColor: "text-yellow-300",
-    weightBg: "bg-yellow-900/40 border-yellow-700/30",
-    weightColor: "text-yellow-200",
-    statBg: "bg-gradient-to-br from-yellow-50 to-amber-50 border-yellow-200/60",
-  },
-  Silver: {
-    colorTheme: "slate",
-    gradient: "from-slate-400 to-slate-500",
-    bgGradient: "from-slate-500 to-slate-700",
-    tagBg: "bg-slate-700/50 text-slate-300 border-slate-600/40",
-    cardBorder: "border-slate-600/30 hover:border-slate-500/50",
-    pieceBg: "bg-slate-800/50 border-slate-700/30",
-    pieceColor: "text-slate-300",
-    weightBg: "bg-slate-700/50 border-slate-600/40",
-    weightColor: "text-slate-200",
-    statBg: "bg-gradient-to-br from-slate-50 to-gray-100 border-slate-200/60",
-  },
+const METAL_COLORS = {
+  "Gold 22K": { dot: "bg-amber-400", badge: "bg-amber-100 text-amber-800", border: "border-l-amber-400" },
+  "Gold 24K": { dot: "bg-yellow-400", badge: "bg-yellow-100 text-yellow-800", border: "border-l-yellow-400" },
+  Silver:     { dot: "bg-slate-400",  badge: "bg-slate-100 text-slate-700",  border: "border-l-slate-400"  },
 };
 
-const SvgCounter = () => {
-  const [inventory, setInventory] = useState({ "Gold 22K": [], "Gold 24K": [], Silver: [] });
-  const [loading, setLoading] = useState(true);
+const fmt3 = (n) => Number(n || 0).toFixed(3);
+const fmt2 = (n) => Number(n || 0).toFixed(2);
+
+// ─── Send to Counter Modal ─────────────────────────────────────────────────────
+
+const SendModal = ({ item, onClose, onSuccess }) => {
+  const [pcs, setPcs] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
 
-  // Send to counter modal
-  const [showModal, setShowModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [piecesInput, setPiecesInput] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const unitWeight = parseUnitWeight(item.target_product);
+  const transferWeight =
+    pcs && parseInt(pcs) > 0
+      ? unitWeight != null
+        ? parseInt(pcs) * unitWeight
+        : item.total_pieces > 0
+          ? (parseInt(pcs) / item.total_pieces) * item.total_weight
+          : 0
+      : null;
 
-  const showToast = (message, type) => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+  const mc = METAL_COLORS[item.metal_type] || METAL_COLORS.Silver;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const pieces = parseInt(pcs);
+    if (!pieces || pieces <= 0) return setToast({ message: "Enter a valid number of pieces", type: "error" });
+    if (pieces > item.total_pieces) return setToast({ message: "Cannot exceed available pieces", type: "error" });
+    setSubmitting(true);
+    try {
+      await removeFromSvg({ metal_type: item.metal_type, target_product: item.target_product, pieces });
+      onSuccess(`Moved ${pieces} pcs to Selling Counter`);
+    } catch (err) {
+      setToast({ message: err.message || "Transfer failed", type: "error" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const fetchVault = useCallback(async () => {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+        <div className={`h-1 ${mc.dot.replace("bg-", "bg-")}`} />
+        <div className="p-6">
+          <div className="flex justify-between items-start mb-5">
+            <div>
+              <h3 className="text-lg font-black text-slate-800">Send to Counter</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{item.target_product} · {item.metal_type}</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-200">
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Available</p>
+              <p className="text-2xl font-black text-slate-800">{item.total_pieces}<span className="text-xs text-slate-400 ml-1">pcs</span></p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-200">
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Total Weight</p>
+              <p className="text-2xl font-black text-slate-800">{fmt2(item.total_weight)}<span className="text-xs text-slate-400 ml-1">g</span></p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-black text-slate-600 mb-1.5 uppercase tracking-wider">Pieces to Send</label>
+              <input
+                type="number" min="1" max={item.total_pieces} required autoFocus
+                value={pcs} onChange={(e) => setPcs(e.target.value)}
+                placeholder={`1 – ${item.total_pieces}`}
+                className="w-full px-4 py-3 text-xl font-black text-center border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
+              />
+              {transferWeight != null && (
+                <div className="mt-2 flex justify-between px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-lg text-xs font-bold text-indigo-700">
+                  <span>Transfer Weight</span>
+                  <span>{fmt3(transferWeight)} g</span>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                Cancel
+              </button>
+              <button type="submit" disabled={submitting || !pcs}
+                className="flex-1 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 rounded-xl transition-colors flex items-center justify-center gap-2">
+                <Store size={15} />
+                {submitting ? "Sending…" : "Send to Counter"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const SvgCounter = () => {
+  const [inventory, setInventory] = useState({ "Gold 24K": [], Silver: [], "Gold 22K": [] });
+  const [history, setHistory]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [tab, setTab]             = useState("vault"); // "vault" | "history"
+  const [search, setSearch]       = useState("");
+  const [modalItem, setModalItem] = useState(null);
+  const [toast, setToast]         = useState(null);
+
+  const showToast = useCallback((message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getSvgInventory();
-      if (result.success) {
-        const grouped = { "Gold 22K": [], "Gold 24K": [], Silver: [] };
-        result.data.forEach((item) => {
-          if (grouped[item.metal_type]) {
-            grouped[item.metal_type].push(item);
-          }
-        });
-        setInventory(grouped);
-      }
-    } catch (error) {
+      const [inv, hist] = await Promise.all([getSvgInventory(), getSvgHistory(60)]);
+      const grouped = { "Gold 24K": [], Silver: [], "Gold 22K": [] };
+      (inv.data || []).forEach((item) => {
+        if (grouped[item.metal_type]) grouped[item.metal_type].push(item);
+      });
+      setInventory(grouped);
+      setHistory(hist.data || []);
+    } catch {
       showToast("Failed to load SVG Vault", "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
-  useEffect(() => {
-    fetchVault();
-  }, [fetchVault]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleOpenSend = (item) => {
-    setSelectedItem(item);
-    setPiecesInput("");
-    setShowModal(true);
-  };
+  const allItems  = [...inventory["Gold 24K"], ...inventory.Silver, ...inventory["Gold 22K"]];
+  const totalPcs  = allItems.reduce((s, i) => s + (i.total_pieces || 0), 0);
+  const totalWt   = allItems.reduce((s, i) => s + (i.total_weight || 0), 0);
 
-  const handleSendToCounter = async (e) => {
-    e.preventDefault();
-    if (!selectedItem || !piecesInput) return;
-
-    const pieces = parseInt(piecesInput);
-    if (pieces <= 0) {
-      return showToast("Pieces must be greater than zero", "error");
-    }
-    if (pieces > selectedItem.total_pieces) {
-      return showToast("Cannot send more than available pieces", "error");
-    }
-
-    setIsSubmitting(true);
-    try {
-      const result = await removeFromSvg({
-        metal_type: selectedItem.metal_type,
-        target_product: selectedItem.target_product,
-        pieces,
-      });
-
-      if (result.success) {
-        showToast(result.message, "success");
-        setShowModal(false);
-        fetchVault();
-      }
-    } catch (error) {
-      showToast(error.message || "Failed to send to counter", "error");
-    } finally {
-      setIsSubmitting(false);
-    }
+  const filtered = (items) => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter((i) => i.target_product.toLowerCase().includes(q) || i.metal_type.toLowerCase().includes(q));
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-500 font-semibold text-sm">Accessing Secure Vault...</p>
+          <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-500">Loading vault…</p>
         </div>
       </div>
     );
   }
 
-  const metalSections = [
-    { key: "Gold 22K", label: "Gold 22K" },
-    { key: "Gold 24K", label: "Gold 24K" },
-    { key: "Silver", label: "Silver" },
-  ];
-
-  // Filter items by search
-  const filterItems = (items) => {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(
-      (item) =>
-        item.target_product.toLowerCase().includes(q) ||
-        item.metal_type.toLowerCase().includes(q)
-    );
-  };
-
-  // Grand totals
-  const allItems = [...(inventory["Gold 22K"] || []), ...(inventory["Gold 24K"] || []), ...(inventory["Silver"] || [])];
-  const grandPieces = allItems.reduce((s, i) => s + (i.total_pieces || 0), 0);
-  const grandWeight = allItems.reduce((s, i) => s + (i.total_weight || 0), 0);
-
   return (
-    <div className="relative pb-8 w-full max-w-7xl mx-auto px-0 sm:px-0">
+    <div className="space-y-5">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
-      {/* Header */}
-      <div className="mb-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-        {/* Glow effects */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500 rounded-full blur-[100px] opacity-10 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-500 rounded-full blur-[80px] opacity-10 pointer-events-none"></div>
-
-        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                <ShieldCheck className="text-white" size={20} />
-              </div>
-              SVG Vault
-            </h2>
-            <p className="text-slate-400 font-medium text-sm ml-[52px]">
-              Secure storage for {grandPieces} items · {grandWeight.toFixed(2)}g total
-            </p>
-          </div>
-          <button
-            onClick={fetchVault}
-            className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm border border-white/10 text-white/80 hover:text-white hover:bg-white/15 font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95"
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
-        </div>
-
-        {/* Stats row */}
-        <div className="relative z-10 grid grid-cols-3 gap-3 mt-5">
-          {metalSections.map(({ key, label }) => {
-            const mc = METAL_CONFIG[key];
-            const metalItems = inventory[key] || [];
-            const pieces = metalItems.reduce((s, i) => s + (i.total_pieces || 0), 0);
-            const weight = metalItems.reduce((s, i) => s + (i.total_weight || 0), 0);
-            return (
-              <div key={key} className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-3 flex items-center gap-3">
-                <span className={`w-1.5 h-8 rounded-full bg-gradient-to-b ${mc.gradient} flex-shrink-0`} />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{label}</p>
-                  <p className="text-sm font-black text-white mt-0.5">
-                    {pieces} <span className="text-slate-500 font-semibold text-[10px]">pcs</span>
-                    <span className="text-slate-600 mx-1.5">·</span>
-                    <span className="text-slate-300">{weight.toFixed(2)}</span>
-                    <span className="text-slate-500 text-[10px]">g</span>
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Search bar */}
-      <div className="mb-6 relative">
-        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search vault items..."
-          className="w-full bg-white border border-slate-200 text-slate-800 rounded-xl pl-11 pr-4 py-3 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all placeholder:text-slate-400"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+      {modalItem && (
+        <SendModal
+          item={modalItem}
+          onClose={() => setModalItem(null)}
+          onSuccess={(msg) => { showToast(msg); setModalItem(null); fetchAll(); }}
         />
+      )}
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2.5">
+            <ShieldCheck size={22} className="text-indigo-600" /> SVG Vault
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">{totalPcs} items · {fmt2(totalWt)} g total across all metals</p>
+        </div>
+        <button onClick={fetchAll}
+          className="flex items-center gap-1.5 text-sm font-bold text-slate-500 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 px-3 py-2 rounded-xl transition-colors">
+          <RefreshCw size={14} /> Refresh
+        </button>
       </div>
 
-      {/* Vault Contents */}
-      <div className="space-y-8">
-        {metalSections.map(({ key, label }) => {
-          const mc = METAL_CONFIG[key];
-          const filteredItems = filterItems(inventory[key] || []);
-
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-3 gap-3">
+        {[{ key: "Gold 24K" }, { key: "Silver" }, { key: "Gold 22K" }].map(({ key }) => {
+          const mc = METAL_COLORS[key];
+          const items = inventory[key] || [];
+          const pcs = items.reduce((s, i) => s + (i.total_pieces || 0), 0);
+          const wt  = items.reduce((s, i) => s + (i.total_weight || 0), 0);
           return (
-            <section key={key}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className={`w-1.5 h-6 bg-gradient-to-b ${mc.gradient} rounded-full`}></div>
-                <h3 className="text-lg font-black text-slate-800 tracking-tight">{label}</h3>
-                <span className="text-xs font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {filteredItems.length} items
-                </span>
-              </div>
-
-              {filteredItems.length === 0 ? (
-                <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center shadow-sm">
-                  <Lock className="mx-auto text-slate-300 mb-3" size={36} strokeWidth={1.5} />
-                  <p className="text-slate-500 font-bold text-sm">
-                    {searchQuery ? `No matching ${label} items.` : `No ${label} items in the vault.`}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {searchQuery ? "Try a different search term." : "Items can be added from the Selling Counter."}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredItems.map((item, idx) => (
-                    <div
-                      key={`${key}-${idx}`}
-                      className={`bg-slate-900 rounded-2xl p-5 shadow-xl border ${mc.cardBorder} transition-all duration-300 relative overflow-hidden group`}
-                    >
-                      {/* Item info */}
-                      <div className="flex justify-between items-start mb-4 z-10 relative">
-                        <h3 className="text-lg font-black text-white leading-tight">
-                          {item.target_product}
-                        </h3>
-                        <span className={`${mc.tagBg} border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest`}>
-                          {item.metal_type}
-                        </span>
-                      </div>
-
-                      {/* Stats */}
-                      <div className="flex gap-3 relative z-10 mb-4">
-                        <div className={`flex-1 ${mc.pieceBg} border p-3 rounded-xl flex flex-col items-center`}>
-                          <div className="flex items-center gap-1 text-slate-500 font-black text-[10px] mb-1 uppercase tracking-wider">
-                            <Layers size={10} /> Pieces
-                          </div>
-                          <span className="text-xl font-black text-white">
-                            {item.total_pieces}
-                          </span>
-                        </div>
-
-                        <div className={`flex-1 ${mc.weightBg} border p-3 rounded-xl flex flex-col items-center`}>
-                          <div className={`flex items-center gap-1 ${mc.pieceColor} font-black text-[10px] mb-1 uppercase tracking-wider`}>
-                            <Weight size={10} /> Weight
-                          </div>
-                          <span className={`text-xl font-black ${mc.weightColor}`}>
-                            {item.total_weight.toFixed(2)}
-                            <span className="text-xs font-bold opacity-60 ml-0.5">g</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Send to Counter button */}
-                      <button
-                        onClick={() => handleOpenSend(item)}
-                        className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white border border-white/10 hover:border-white/20 font-bold text-xs px-4 py-2.5 rounded-xl transition-all active:scale-[0.98] group/btn relative z-10"
-                      >
-                        <Store size={14} className="text-indigo-300" />
-                        Send to Counter
-                        <ArrowRight size={12} className="text-slate-400 group-hover/btn:text-white group-hover/btn:translate-x-0.5 transition-all" />
-                      </button>
-
-                      {/* Decorative glow */}
-                      <div className={`absolute -bottom-6 -right-6 w-28 h-28 bg-gradient-to-br ${mc.bgGradient} rounded-full blur-2xl opacity-15 group-hover:opacity-25 group-hover:scale-150 transition-all duration-700 pointer-events-none`}></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+            <div key={key} className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-4 border-l-4 ${mc.border}`}>
+              <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">{key}</p>
+              <p className="text-xl font-black text-slate-800">{pcs} <span className="text-xs font-semibold text-slate-400">pcs</span></p>
+              <p className="text-sm font-semibold text-slate-500">{fmt2(wt)} g</p>
+            </div>
           );
         })}
       </div>
 
-      {/* Info bar */}
-      <div className="mt-6 flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-        <Store size={16} className="text-slate-400 mt-0.5 flex-shrink-0" />
-        <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-          <strong>How it works:</strong> Items are stored here from the Selling Counter for safekeeping.
-          Click <strong>"Send to Counter"</strong> to move them back for sale.
-        </p>
+      {/* ── Tabs ── */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+        {[{ id: "vault", label: "Vault Inventory" }, { id: "history", label: "History" }].map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${tab === t.id ? "bg-white shadow-sm text-indigo-700" : "text-slate-500 hover:text-slate-700"}`}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Send to Counter Modal */}
-      {showModal && selectedItem && (() => {
-        const unitWeight = parseUnitWeight(selectedItem.target_product);
-        const computedWeight = piecesInput && parseInt(piecesInput) > 0
-          ? (unitWeight != null
-              ? parseInt(piecesInput) * unitWeight
-              : selectedItem.total_pieces > 0
-                ? (parseInt(piecesInput) / selectedItem.total_pieces) * selectedItem.total_weight
-                : 0)
-          : null;
+      {/* ── Vault Inventory Tab ── */}
+      {tab === "vault" && (
+        <div className="space-y-5">
+          {/* Search */}
+          <div className="relative">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by product or metal…"
+              className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
 
-        return (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl p-0 max-w-sm w-full shadow-2xl relative overflow-hidden">
-              {/* Color bar */}
-              <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
+          {/* Per-metal tables */}
+          {[{ key: "Gold 24K" }, { key: "Silver" }, { key: "Gold 22K" }].map(({ key }) => {
+            const mc = METAL_COLORS[key];
+            const items = filtered(inventory[key] || []);
+            const totalPcsSection = inventory[key].reduce((s, i) => s + (i.total_pieces || 0), 0);
+            const totalWtSection  = inventory[key].reduce((s, i) => s + (i.total_weight || 0), 0);
 
-              <div className="p-6">
-                {/* Header */}
-                <div className="flex justify-between items-start mb-5">
+            return (
+              <div key={key} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                {/* Section header */}
+                <div className={`px-5 py-3 flex items-center justify-between border-b border-slate-100 border-l-4 ${mc.border} bg-slate-50/60`}>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                      <Store size={20} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-black text-slate-800">Send to Counter</h3>
-                      <p className="text-slate-400 text-xs font-medium mt-0.5">
-                        Move items from vault to selling counter
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* Selected item info */}
-                <div className="bg-slate-900 rounded-xl p-4 mb-5 border border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Vault Item</p>
-                      <p className="text-lg font-black text-white">{selectedItem.target_product}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Available</p>
-                      <p className="text-lg font-black text-white">
-                        {selectedItem.total_pieces} <span className="text-xs font-bold text-slate-500">pcs</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between">
-                    <span className="text-xs font-bold text-slate-500">{selectedItem.metal_type}</span>
-                    <span className="text-xs font-bold text-slate-400">
-                      {selectedItem.total_weight.toFixed(2)}g
+                    <h3 className="font-black text-slate-700">{key}</h3>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                      {items.length} {items.length === 1 ? "item" : "items"}
                     </span>
                   </div>
+                  <div className="text-right">
+                    <span className="text-xs text-slate-500 font-semibold">{totalPcsSection} pcs · {fmt2(totalWtSection)} g</span>
+                  </div>
                 </div>
 
-                {/* Form */}
-                <form onSubmit={handleSendToCounter} className="space-y-5">
-                  <div>
-                    <label className="block text-[11px] font-black text-slate-600 mb-2 uppercase tracking-wider">
-                      Pieces to Send
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max={selectedItem.total_pieces}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 font-black text-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition-all placeholder:text-slate-300 placeholder:font-medium placeholder:text-sm"
-                      value={piecesInput}
-                      onChange={(e) => setPiecesInput(e.target.value)}
-                      placeholder="Enter number of pieces"
-                      required
-                      autoFocus
-                    />
-                    {computedWeight != null && (
-                      <div className="mt-2 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100 flex items-center justify-between">
-                        <span className="text-[10px] font-black text-indigo-400 uppercase">Transfer Weight</span>
-                        <span className="font-black text-indigo-700">
-                          {computedWeight.toFixed(2)}<span className="text-xs font-bold text-indigo-400 ml-0.5">g</span>
-                        </span>
-                      </div>
-                    )}
+                {items.length === 0 ? (
+                  <div className="px-5 py-8 text-center text-sm text-slate-400 font-semibold">
+                    {search ? `No matching ${key} items` : `No ${key} items in vault`}
                   </div>
-
-                  <div className="flex gap-3 pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setShowModal(false)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-3 rounded-xl font-bold transition-all text-sm"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting || !piecesInput}
-                      className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-4 py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Store size={16} />
-                      {isSubmitting ? "Sending..." : "Send to Counter"}
-                    </button>
-                  </div>
-                </form>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="text-left px-5 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Product</th>
+                        <th className="text-center px-4 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Pieces</th>
+                        <th className="text-right px-4 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Weight (g)</th>
+                        <th className="text-right px-4 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Avg/pc (g)</th>
+                        <th className="px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, idx) => {
+                        const avgWt = item.total_pieces > 0 ? item.total_weight / item.total_pieces : 0;
+                        return (
+                          <tr key={idx} className="border-b border-slate-50 hover:bg-indigo-50/30 transition-colors">
+                            <td className="px-5 py-3">
+                              <span className="font-bold text-slate-800">{item.target_product}</span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-block px-2.5 py-0.5 text-xs font-black rounded-full ${mc.badge}`}>
+                                {item.total_pieces}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-semibold text-slate-700">{fmt3(item.total_weight)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-slate-500 text-xs">{fmt3(avgWt)}</td>
+                            <td className="px-4 py-3 text-right">
+                              <button onClick={() => setModalItem(item)}
+                                className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors ml-auto">
+                                <Store size={12} /> Send
+                                <ArrowRight size={11} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
-            </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── History Tab ── */}
+      {tab === "history" && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center gap-2">
+            <Clock size={15} className="text-slate-400" />
+            <h3 className="font-black text-slate-700 text-sm">Recent Vault Movements</h3>
+            <span className="text-xs text-slate-400 ml-auto">{history.length} records</span>
           </div>
-        );
-      })()}
+          {history.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 font-semibold text-sm">No history yet</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50/50 border-b border-slate-100">
+                  <th className="text-left px-5 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Type</th>
+                  <th className="text-left px-4 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Metal</th>
+                  <th className="text-left px-4 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Product</th>
+                  <th className="text-center px-4 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Pieces</th>
+                  <th className="text-right px-4 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Weight (g)</th>
+                  <th className="text-right px-5 py-2.5 font-black text-slate-500 text-xs uppercase tracking-wider">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((row) => {
+                  const isIn = (row.pieces || 0) > 0;
+                  const mc   = METAL_COLORS[row.metal_type] || METAL_COLORS.Silver;
+                  const dateStr = row.created_at
+                    ? new Date(row.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                    : "—";
+                  return (
+                    <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                      <td className="px-5 py-3">
+                        <span className={`flex items-center gap-1.5 text-xs font-bold w-fit px-2 py-0.5 rounded-full ${isIn ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                          {isIn ? <ArrowDownCircle size={11} /> : <ArrowUpCircle size={11} />}
+                          {isIn ? "Deposit" : "Withdraw"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${mc.badge}`}>{row.metal_type}</span>
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{row.target_product}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`font-bold ${isIn ? "text-green-700" : "text-red-600"}`}>
+                          {isIn ? <Plus size={10} className="inline" /> : <Minus size={10} className="inline" />}
+                          {Math.abs(row.pieces || 0)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-600">
+                        {row.weight != null ? fmt3(Math.abs(row.weight)) : "—"}
+                      </td>
+                      <td className="px-5 py-3 text-right text-xs text-slate-500">{dateStr}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── Info Footer ── */}
+      <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 font-semibold">
+        <ShieldCheck size={14} className="text-slate-400 mt-0.5 shrink-0" />
+        <span>
+          Items are stored here from the Selling Counter for safekeeping.
+          Use <strong>"Send"</strong> to move them back to the counter for sale.
+        </span>
+      </div>
     </div>
   );
 };

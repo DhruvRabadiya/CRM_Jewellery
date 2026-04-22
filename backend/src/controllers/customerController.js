@@ -38,9 +38,11 @@ const getById = async (req, res) => {
   }
 };
 
+const VALID_CUSTOMER_TYPES = ["Wholesale", "Showroom", "Retail"];
+
 const create = async (req, res) => {
   try {
-    const { party_name, firm_name, address, city, phone_no, telephone_no } = req.body;
+    const { party_name, firm_name, address, city, phone_no, telephone_no, customer_type } = req.body;
 
     // Required field validations
     if (!party_name || !party_name.trim()) {
@@ -65,13 +67,15 @@ const create = async (req, res) => {
       return formatResponse(res, 400, false, "Telephone number format is invalid");
     }
 
+    const resolvedType = VALID_CUSTOMER_TYPES.includes(customer_type) ? customer_type : "Retail";
     const newId = await customerService.createCustomer(
       party_name.trim(),
       firm_name.trim(),
       address.trim(),
       city.trim(),
       phone_no.trim(),
-      telephone_no ? telephone_no.trim() : ""
+      telephone_no ? telephone_no.trim() : "",
+      resolvedType
     );
 
     const customer = await customerService.getCustomerById(newId);
@@ -84,7 +88,7 @@ const create = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { party_name, firm_name, address, city, phone_no, telephone_no } = req.body;
+    const { party_name, firm_name, address, city, phone_no, telephone_no, customer_type } = req.body;
 
     // Check customer exists
     const existing = await customerService.getCustomerById(id);
@@ -115,6 +119,7 @@ const update = async (req, res) => {
       return formatResponse(res, 400, false, "Telephone number format is invalid");
     }
 
+    const resolvedType = VALID_CUSTOMER_TYPES.includes(customer_type) ? customer_type : (existing.customer_type || "Retail");
     await customerService.updateCustomer(
       id,
       party_name.trim(),
@@ -122,7 +127,8 @@ const update = async (req, res) => {
       address.trim(),
       city.trim(),
       phone_no.trim(),
-      telephone_no ? telephone_no.trim() : ""
+      telephone_no ? telephone_no.trim() : "",
+      resolvedType
     );
 
     const updated = await customerService.getCustomerById(id);

@@ -12,16 +12,16 @@ import Toast from "../components/Toast";
 import AddStockForm from "../components/forms/AddStockForm";
 
 const TAB_CONFIG = {
-  "Gold 22K": { dotClass: "bg-amber-400", activeTab: "bg-amber-100 text-amber-900 ring-2 ring-amber-300", stageText: "text-amber-800" },
   "Gold 24K": { dotClass: "bg-yellow-400", activeTab: "bg-yellow-100 text-yellow-900 ring-2 ring-yellow-300", stageText: "text-yellow-800" },
   Silver:     { dotClass: "bg-gray-400",   activeTab: "bg-gray-200 text-gray-900 ring-2 ring-gray-400",     stageText: "text-gray-800" },
+  "Gold 22K": { dotClass: "bg-amber-400", activeTab: "bg-amber-100 text-amber-900 ring-2 ring-amber-300", stageText: "text-amber-800" },
 };
 const STAGES = ["Melting", "Rolling", "Press", "TPP", "Packing"];
 
 const Dashboard = () => {
   const [stock, setStock] = useState(null);
   const [lossStats, setLossStats] = useState([]);
-  const [activeTab, setActiveTab] = useState("Gold 22K");
+  const [activeTab, setActiveTab] = useState("Gold 24K");
   const initialStageMetrics = () => ({
     Melting: { pending: 0, running: 0, completed: 0 },
     Rolling: { pending: 0, running: 0, completed: 0 },
@@ -31,9 +31,9 @@ const Dashboard = () => {
   });
 
   const [processMetrics, setProcessMetrics] = useState({
-    "Gold 22K": initialStageMetrics(),
     "Gold 24K": initialStageMetrics(),
     Silver: initialStageMetrics(),
+    "Gold 22K": initialStageMetrics(),
   });
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -106,9 +106,9 @@ const Dashboard = () => {
     const gold24k = stock?.gold_24k || {};
     const silver = stock?.silver || {};
     return [
-      { key: "Gold 22K", data: gold22k, dot: "bg-amber-400", bg: "from-amber-50 to-orange-50", border: "border-amber-200", text: "text-amber-700", hoverBorder: "hover:border-amber-400" },
       { key: "Gold 24K", data: gold24k, dot: "bg-yellow-400", bg: "from-yellow-50 to-amber-50", border: "border-yellow-200", text: "text-yellow-700", hoverBorder: "hover:border-yellow-400" },
       { key: "Silver",   data: silver,  dot: "bg-gray-400",   bg: "from-gray-50 to-slate-100",  border: "border-gray-200",   text: "text-gray-600",   hoverBorder: "hover:border-blue-400" },
+      { key: "Gold 22K", data: gold22k, dot: "bg-amber-400", bg: "from-amber-50 to-orange-50", border: "border-amber-200", text: "text-amber-700", hoverBorder: "hover:border-amber-400" },
     ];
   }, [stock]);
 

@@ -436,19 +436,34 @@ const ProductionJobs = () => {
   };
 
   const handleDeleteProcess = async (process) => {
+    const stagePriority = { Melting: 0, Rolling: 1, Press: 2, TPP: 3, Packing: 4 };
+    // Collect all stage records for this job, delete latest-first so stock reversal chains correctly
+    const jobProcesses = processes
+      .filter((p) => p.job_number === process.job_number)
+      .sort((a, b) => stagePriority[b.stage] - stagePriority[a.stage]);
+
+    const stageList = jobProcesses.map((p) => `${p.stage} (${p.status})`).join(", ");
+    const count = jobProcesses.length;
+
     setConfirmModal({
       isOpen: true,
-      title: "Delete Process",
-      message: `Are you SURE you want to permanently delete the COMPLETED Job ${process.job_number} at the ${process.stage} stage? This will entirely reverse the stock math and return physical metals back to their raw states.`,
+      title: `Delete Job ${process.job_number}`,
+      message: `Permanently delete ALL ${count} stage record${count > 1 ? "s" : ""} for Job ${process.job_number}?\n\nStages: ${stageList}\n\nAll stock changes will be fully reversed in reverse order.`,
       isDestructive: true,
-      confirmText: "Yes, Delete It",
+      confirmText: `Yes, Delete ${count > 1 ? "All Stages" : "Job"}`,
       onConfirm: async () => {
         try {
-          await deleteProcess(process.stage, process.id);
-          showToast("Job Deleted and Stock Reversed!", "success");
+          for (const proc of jobProcesses) {
+            await deleteProcess(proc.stage, proc.id);
+          }
+          showToast(
+            `Job ${process.job_number} deleted — ${count} stage${count > 1 ? "s" : ""} reversed!`,
+            "success"
+          );
           fetchProcesses();
         } catch (error) {
           showToast(error.message || "Failed to delete job", "error");
+          fetchProcesses();
         }
       },
     });
@@ -1017,9 +1032,9 @@ const ProductionJobs = () => {
                   }
                 >
                   <option value="" disabled>Select Metal</option>
-                  <option value="Gold 22K">Gold 22K</option>
                   <option value="Gold 24K">Gold 24K</option>
                   <option value="Silver">Silver</option>
+                  <option value="Gold 22K">Gold 22K</option>
                 </select>
             </div>
 

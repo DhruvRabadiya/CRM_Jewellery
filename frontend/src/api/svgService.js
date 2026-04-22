@@ -28,3 +28,12 @@ export const removeFromSvg = async (payload) => {
     throw error.response?.data || error;
   }
 };
+
+export const getSvgHistory = async (limit = 50) => {
+  try {
+    const response = await api.get(`${API_URL}/history`, { params: { limit } });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};

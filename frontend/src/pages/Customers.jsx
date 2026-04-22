@@ -15,7 +15,10 @@ const EMPTY_FORM = {
   city: "",
   phone_no: "",
   telephone_no: "",
+  customer_type: "Retail",
 };
+
+const CUSTOMER_TYPES = ["Wholesale", "Showroom", "Retail"];
 
 const FIELD_CONFIG = [
   { key: "party_name", label: "Party Name", placeholder: "e.g. Rajesh Shah", icon: User, required: true, type: "text" },
@@ -114,6 +117,7 @@ const Customers = () => {
       city: customer.city || "",
       phone_no: customer.phone_no || "",
       telephone_no: customer.telephone_no || "",
+      customer_type: customer.customer_type || "Retail",
     });
     setFormErrors({});
     setModalMode("edit");
@@ -268,12 +272,13 @@ const Customers = () => {
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Table header */}
-          <div className="hidden md:grid grid-cols-[1fr_1fr_1fr_0.8fr_0.8fr_120px] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-100">
+          <div className="hidden md:grid grid-cols-[1fr_1fr_1fr_0.7fr_0.7fr_0.6fr_120px] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-100">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Party Name</span>
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Firm Name</span>
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Address</span>
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">City</span>
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Phone</span>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Type</span>
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Actions</span>
           </div>
 
@@ -283,7 +288,7 @@ const Customers = () => {
               <div key={cust.id}>
                 {/* Desktop row */}
                 <div
-                  className="hidden md:grid grid-cols-[1fr_1fr_1fr_0.8fr_0.8fr_120px] gap-4 px-5 py-3.5 items-center hover:bg-emerald-50/30 transition-colors group cursor-default"
+                  className="hidden md:grid grid-cols-[1fr_1fr_1fr_0.7fr_0.7fr_0.6fr_120px] gap-4 px-5 py-3.5 items-center hover:bg-emerald-50/30 transition-colors group cursor-default"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 text-emerald-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
@@ -307,6 +312,13 @@ const Customers = () => {
                     {cust.telephone_no && (
                       <span className="text-[10px] text-slate-400 font-medium">Tel: {cust.telephone_no}</span>
                     )}
+                  </div>
+                  <div>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      cust.customer_type === "Wholesale" ? "bg-blue-100 text-blue-700" :
+                      cust.customer_type === "Showroom" ? "bg-purple-100 text-purple-700" :
+                      "bg-slate-100 text-slate-600"
+                    }`}>{cust.customer_type || "Retail"}</span>
                   </div>
                   <div className="flex items-center justify-center gap-1.5">
                     <button
@@ -471,6 +483,27 @@ const Customers = () => {
                     </div>
                   );
                 })}
+
+                {/* Customer Type */}
+                <div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-black text-slate-600 mb-1.5 uppercase tracking-wider">
+                    Customer Type
+                  </label>
+                  <div className="flex gap-2">
+                    {CUSTOMER_TYPES.map((ct) => (
+                      <button
+                        key={ct}
+                        type="button"
+                        onClick={() => handleChange("customer_type", ct)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border-2 transition-all ${
+                          formData.customer_type === ct
+                            ? ct === "Wholesale" ? "bg-blue-600 border-blue-600 text-white" : ct === "Showroom" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-700 border-slate-700 text-white"
+                            : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                        }`}
+                      >{ct}</button>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Buttons */}
                 <div className="flex gap-3 pt-3 border-t border-slate-100">

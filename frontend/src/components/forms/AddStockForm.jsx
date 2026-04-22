@@ -54,9 +54,9 @@ const AddStockForm = ({ onSuccess, onCancel, showToast }) => {
               setFormData({ ...formData, metal_type: e.target.value })
             }
           >
-            <option value="Gold 22K">Gold 22K</option>
             <option value="Gold 24K">Gold 24K</option>
             <option value="Silver">Silver</option>
+            <option value="Gold 22K">Gold 22K</option>
           </select>
           <ArrowDownLeft
             className="absolute right-4 top-3 text-gray-500 pointer-events-none"

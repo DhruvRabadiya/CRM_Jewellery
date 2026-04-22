@@ -19,17 +19,6 @@ const parseUnitWeight = (category) => {
 };
 
 const TAB_CONFIG = {
-  "Gold 22K": {
-    dot: "bg-amber-400",
-    activeBg: "bg-amber-50 text-amber-900 ring-2 ring-amber-300",
-    border: "border-amber-100",
-    badge: "bg-amber-50 text-amber-700 border-amber-100",
-    iconBg: "bg-amber-50 text-amber-600",
-    empty: "bg-amber-50/50 border-amber-200 text-amber-700",
-    gradient: "from-amber-500 to-orange-500",
-    statBg: "bg-gradient-to-br from-amber-50 to-orange-50",
-    statBorder: "border-amber-200/60",
-  },
   "Gold 24K": {
     dot: "bg-yellow-400",
     activeBg: "bg-yellow-50 text-yellow-900 ring-2 ring-yellow-300",
@@ -52,12 +41,23 @@ const TAB_CONFIG = {
     statBg: "bg-gradient-to-br from-slate-50 to-gray-100",
     statBorder: "border-slate-200/60",
   },
+  "Gold 22K": {
+    dot: "bg-amber-400",
+    activeBg: "bg-amber-50 text-amber-900 ring-2 ring-amber-300",
+    border: "border-amber-100",
+    badge: "bg-amber-50 text-amber-700 border-amber-100",
+    iconBg: "bg-amber-50 text-amber-600",
+    empty: "bg-amber-50/50 border-amber-200 text-amber-700",
+    gradient: "from-amber-500 to-orange-500",
+    statBg: "bg-gradient-to-br from-amber-50 to-orange-50",
+    statBorder: "border-amber-200/60",
+  },
 };
 
 const SellingCounter = () => {
-  const [inventory, setInventory] = useState({ "Gold 22K": [], "Gold 24K": [], Silver: [] });
+  const [inventory, setInventory] = useState({ "Gold 24K": [], Silver: [], "Gold 22K": [] });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("Gold 22K");
+  const [activeTab, setActiveTab] = useState("Gold 24K");
   const [toast, setToast] = useState(null);
 
   // Modal state
@@ -76,7 +76,7 @@ const SellingCounter = () => {
     try {
       const result = await getCounterInventory();
       if (result.success) {
-        const grouped = { "Gold 22K": [], "Gold 24K": [], Silver: [] };
+        const grouped = { "Gold 24K": [], Silver: [], "Gold 22K": [] };
         result.data.forEach((item) => {
           const unitWeight = parseUnitWeight(item.target_product);
           const calculatedWeight = unitWeight != null ? item.total_pieces * unitWeight : null;
@@ -166,7 +166,7 @@ const SellingCounter = () => {
   const totalWeight = items.reduce((s, i) => s + (i.calculated_weight || 0), 0);
 
   // Grand totals for header
-  const allItems = [...(inventory["Gold 22K"] || []), ...(inventory["Gold 24K"] || []), ...(inventory["Silver"] || [])];
+  const allItems = [...(inventory["Gold 24K"] || []), ...(inventory["Silver"] || []), ...(inventory["Gold 22K"] || [])];
   const grandPieces = allItems.reduce((s, i) => s + (i.total_pieces || 0), 0);
 
   const modalConfig = {

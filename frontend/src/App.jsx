@@ -14,6 +14,8 @@ import SellingLayout from "./layouts/SellingLayout";
 import SellingCounter from "./pages/SellingCounter";
 import SvgCounter from "./pages/SvgCounter";
 import Customers from "./pages/Customers";
+import SellingAdmin from "./pages/SellingAdmin";
+import OrderBills from "./pages/OrderBills";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 // Guard wrapper to ensure user is logged in
@@ -59,6 +61,8 @@ function App() {
             <Route path="stocks" element={<SellingCounter />} />
             <Route path="svg" element={<SvgCounter />} />
             <Route path="customers" element={<Customers />} />
+            <Route path="order-bills" element={<OrderBills />} />
+            <Route path="admin" element={<ProtectedRoute requireAdmin={true}><SellingAdmin /></ProtectedRoute>} />
           </Route>
 
           {/* Fallback */}
