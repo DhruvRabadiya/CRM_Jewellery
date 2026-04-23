@@ -111,6 +111,52 @@ const findOrCreateByPhone = async ({ party_name, phone_no, address, city, firm_n
   return await getCustomerById(newId);
 };
 
+const getCustomerLedger = (id) => {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT *
+       FROM customer_ledger_entries
+       WHERE customer_id = ?
+       ORDER BY entry_date ASC, id ASC`,
+      [id],
+      (err, rows) => {
+        if (err) return reject(err);
+
+        let runningAmountBalance = 0;
+        const runningMetalBalances = { "Gold 24K": 0, "Gold 22K": 0, Silver: 0 };
+
+        const entries = (rows || []).map((row) => {
+          const amountDelta = parseFloat(row.amount_delta) || 0;
+          const weightDelta = parseFloat(row.weight_delta) || 0;
+          runningAmountBalance = parseFloat((runningAmountBalance + amountDelta).toFixed(2));
+
+          if (row.metal_type) {
+            runningMetalBalances[row.metal_type] = parseFloat(
+              ((runningMetalBalances[row.metal_type] || 0) + weightDelta).toFixed(4)
+            );
+          }
+
+          return {
+            ...row,
+            amount_delta: amountDelta,
+            weight_delta: weightDelta,
+            running_amount_balance: runningAmountBalance,
+            running_metal_balances: { ...runningMetalBalances },
+          };
+        });
+
+        resolve({
+          entries,
+          summary: {
+            outstanding_amount: Math.max(runningAmountBalance, 0),
+            metal_balances: runningMetalBalances,
+          },
+        });
+      }
+    );
+  });
+};
+
 module.exports = {
   getAllCustomers,
   getCustomerById,
@@ -121,4 +167,5 @@ module.exports = {
   deleteCustomer,
   searchCustomers,
   updateOutstandingBalance,
+  getCustomerLedger,
 };

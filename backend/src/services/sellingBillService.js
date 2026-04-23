@@ -2,6 +2,15 @@ const db = require("../../config/dbConfig");
 const customerService = require("./customerService");
 
 const PURITY_FACTORS = { "99.99": 0.9999, "91.60": 0.916 };
+const REFERENCE_TYPE = "SELLING_BILL";
+
+const all = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows || []);
+    });
+  });
 
 // If the bill is for a walk-in customer (no customer_id) but the UI collected
 // a name + phone (and optionally address), auto-create a customer record and
@@ -73,7 +82,6 @@ const getBillById = (id) =>
               [id],
               (err3, metalPayments) => {
                 if (err3) return reject(err3);
-                // Backward compat: if no metal_payments rows but old bill has single-metal data, expose as one entry
                 let finalMetalPayments = metalPayments || [];
                 if (
                   finalMetalPayments.length === 0 &&
@@ -101,13 +109,13 @@ const getBillById = (id) =>
 
 const _insertItems = async (run, billId, items) => {
   for (const [i, item] of items.entries()) {
-    const pieces = Math.max(parseInt(item.pieces) || 0, 0);
+    const pieces = Math.max(parseInt(item.pieces, 10) || 0, 0);
     const size = item.size != null ? parseFloat(item.size) : null;
     const weight = size != null ? parseFloat((size * pieces).toFixed(4)) : parseFloat(item.weight) || 0;
     const rate = parseFloat(item.rate_per_gram) || 0;
-    const metal_value = parseFloat((weight * rate).toFixed(2));
-    const lc_pp = parseFloat(item.lc_pp) || 0;
-    const t_lc = parseFloat((lc_pp * pieces).toFixed(2));
+    const metalValue = parseFloat((weight * rate).toFixed(2));
+    const lcPp = parseFloat(item.lc_pp) || 0;
+    const totalLc = parseFloat((lcPp * pieces).toFixed(2));
     await run(
       `INSERT INTO selling_bill_items
         (bill_id, metal_type, category, custom_label, size, pieces, weight, rate_per_gram, metal_value, lc_pp, t_lc, sort_order)
@@ -121,9 +129,9 @@ const _insertItems = async (run, billId, items) => {
         pieces,
         weight,
         rate,
-        metal_value,
-        lc_pp,
-        t_lc,
+        metalValue,
+        lcPp,
+        totalLc,
         item.sort_order != null ? item.sort_order : i,
       ]
     );
@@ -135,11 +143,11 @@ const _insertMetalPayments = async (run, billId, entries) => {
     const factor = PURITY_FACTORS[entry.purity] || 0;
     const weight = parseFloat(entry.weight) || 0;
     const rate = parseFloat(entry.rate) || 0;
-    const metal_value = parseFloat((weight * rate * factor).toFixed(2));
+    const metalValue = parseFloat((weight * rate * factor).toFixed(2));
     await run(
       `INSERT INTO selling_bill_metal_payments (bill_id, metal_type, purity, weight, rate, metal_value)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [billId, entry.metal_type, entry.purity || "99.99", weight, rate, metal_value]
+      [billId, entry.metal_type, entry.purity || "99.99", weight, rate, metalValue]
     );
   }
 };
@@ -147,16 +155,16 @@ const _insertMetalPayments = async (run, billId, entries) => {
 const _computeTotalMetalValue = (entries) =>
   parseFloat(
     (entries || [])
-      .reduce((sum, e) => {
-        const factor = PURITY_FACTORS[e.purity] || 0;
-        return sum + (parseFloat(e.weight) || 0) * (parseFloat(e.rate) || 0) * factor;
+      .reduce((sum, entry) => {
+        const factor = PURITY_FACTORS[entry.purity] || 0;
+        return sum + (parseFloat(entry.weight) || 0) * (parseFloat(entry.rate) || 0) * factor;
       }, 0)
       .toFixed(2)
   );
 
 const _deductCounterStock = async (run, get, items) => {
   for (const item of items || []) {
-    const pieces = parseInt(item.pieces) || 0;
+    const pieces = parseInt(item.pieces, 10) || 0;
     if (pieces <= 0) continue;
     const stock = await get(
       `SELECT COALESCE(SUM(pieces), 0) AS total FROM counter_inventory WHERE metal_type = ? AND target_product = ?`,
@@ -177,7 +185,7 @@ const _deductCounterStock = async (run, get, items) => {
 
 const _restoreCounterStock = async (run, items) => {
   for (const item of items || []) {
-    const pieces = parseInt(item.pieces) || 0;
+    const pieces = parseInt(item.pieces, 10) || 0;
     if (pieces <= 0) continue;
     await run(
       `INSERT INTO counter_inventory (metal_type, target_product, pieces) VALUES (?, ?, ?)`,
@@ -186,10 +194,111 @@ const _restoreCounterStock = async (run, items) => {
   }
 };
 
+const _deleteAccountingEntries = async (run, billId) => {
+  await run(`DELETE FROM customer_ledger_entries WHERE reference_type = ? AND reference_id = ?`, [REFERENCE_TYPE, billId]);
+  await run(`DELETE FROM counter_cash_ledger WHERE reference_type = ? AND reference_id = ?`, [REFERENCE_TYPE, billId]);
+};
+
+const _applyOutstandingDelta = async (run, customerId, delta) => {
+  if (!customerId || !delta) return;
+  await run(
+    `UPDATE customers
+     SET outstanding_balance = MAX(0, outstanding_balance + ?),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [delta, customerId]
+  );
+};
+
+const _insertAccountingEntries = async (run, billId, data, resolvedCustomerId, billNo) => {
+  if (resolvedCustomerId) {
+    await run(
+      `INSERT INTO customer_ledger_entries
+        (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        resolvedCustomerId,
+        data.date,
+        REFERENCE_TYPE,
+        billId,
+        String(billNo),
+        "BILL_TOTAL",
+        parseFloat(data.total_amount) || 0,
+        data.notes || "",
+      ]
+    );
+
+    const cashAmount = parseFloat(data.cash_amount) || 0;
+    if (cashAmount > 0) {
+      await run(
+        `INSERT INTO customer_ledger_entries
+          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [resolvedCustomerId, data.date, REFERENCE_TYPE, billId, String(billNo), "PAYMENT_CASH", -cashAmount, "Cash payment"]
+      );
+    }
+
+    const onlineAmount = parseFloat(data.online_amount) || 0;
+    if (onlineAmount > 0) {
+      await run(
+        `INSERT INTO customer_ledger_entries
+          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [resolvedCustomerId, data.date, REFERENCE_TYPE, billId, String(billNo), "PAYMENT_ONLINE", -onlineAmount, "Online payment"]
+      );
+    }
+
+    for (const entry of data.metal_payments || []) {
+      const factor = PURITY_FACTORS[entry.purity] || 0;
+      const weight = parseFloat(entry.weight) || 0;
+      const rate = parseFloat(entry.rate) || 0;
+      const metalValue = parseFloat((weight * rate * factor).toFixed(2));
+      if (weight <= 0 && metalValue <= 0) continue;
+      await run(
+        `INSERT INTO customer_ledger_entries
+          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, metal_type, metal_purity, weight_delta, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          resolvedCustomerId,
+          data.date,
+          REFERENCE_TYPE,
+          billId,
+          String(billNo),
+          "METAL_IN",
+          entry.metal_type || "",
+          entry.purity || "99.99",
+          weight,
+          -metalValue,
+          "Metal exchange received",
+        ]
+      );
+    }
+  }
+
+  const cashAmount = parseFloat(data.cash_amount) || 0;
+  if (cashAmount !== 0) {
+    await run(
+      `INSERT INTO counter_cash_ledger
+        (entry_date, reference_type, reference_id, reference_no, mode, amount, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [data.date, REFERENCE_TYPE, billId, String(billNo), "Cash", cashAmount, data.notes || ""]
+    );
+  }
+
+  const onlineAmount = parseFloat(data.online_amount) || 0;
+  if (onlineAmount !== 0) {
+    await run(
+      `INSERT INTO counter_cash_ledger
+        (entry_date, reference_type, reference_id, reference_no, mode, amount, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [data.date, REFERENCE_TYPE, billId, String(billNo), "Online", onlineAmount, data.notes || ""]
+    );
+  }
+};
+
 const createBill = async (data) => {
-  const bill_no = await getNextBillNo();
+  const billNo = await getNextBillNo();
   const metalValue = _computeTotalMetalValue(data.metal_payments);
-  // Auto-create customer if walk-in with name+phone provided (outside txn for simpler flow)
   const resolvedCustomerId = await _resolveCustomerId(data);
 
   return db.runTransaction(async (run, get) => {
@@ -201,7 +310,7 @@ const createBill = async (data) => {
          subtotal, total_lc, discount, total_amount, amount_paid, outstanding_amount, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        bill_no,
+        billNo,
         data.date,
         resolvedCustomerId || null,
         data.customer_name || "",
@@ -223,33 +332,25 @@ const createBill = async (data) => {
         data.notes || "",
       ]
     );
+
     await _insertItems(run, lastID, data.items || []);
     await _insertMetalPayments(run, lastID, data.metal_payments || []);
     await _deductCounterStock(run, get, data.items || []);
+    await _insertAccountingEntries(run, lastID, data, resolvedCustomerId, billNo);
+    await _applyOutstandingDelta(run, resolvedCustomerId, parseFloat(data.outstanding_amount) || 0);
 
-    if (resolvedCustomerId && parseFloat(data.outstanding_amount) > 0) {
-      await run(
-        `UPDATE customers SET outstanding_balance = outstanding_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [parseFloat(data.outstanding_amount), resolvedCustomerId]
-      );
-    }
     return lastID;
   });
 };
 
 const updateBill = async (id, data) => {
   const metalValue = _computeTotalMetalValue(data.metal_payments);
-  // Auto-create customer during edit too (if walk-in now has phone+name entered)
   const resolvedCustomerId = await _resolveCustomerId(data);
-
-  // Fetch old items outside transaction to restore their stock inside
-  const oldItems = await new Promise((resolve, reject) =>
-    db.all(`SELECT metal_type, category, pieces FROM selling_bill_items WHERE bill_id = ?`, [id],
-      (err, rows) => err ? reject(err) : resolve(rows || []))
-  );
+  const oldItems = await all(`SELECT metal_type, category, pieces FROM selling_bill_items WHERE bill_id = ?`, [id]);
 
   return db.runTransaction(async (run, get) => {
-    const oldBill = await get(`SELECT customer_id, outstanding_amount FROM selling_bills WHERE id = ?`, [id]);
+    const oldBill = await get(`SELECT bill_no, customer_id, outstanding_amount FROM selling_bills WHERE id = ?`, [id]);
+    if (!oldBill) throw new Error("Bill not found");
 
     await run(
       `UPDATE selling_bills SET
@@ -282,7 +383,6 @@ const updateBill = async (id, data) => {
       ]
     );
 
-    // Restore old stock, replace items, deduct new stock
     await _restoreCounterStock(run, oldItems);
     await run(`DELETE FROM selling_bill_items WHERE bill_id = ?`, [id]);
     await _insertItems(run, id, data.items || []);
@@ -291,53 +391,29 @@ const updateBill = async (id, data) => {
     await run(`DELETE FROM selling_bill_metal_payments WHERE bill_id = ?`, [id]);
     await _insertMetalPayments(run, id, data.metal_payments || []);
 
-    if (oldBill) {
-      const oldCustomerId = oldBill.customer_id;
-      const oldOutstanding = parseFloat(oldBill.outstanding_amount) || 0;
-      const newCustomerId = resolvedCustomerId || null;
-      const newOutstanding = parseFloat(data.outstanding_amount) || 0;
-
-      if (oldCustomerId && oldOutstanding !== 0) {
-        await run(
-          `UPDATE customers SET outstanding_balance = outstanding_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-          [oldOutstanding, oldCustomerId]
-        );
-      }
-      if (newCustomerId && newOutstanding > 0) {
-        await run(
-          `UPDATE customers SET outstanding_balance = outstanding_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-          [newOutstanding, newCustomerId]
-        );
-      }
-    }
+    await _deleteAccountingEntries(run, id);
+    await _applyOutstandingDelta(run, oldBill.customer_id, -(parseFloat(oldBill.outstanding_amount) || 0));
+    await _insertAccountingEntries(run, id, data, resolvedCustomerId, oldBill.bill_no);
+    await _applyOutstandingDelta(run, resolvedCustomerId, parseFloat(data.outstanding_amount) || 0);
   });
 };
 
 const deleteBill = (id) =>
   db.runTransaction(async (run, get) => {
-    // Fetch bill to reverse outstanding + restore stock
     const bill = await get(
-      `SELECT customer_id, outstanding_amount FROM selling_bills WHERE id = ?`,
+      `SELECT bill_no, customer_id, outstanding_amount FROM selling_bills WHERE id = ?`,
       [id]
     );
     if (!bill) return 0;
 
-    const items = await new Promise((resolve, reject) =>
-      db.all(
-        `SELECT metal_type, category, pieces FROM selling_bill_items WHERE bill_id = ?`,
-        [id],
-        (err, rows) => (err ? reject(err) : resolve(rows || []))
-      )
+    const items = await all(
+      `SELECT metal_type, category, pieces FROM selling_bill_items WHERE bill_id = ?`,
+      [id]
     );
 
     await _restoreCounterStock(run, items);
-
-    if (bill.customer_id && parseFloat(bill.outstanding_amount) !== 0) {
-      await run(
-        `UPDATE customers SET outstanding_balance = outstanding_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [parseFloat(bill.outstanding_amount) || 0, bill.customer_id]
-      );
-    }
+    await _deleteAccountingEntries(run, id);
+    await _applyOutstandingDelta(run, bill.customer_id, -(parseFloat(bill.outstanding_amount) || 0));
 
     await run(`DELETE FROM selling_bill_items WHERE bill_id = ?`, [id]);
     await run(`DELETE FROM selling_bill_metal_payments WHERE bill_id = ?`, [id]);

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings, BookOpen } from "lucide-react";
+import { Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings, BookOpen, LayoutDashboard, Receipt } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const SellingLayout = () => {
@@ -9,10 +9,16 @@ const SellingLayout = () => {
 
   const allNavItems = [
     {
+      to: "/selling/dashboard",
+      icon: <LayoutDashboard size={20} />,
+      label: "Dashboard",
+      match: (path) => path.includes("/selling/dashboard") || path === "/selling",
+    },
+    {
       to: "/selling/stocks",
       icon: <Store size={20} />,
       label: "Stocks",
-      match: (path) => path.includes("/selling/stocks") || path === "/selling",
+      match: (path) => path.includes("/selling/stocks"),
     },
     {
       to: "/selling/svg",
@@ -31,6 +37,12 @@ const SellingLayout = () => {
       icon: <BookOpen size={20} />,
       label: "Order Bills",
       match: (path) => path.includes("/selling/order-bills"),
+    },
+    {
+      to: "/selling/billing",
+      icon: <Receipt size={20} />,
+      label: "Billing",
+      match: (path) => path.includes("/selling/billing"),
     },
     {
       to: "/selling/admin",

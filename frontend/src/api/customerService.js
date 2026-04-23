@@ -21,6 +21,15 @@ export const getCustomerById = async (id) => {
   }
 };
 
+export const getCustomerLedger = async (id) => {
+  try {
+    const response = await api.get(`${API_URL}/${id}/ledger`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export const createCustomer = async (payload) => {
   try {
     const response = await api.post(API_URL, payload);

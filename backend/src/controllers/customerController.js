@@ -38,6 +38,24 @@ const getById = async (req, res) => {
   }
 };
 
+const getLedger = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await customerService.getCustomerById(id);
+    if (!customer) {
+      return formatResponse(res, 404, false, "Customer not found");
+    }
+
+    const ledger = await customerService.getCustomerLedger(id);
+    return formatResponse(res, 200, true, "Customer ledger fetched", {
+      customer,
+      ...ledger,
+    });
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 const VALID_CUSTOMER_TYPES = ["Wholesale", "Showroom", "Retail"];
 
 const create = async (req, res) => {
@@ -157,6 +175,7 @@ const remove = async (req, res) => {
 module.exports = {
   getAll,
   getById,
+  getLedger,
   create,
   update,
   remove,

@@ -630,6 +630,36 @@ db.serialize(() => {
       metal_value REAL DEFAULT 0
   )`);
 
+  // 12a. CUSTOMER LEDGER (customer-wise accounting trail for counter billing)
+  db.run(`CREATE TABLE IF NOT EXISTS customer_ledger_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      entry_date TEXT NOT NULL,
+      reference_type TEXT NOT NULL,
+      reference_id INTEGER,
+      reference_no TEXT DEFAULT '',
+      line_type TEXT NOT NULL,
+      metal_type TEXT DEFAULT '',
+      metal_purity TEXT DEFAULT '',
+      weight_delta REAL DEFAULT 0,
+      amount_delta REAL DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 12b. COUNTER CASH LEDGER (tracks net cash/online movement from counter bills)
+  db.run(`CREATE TABLE IF NOT EXISTS counter_cash_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_date TEXT NOT NULL,
+      reference_type TEXT NOT NULL,
+      reference_id INTEGER,
+      reference_no TEXT DEFAULT '',
+      mode TEXT NOT NULL,
+      amount REAL DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Migration: add customer_type and outstanding_balance to customers table
   db.all(`PRAGMA table_info(customers)`, (err, columns) => {
     if (!err && columns) {
@@ -687,6 +717,7 @@ db.serialize(() => {
       date TEXT NOT NULL,
       product TEXT DEFAULT '',
       products TEXT DEFAULT '["Gold 24K"]',
+      customer_id INTEGER DEFAULT NULL,
       customer_name TEXT DEFAULT '',
       customer_city TEXT DEFAULT '',
       customer_phone TEXT DEFAULT '',
@@ -694,6 +725,9 @@ db.serialize(() => {
       fine_jama REAL DEFAULT 0,
       rate_10g REAL DEFAULT 0,
       amt_jama REAL DEFAULT 0,
+      cash_amount REAL DEFAULT 0,
+      online_amount REAL DEFAULT 0,
+      payment_mode TEXT DEFAULT 'Cash',
       total_pcs INTEGER DEFAULT 0,
       total_weight REAL DEFAULT 0,
       labour_total REAL DEFAULT 0,
@@ -771,6 +805,49 @@ db.serialize(() => {
             }
           }
         );
+      }
+
+      // Phase 1 (selling-counter-billing-ledger): add customer FK + payment split columns.
+      // All additive & nullable with safe defaults so existing bills continue to read.
+      const hasCustomerId   = columns.some((c) => c.name === 'customer_id');
+      const hasCashAmount   = columns.some((c) => c.name === 'cash_amount');
+      const hasOnlineAmount = columns.some((c) => c.name === 'online_amount');
+      const hasPaymentMode  = columns.some((c) => c.name === 'payment_mode');
+
+      if (!hasCustomerId) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN customer_id INTEGER DEFAULT NULL`, (e) => {
+          if (e) console.error('Migration customer_id:', e.message);
+          else console.log('Added customer_id column to order_bills');
+        });
+      }
+      if (!hasCashAmount) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN cash_amount REAL DEFAULT 0`, (e) => {
+          if (e) return console.error('Migration cash_amount:', e.message);
+          console.log('Added cash_amount column to order_bills');
+          // Backfill: treat legacy amt_jama as cash. Only touch rows still at zero
+          // so this is idempotent if run after partial data entry.
+          db.run(
+            `UPDATE order_bills
+               SET cash_amount = amt_jama
+             WHERE cash_amount = 0 AND amt_jama > 0`,
+            (ue) => {
+              if (ue) console.error('Backfill cash_amount from amt_jama:', ue.message);
+              else console.log('Backfilled cash_amount from legacy amt_jama');
+            }
+          );
+        });
+      }
+      if (!hasOnlineAmount) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN online_amount REAL DEFAULT 0`, (e) => {
+          if (e) console.error('Migration online_amount:', e.message);
+          else console.log('Added online_amount column to order_bills');
+        });
+      }
+      if (!hasPaymentMode) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN payment_mode TEXT DEFAULT 'Cash'`, (e) => {
+          if (e) console.error('Migration payment_mode:', e.message);
+          else console.log("Added payment_mode column to order_bills (default 'Cash')");
+        });
       }
     }
   });
