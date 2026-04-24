@@ -16,6 +16,12 @@ const all = (sql, params = []) =>
     });
   });
 
+// Dashboard summary for the Selling area.
+// Reads from:
+//   - customer_ledger_entries  → metal inventory running balances
+//   - counter_cash_ledger       → cash/online totals
+//   - customers                 → outstanding receivables
+//   - order_bills (estimates)   → bill count and total billed (subtotal)
 const getDashboard = async () => {
   const metalRows = await all(
     `SELECT metal_type, ROUND(COALESCE(SUM(weight_delta), 0), 4) AS available_weight
@@ -36,7 +42,7 @@ const getDashboard = async () => {
 
   const cashRow = await get(
     `SELECT
-        ROUND(COALESCE(SUM(CASE WHEN mode = 'Cash' THEN amount ELSE 0 END), 0), 2) AS cash_total,
+        ROUND(COALESCE(SUM(CASE WHEN mode = 'Cash'   THEN amount ELSE 0 END), 0), 2) AS cash_total,
         ROUND(COALESCE(SUM(CASE WHEN mode = 'Online' THEN amount ELSE 0 END), 0), 2) AS online_total
      FROM counter_cash_ledger`
   );
@@ -45,16 +51,26 @@ const getDashboard = async () => {
     `SELECT ROUND(COALESCE(SUM(outstanding_balance), 0), 2) AS receivable_total FROM customers`
   );
 
+  // Estimates (order_bills) — count and grossed up subtotal
   const billRow = await get(
     `SELECT
         COUNT(*) AS bill_count,
-        ROUND(COALESCE(SUM(total_amount), 0), 2) AS billed_total
-     FROM selling_bills`
+        ROUND(COALESCE(SUM(subtotal), 0), 2) AS billed_total
+     FROM order_bills`
   );
 
+  // Recent estimates — shape mirrors the old selling_bills recent list so the
+  // dashboard frontend can render without changes.
   const recentBills = await all(
-    `SELECT bill_no, date, customer_name, customer_type, total_amount, amount_paid, outstanding_amount
-     FROM selling_bills
+    `SELECT
+        ob_no           AS bill_no,
+        date,
+        customer_name,
+        customer_type,
+        subtotal        AS total_amount,
+        amt_jama        AS amount_paid,
+        amt_baki        AS outstanding_amount
+     FROM order_bills
      ORDER BY id DESC
      LIMIT 8`
   );

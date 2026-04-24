@@ -1,20 +1,21 @@
 const db = require("../../config/dbConfig");
 const customerService = require("./customerService");
+const { createAppError, isValidMetalType } = require("../utils/common");
 
-// ─── Constants ──────────────────────────────────────────────────────────────
+// --- Constants ---
 
 // reference_type discriminator in customer_ledger_entries / counter_cash_ledger.
 // Keep distinct from "SELLING_BILL" so each bill type's accounting rows are
 // independently deletable/updatable.
 const REFERENCE_TYPE = "ORDER_BILL";
 
-// F. JAMA in the Excel bill is unqualified fine gold — always recorded as
+// F. JAMA in the Excel bill is unqualified fine gold - always recorded as
 // Gold 24K at 99.99 purity in the ledger. Any future requirement to record
 // 22K-as-jama can extend this to a per-line purity, but today it's singular.
 const FINE_METAL_TYPE  = "Gold 24K";
 const FINE_METAL_PURITY = "99.99";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// --- Helpers ---
 
 // Parse the products JSON column; fall back gracefully for legacy bills.
 const parseProducts = (raw) => {
@@ -24,6 +25,80 @@ const parseProducts = (raw) => {
     return Array.isArray(arr) && arr.length ? arr : ["Gold 24K"];
   } catch {
     return ["Gold 24K"];
+  }
+};
+
+const VALID_CUSTOMER_TYPES = ["Retail", "Showroom", "Wholesale"];
+
+const _validateBillInput = (data, { requireObNo = false } = {}) => {
+  if (!data || typeof data !== "object") {
+    throw createAppError("Invalid estimate payload", 400, "INVALID_PAYLOAD");
+  }
+
+  if (requireObNo) {
+    const obNo = parseInt(data.ob_no, 10);
+    if (!Number.isInteger(obNo) || obNo <= 0) {
+      throw createAppError("Estimate number must be a positive integer", 400, "INVALID_ESTIMATE_NO");
+    }
+  }
+
+  if (!data.date || !String(data.date).trim()) {
+    throw createAppError("Date is required", 400, "DATE_REQUIRED");
+  }
+
+  if (!Array.isArray(data.products) || data.products.length === 0) {
+    throw createAppError("At least one metal type must be selected", 400, "PRODUCTS_REQUIRED");
+  }
+
+  const invalidProducts = data.products.filter((metalType) => !isValidMetalType(metalType));
+  if (invalidProducts.length > 0) {
+    throw createAppError(`Invalid metal type: ${invalidProducts[0]}`, 400, "INVALID_METAL");
+  }
+
+  if (data.customer_type && !VALID_CUSTOMER_TYPES.includes(data.customer_type)) {
+    throw createAppError("Invalid customer type", 400, "INVALID_CUSTOMER_TYPE");
+  }
+
+  if (!Array.isArray(data.items) || data.items.length === 0) {
+    throw createAppError("At least one estimate item is required", 400, "ITEMS_REQUIRED");
+  }
+
+  const nonZeroItems = data.items.filter((item) => (parseInt(item.pcs, 10) || 0) > 0);
+  if (nonZeroItems.length === 0) {
+    throw createAppError("Enter quantity for at least one size", 400, "PCS_REQUIRED");
+  }
+
+  nonZeroItems.forEach((item, index) => {
+    if (!isValidMetalType(item.metal_type || "")) {
+      throw createAppError(`Invalid metal type on item ${index + 1}`, 400, "INVALID_ITEM_METAL");
+    }
+    if (!item.category || !String(item.category).trim()) {
+      throw createAppError(`Category is required on item ${index + 1}`, 400, "ITEM_CATEGORY_REQUIRED");
+    }
+    if (!item.size_label || !String(item.size_label).trim()) {
+      throw createAppError(`Size label is required on item ${index + 1}`, 400, "ITEM_SIZE_REQUIRED");
+    }
+    const sizeValue = parseFloat(item.size_value);
+    if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
+      throw createAppError(`Size value must be greater than 0 on item ${index + 1}`, 400, "ITEM_SIZE_INVALID");
+    }
+    const lcPp = parseFloat(item.lc_pp);
+    if (!Number.isFinite(lcPp) || lcPp < 0) {
+      throw createAppError(`Labour charge must be 0 or more on item ${index + 1}`, 400, "ITEM_LABOUR_INVALID");
+    }
+  });
+
+  const hasCustomerDraft = (data.customer_name || "").trim() || (data.customer_phone || "").trim() || (data.customer_address || "").trim();
+  if (!data.customer_id && hasCustomerDraft) {
+    if (!(data.customer_name || "").trim()) {
+      throw createAppError("Customer name is required for a new customer", 400, "CUSTOMER_NAME_REQUIRED");
+    }
+    if (!(data.customer_phone || "").trim()) {
+      throw createAppError("Phone number is required for a new customer", 400, "CUSTOMER_PHONE_REQUIRED");
+    }
+    if (!(data.customer_address || "").trim()) {
+      throw createAppError("Address is required for a new customer", 400, "CUSTOMER_ADDRESS_REQUIRED");
+    }
   }
 };
 
@@ -73,7 +148,7 @@ const _normalisePayments = (data) => {
   return { cash: cashFinal, online: onlineFinal, amt_jama, payment_mode };
 };
 
-// ─── Next OB Number ─────────────────────────────────────────────────────────
+// --- Next OB Number ---
 
 const getNextObNo = () =>
   new Promise((resolve, reject) => {
@@ -87,7 +162,7 @@ const getNextObNo = () =>
     );
   });
 
-// ─── List Bills ─────────────────────────────────────────────────────────────
+// --- List Bills ---
 
 const listBills = () =>
   new Promise((resolve, reject) => {
@@ -106,7 +181,7 @@ const listBills = () =>
     );
   });
 
-// ─── Get Bill by ID ─────────────────────────────────────────────────────────
+// --- Get Bill by ID ---
 
 const getBillById = (id) =>
   new Promise((resolve, reject) => {
@@ -120,7 +195,7 @@ const getBillById = (id) =>
         if (err) return reject(err);
         if (!bill) return resolve(null);
         db.all(
-          `SELECT * FROM order_bill_items WHERE bill_id = ? ORDER BY metal_type, sort_order`,
+          `SELECT * FROM order_bill_items WHERE bill_id = ? ORDER BY metal_type, category, sort_order`,
           [id],
           (err2, items) => {
             if (err2) return reject(err2);
@@ -138,7 +213,7 @@ const getBillById = (id) =>
     );
   });
 
-// ─── Server-side Recalculation ──────────────────────────────────────────────
+// --- Server-side Recalculation ---
 // Re-derives every summary field from items + fine gold inputs + payments.
 // Formulas mirror the Excel "Sample Bill Format" sheet exactly.
 const _computeSummary = (items, fine_jama, rate_10g, cash, online) => {
@@ -185,7 +260,7 @@ const _computeSummary = (items, fine_jama, rate_10g, cash, online) => {
   };
 };
 
-// ─── Line-item insert ───────────────────────────────────────────────────────
+// --- Line-item insert ---
 
 const _insertItems = async (run, billId, items) => {
   for (const [i, item] of items.entries()) {
@@ -196,11 +271,12 @@ const _insertItems = async (run, billId, items) => {
     const t_lc       = parseFloat((lc_pp * pcs).toFixed(2));
     await run(
       `INSERT INTO order_bill_items
-        (bill_id, metal_type, size_label, size_value, pcs, weight, lc_pp, t_lc, is_custom, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (bill_id, metal_type, category, size_label, size_value, pcs, weight, lc_pp, t_lc, is_custom, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         billId,
         item.metal_type || "Gold 24K",
+        item.category || "Standard",
         item.size_label || "",
         size_value,
         pcs,
@@ -214,7 +290,7 @@ const _insertItems = async (run, billId, items) => {
   }
 };
 
-// ─── Accounting helpers ─────────────────────────────────────────────────────
+// --- Accounting helpers ---
 
 const _deleteAccountingEntries = async (run, billId) => {
   await run(
@@ -315,22 +391,23 @@ const _insertAccountingEntries = async (
   }
 };
 
-// ─── Create Bill ────────────────────────────────────────────────────────────
+// --- Create Bill ---
 
 const createBill = async (data) => {
+  _validateBillInput(data);
   const ob_no = data.ob_no ? parseInt(data.ob_no) : await getNextObNo();
 
   const existing = await new Promise((resolve, reject) =>
     db.get(`SELECT id FROM order_bills WHERE ob_no = ?`, [ob_no],
       (err, row) => err ? reject(err) : resolve(row))
   );
-  if (existing) throw new Error("OB No. " + ob_no + " already exists. Please use a different number.");
+  if (existing) throw createAppError("Estimate No. " + ob_no + " already exists. Please use a different number.", 409, "ESTIMATE_NO_CONFLICT");
 
   const fj = parseFloat(data.fine_jama) || 0;
   const hasCustHint = !!(data.customer_id ||
     ((data.customer_phone || "").trim() && (data.customer_name || "").trim()));
   if (fj > 0 && !hasCustHint) {
-    throw new Error("F. JAMA (metal deposit) requires a customer — please select or add one.");
+    throw createAppError("F. JAMA (metal deposit) requires a customer. Please select or add one.", 400, "CUSTOMER_REQUIRED_FOR_FINE");
   }
 
   const payments = _normalisePayments(data);
@@ -341,23 +418,24 @@ const createBill = async (data) => {
 
   const resolvedCustomerId = await _resolveCustomerId(data);
   if (fj > 0 && !resolvedCustomerId) {
-    throw new Error("F. JAMA (metal deposit) requires a resolvable customer — please select or add one.");
+    throw createAppError("F. JAMA (metal deposit) requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
   }
 
   return db.runTransaction(async (run) => {
     const { lastID } = await run(
       `INSERT INTO order_bills
         (ob_no, date, product, products,
-         customer_id, customer_name, customer_city, customer_phone, customer_type,
+         customer_id, customer_name, customer_city, customer_address, customer_phone, customer_type,
          fine_jama, rate_10g, amt_jama, cash_amount, online_amount, payment_mode,
          total_pcs, total_weight, labour_total, fine_diff, gold_rs,
          subtotal, amt_baki, ofg_status, fine_carry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         ob_no, data.date, data.product || "", productsJson,
         resolvedCustomerId || null,
         data.customer_name || "",
         data.customer_city || "",
+        data.customer_address || "",
         data.customer_phone || "",
         data.customer_type || "Retail",
         parseFloat(data.fine_jama) || 0,
@@ -381,16 +459,17 @@ const createBill = async (data) => {
   });
 };
 
-// ─── Update Bill ────────────────────────────────────────────────────────────
+// --- Update Bill ---
 
 const updateBill = async (id, data) => {
+  _validateBillInput(data, { requireObNo: true });
   const ob_no = parseInt(data.ob_no);
 
   const conflict = await new Promise((resolve, reject) =>
     db.get(`SELECT id FROM order_bills WHERE ob_no = ? AND id != ?`, [ob_no, id],
       (err, row) => err ? reject(err) : resolve(row))
   );
-  if (conflict) throw new Error("OB No. " + ob_no + " already exists. Please use a different number.");
+  if (conflict) throw createAppError("Estimate No. " + ob_no + " already exists. Please use a different number.", 409, "ESTIMATE_NO_CONFLICT");
 
   const fj = parseFloat(data.fine_jama) || 0;
   const payments = _normalisePayments(data);
@@ -401,7 +480,7 @@ const updateBill = async (id, data) => {
 
   const resolvedCustomerId = await _resolveCustomerId(data);
   if (fj > 0 && !resolvedCustomerId) {
-    throw new Error("F. JAMA (metal deposit) requires a resolvable customer — please select or add one.");
+    throw createAppError("F. JAMA (metal deposit) requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
   }
 
   return db.runTransaction(async (run, get) => {
@@ -409,12 +488,12 @@ const updateBill = async (id, data) => {
       `SELECT customer_id, amt_baki FROM order_bills WHERE id = ?`,
       [id]
     );
-    if (!oldBill) throw new Error("Order bill not found");
+    if (!oldBill) throw createAppError("Estimate not found", 404, "ESTIMATE_NOT_FOUND");
 
     await run(
       `UPDATE order_bills SET
          ob_no=?, date=?, product=?, products=?,
-         customer_id=?, customer_name=?, customer_city=?, customer_phone=?, customer_type=?,
+         customer_id=?, customer_name=?, customer_city=?, customer_address=?, customer_phone=?, customer_type=?,
          fine_jama=?, rate_10g=?, amt_jama=?, cash_amount=?, online_amount=?, payment_mode=?,
          total_pcs=?, total_weight=?, labour_total=?, fine_diff=?, gold_rs=?,
          subtotal=?, amt_baki=?, ofg_status=?, fine_carry=?
@@ -424,6 +503,7 @@ const updateBill = async (id, data) => {
         resolvedCustomerId || null,
         data.customer_name || "",
         data.customer_city || "",
+        data.customer_address || "",
         data.customer_phone || "",
         data.customer_type || "Retail",
         parseFloat(data.fine_jama) || 0,
@@ -455,7 +535,7 @@ const updateBill = async (id, data) => {
   });
 };
 
-// ─── Delete Bill ────────────────────────────────────────────────────────────
+// --- Delete Bill ---
 
 const deleteBill = (id) =>
   db.runTransaction(async (run, get) => {

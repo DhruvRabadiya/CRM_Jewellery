@@ -562,141 +562,38 @@ const Customers = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+            {/* Delete Confirmation Modal */}
       {showDeleteConfirm && deleteTarget && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-0 max-w-sm w-full shadow-2xl relative overflow-hidden">
-            <div className="h-1.5 bg-red-500"></div>
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
-                  <Trash2 size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-800">Delete Customer</h3>
-                  <p className="text-slate-400 text-xs font-medium mt-0.5">This action cannot be undone.</p>
-                </div>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-red-100 text-red-600">
+                <AlertCircle size={20} />
               </div>
-
-              <div className="bg-red-50 rounded-xl p-4 mb-5 border border-red-100">
-                <p className="text-sm text-red-800 font-semibold">
-                  Are you sure you want to delete <strong>{deleteTarget.party_name}</strong> from <strong>{deleteTarget.firm_name}</strong>?
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-3 rounded-xl font-bold transition-all text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="flex-1 bg-red-600 hover:bg-red-500 text-white px-4 py-3 rounded-xl font-bold transition-all shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 text-sm"
-                >
-                  <Trash2 size={16} /> Delete
-                </button>
-              </div>
+              <h3 className="text-lg font-bold text-slate-800">
+                Confirm Delete
+              </h3>
             </div>
-          </div>
-        </div>
-      )}
 
-      {ledgerState.open && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-0 max-w-4xl w-full shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-cyan-500" />
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="flex items-start justify-between gap-4 mb-5">
-                <div>
-                  <h3 className="text-lg font-black text-slate-800">Customer Ledger</h3>
-                  <p className="text-slate-400 text-xs font-medium mt-0.5">
-                    Customer-wise billing, payment, and metal movement trail
-                  </p>
-                </div>
-                <button
-                  onClick={() => setLedgerState({ open: false, loading: false, data: null })}
-                  className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+            <p className="text-sm text-slate-600 mb-6">
+              Are you sure you want to delete{" "}
+              <span className="font-bold">{deleteTarget.party_name}</span>?
+              This action cannot be undone.
+            </p>
 
-              {ledgerState.loading ? (
-                <div className="flex items-center justify-center min-h-[240px]">
-                  <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Customer</p>
-                      <p className="font-black text-slate-800 mt-2">{ledgerState.data?.customer?.party_name}</p>
-                      <p className="text-xs text-slate-500 mt-1">{ledgerState.data?.customer?.phone_no}</p>
-                    </div>
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                      <p className="text-[10px] font-black text-red-600 uppercase tracking-widest">Outstanding</p>
-                      <p className="font-black text-red-700 mt-2">
-                        ₹{Number(ledgerState.data?.summary?.outstanding_amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                    {["Gold 24K", "Gold 22K", "Silver"].map((metal) => (
-                      <div key={metal} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{metal}</p>
-                        <p className="font-black text-slate-800 mt-2">
-                          {Number(ledgerState.data?.summary?.metal_balances?.[metal] || 0).toFixed(3)}g
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-slate-50">
-                          <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Date</th>
-                          <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Ref</th>
-                          <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Entry</th>
-                          <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Metal</th>
-                          <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Weight</th>
-                          <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Amount</th>
-                          <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Running Bal.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(ledgerState.data?.entries || []).length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                              No ledger entries yet for this customer.
-                            </td>
-                          </tr>
-                        ) : (
-                          ledgerState.data.entries.map((entry, idx) => (
-                            <tr key={entry.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
-                              <td className="px-4 py-3 text-slate-600">{entry.entry_date}</td>
-                              <td className="px-4 py-3 font-semibold text-indigo-600">{entry.reference_no ? `#${entry.reference_no}` : "—"}</td>
-                              <td className="px-4 py-3 text-slate-700">{entry.line_type.replaceAll("_", " ")}</td>
-                              <td className="px-4 py-3 text-slate-600">
-                                {entry.metal_type ? `${entry.metal_type}${entry.metal_purity ? ` (${entry.metal_purity})` : ""}` : "—"}
-                              </td>
-                              <td className="px-4 py-3 text-right font-mono text-slate-700">
-                                {entry.weight_delta ? `${Number(entry.weight_delta).toFixed(3)}g` : "—"}
-                              </td>
-                              <td className={`px-4 py-3 text-right font-bold ${entry.amount_delta > 0 ? "text-red-600" : entry.amount_delta < 0 ? "text-green-700" : "text-slate-500"}`}>
-                                ₹{Number(entry.amount_delta || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="px-4 py-3 text-right font-black text-slate-800">
-                                ₹{Number(entry.running_amount_balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-bold text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white px-4 py-2.5 rounded-xl font-bold text-sm"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

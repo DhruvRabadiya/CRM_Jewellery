@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings, BookOpen, LayoutDashboard, Receipt } from "lucide-react";
+import { Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings, FileText, LayoutDashboard } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const SellingLayout = () => {
@@ -33,16 +33,13 @@ const SellingLayout = () => {
       match: (path) => path.includes("/selling/customers"),
     },
     {
-      to: "/selling/order-bills",
-      icon: <BookOpen size={20} />,
-      label: "Order Bills",
-      match: (path) => path.includes("/selling/order-bills"),
-    },
-    {
-      to: "/selling/billing",
-      icon: <Receipt size={20} />,
-      label: "Billing",
-      match: (path) => path.includes("/selling/billing"),
+      to: "/selling/estimate",
+      icon: <FileText size={20} />,
+      label: "Estimate",
+      match: (path) =>
+        path.includes("/selling/estimate") ||
+        path.includes("/selling/order-bills") ||
+        path.includes("/selling/billing"),
     },
     {
       to: "/selling/admin",
@@ -124,12 +121,12 @@ const SellingLayout = () => {
             })}
           </nav>
 
-          {/* Sidebar footer – quick help */}
+          {/* Sidebar footer - quick help */}
           <div className="p-3 border-t border-slate-100">
             <div className="bg-slate-50 rounded-xl p-3 text-center">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Flow</p>
               <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
-                Finished Goods → Counter ↔ Vault
+                Finished Goods - Counter - Vault
               </p>
             </div>
           </div>

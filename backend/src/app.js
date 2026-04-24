@@ -15,10 +15,9 @@ const packingRoutes = require("./routes/packingRoutes");
 const svgRoutes = require("./routes/svgRoutes");
 const counterRoutes = require("./routes/counterRoutes");
 const customerRoutes = require("./routes/customerRoutes");
-const sellingBillRoutes = require("./routes/sellingBillRoutes");
 const sellingDashboardRoutes = require("./routes/sellingDashboardRoutes");
-const obRateRoutes = require("./routes/obRateRoutes");
-const orderBillRoutes = require("./routes/orderBillRoutes");
+const labourChargeRoutes = require("./routes/labourChargeRoutes");
+const estimateRoutes = require("./routes/orderBillRoutes");
 const authRoutes = require("./routes/authRoutes");
 const { authenticateToken } = require("./middleware/authMiddleware");
 
@@ -42,10 +41,15 @@ app.use("/api/packing", authenticateToken, packingRoutes);
 app.use("/api/svg", authenticateToken, svgRoutes);
 app.use("/api/counter", authenticateToken, counterRoutes);
 app.use("/api/customers", authenticateToken, customerRoutes);
-app.use("/api/billing/selling", authenticateToken, sellingBillRoutes);
 app.use("/api/selling/dashboard", authenticateToken, sellingDashboardRoutes);
-app.use("/api/ob-rates", authenticateToken, obRateRoutes);
-app.use("/api/order-bills", authenticateToken, orderBillRoutes);
+
+// Labour charges - admin-configured Metal > Category > Size rates, used by Estimate.
+app.use("/api/labour-charges", authenticateToken, labourChargeRoutes);
+
+// Estimates (formerly Order Bills / Selling Counter) - unified billing module.
+// Backward-compat alias at /api/order-bills keeps older clients working.
+app.use("/api/estimates", authenticateToken, estimateRoutes);
+app.use("/api/order-bills", authenticateToken, estimateRoutes);
 
 app.get("/", (req, res) => {
   res.send("Jewelry CRM Backend is Running");

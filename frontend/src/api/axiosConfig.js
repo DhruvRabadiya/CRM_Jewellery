@@ -36,6 +36,14 @@ api.interceptors.response.use(
         window.location.href = "/login";
       }
     }
+
+    const serverMessage =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      "Request failed";
+    error.message = serverMessage;
+
     return Promise.reject(error);
   }
 );

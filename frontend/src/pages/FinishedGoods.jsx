@@ -404,10 +404,10 @@ const FinishedGoods = () => {
                   >
                     Cancel
                   </button>
-                  <button
+                                    <button
                     type="submit"
                     disabled={isSubmitting || !sendPieces}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Send size={16} />
                     {isSubmitting ? "Sending..." : "Send to Counter"}

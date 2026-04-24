@@ -1,12 +1,4 @@
-const express = require("express");
-const router = express.Router();
-const ctrl = require("../controllers/sellingBillController");
-
-router.get("/next-no", ctrl.getNextNo);
-router.get("/", ctrl.listBills);
-router.get("/:id", ctrl.getBill);
-router.post("/", ctrl.createBill);
-router.put("/:id", ctrl.updateBill);
-router.delete("/:id", ctrl.deleteBill);
-
-module.exports = router;
+// DEPRECATED — SellingBilling module removed as part of the Estimate refactor.
+// The /api/billing/selling route is no longer mounted in app.js.
+// Safe to `git rm` this file on the branch.
+module.exports = require("express").Router();

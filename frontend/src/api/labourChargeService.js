@@ -1,6 +1,8 @@
 import api from "./axiosConfig";
 
-const BASE = "/billing/labour-charges";
+// Backend mounts this module at /api/labour-charges (see backend/src/app.js).
+// axiosConfig already prepends /api via VITE_API_URL, so BASE is relative.
+const BASE = "/labour-charges";
 
 export const getLabourCharges = (metal) =>
   api.get(BASE, { params: metal ? { metal } : {} }).then((r) => r.data.data);

@@ -69,7 +69,7 @@ export default function SellingDashboard() {
             Selling Dashboard
           </h1>
           <p className="text-slate-500 text-sm mt-1 ml-[52px]">
-            Counter cash, customer metal pool, and recent billing activity
+            Counter cash, customer metal pool, and recent estimate activity
           </p>
         </div>
         <button
@@ -97,12 +97,12 @@ export default function SellingDashboard() {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">
               <Receipt size={18} className="text-indigo-500" />
-              <h2 className="font-black text-slate-800">Recent Bills</h2>
+              <h2 className="font-black text-slate-800">Recent Estimates</h2>
             </div>
             {recentBills.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
-                <p className="font-bold">No bills yet</p>
-                <p className="text-sm mt-1">Counter billing activity will appear here once bills are created.</p>
+                <p className="font-bold">No estimates yet</p>
+                <p className="text-sm mt-1">Estimate activity will appear here once estimates are created.</p>
               </div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -178,8 +178,8 @@ export default function SellingDashboard() {
               <h2 className="font-black text-slate-800">Accounting Note</h2>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Cash is derived from recorded counter bill receipts. Customer metal availability is derived from ledgered
-              metal-in entries captured during billing.
+              Cash is derived from recorded estimate receipts. Customer metal availability is derived from ledgered
+              metal-in entries captured during estimate creation.
             </p>
           </div>
         </div>

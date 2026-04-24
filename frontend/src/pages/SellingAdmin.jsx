@@ -3,7 +3,6 @@ import {
   Plus, Trash2, X, CheckCircle, AlertCircle, Save, Check,
   ChevronDown, ChevronRight, FolderPlus, Gem,
 } from "lucide-react";
-import { getObRates, bulkUpdateObRates, addObRate, deleteObRate } from "../api/obRateService";
 import {
   getLabourCharges,
   createLabourCharge,
@@ -72,7 +71,9 @@ const RateInput = ({ value, onChange, colorClass = "" }) => (
   />
 );
 
-// ─── NEW: Labour Charges Admin (Metal → Category → Size tree) ────────────────
+// ─── Labour Charges Admin (Metal → Category → Size tree) ─────────────────────
+// This is the SOLE rate-management surface for the Estimate module.
+// The legacy "OB Rates" section was removed as part of the Estimate refactor.
 
 const EMPTY_ROW = {
   size_label: "",
@@ -568,272 +569,12 @@ const LabourChargesAdmin = ({ showToast }) => {
   );
 };
 
-const EMPTY_OB_ROW = { size_label: "", size_value: "", lc_pp_retail: "", lc_pp_showroom: "", lc_pp_wholesale: "" };
-
-const ObAddRowForm = ({ metalType, onAdd, onCancel, adding }) => {
-  const [form, setForm] = useState(EMPTY_OB_ROW);
-  const [error, setError] = useState("");
-
-  const set = (field, value) => { setForm((prev) => ({ ...prev, [field]: value })); setError(""); };
-
-  const handleAdd = () => {
-    if (!form.size_label.trim()) { setError("Size label is required"); return; }
-    if (form.lc_pp_retail === "" && form.lc_pp_showroom === "" && form.lc_pp_wholesale === "") {
-      setError("Enter at least one rate"); return;
-    }
-    onAdd({
-      metal_type:       metalType,
-      size_label:       form.size_label.trim(),
-      size_value:       form.size_value !== "" ? form.size_value : null,
-      lc_pp_retail:     parseFloat(form.lc_pp_retail)    || 0,
-      lc_pp_showroom:   parseFloat(form.lc_pp_showroom)  || 0,
-      lc_pp_wholesale:  parseFloat(form.lc_pp_wholesale) || 0,
-    });
-  };
-
-  return (
-    <tr className="bg-indigo-50 border-b border-indigo-200">
-      <td className="px-3 py-2">
-        <input type="text" value={form.size_label} onChange={(e) => set("size_label", e.target.value)}
-          placeholder="e.g. 3g" autoFocus
-          className="w-full text-sm px-2 py-1.5 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-      </td>
-      <td className="px-3 py-2">
-        <input type="number" min="0" step="0.001" value={form.size_value}
-          onChange={(e) => set("size_value", e.target.value)}
-          placeholder="g/pc (opt.)"
-          className="w-full text-sm px-2 py-1.5 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-      </td>
-      {["lc_pp_retail", "lc_pp_showroom", "lc_pp_wholesale"].map((field) => (
-        <td key={field} className="px-3 py-2">
-          <RateInput value={form[field]} onChange={(v) => set(field, v)}
-            colorClass="border-indigo-200 focus:ring-indigo-300" />
-        </td>
-      ))}
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <button onClick={handleAdd} disabled={adding}
-            className="p-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-lg">
-            <Check size={14} />
-          </button>
-          <button onClick={onCancel}
-            className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg">
-            <X size={14} />
-          </button>
-        </div>
-        {error && <p className="text-red-500 text-[10px] mt-1 font-semibold">{error}</p>}
-      </td>
-    </tr>
-  );
-};
-
-const ObMetalPanel = ({ metalType, rates, showToast, onReload }) => {
-  const [edits, setEdits] = useState({});
-  const [showAddRow, setShowAddRow] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [adding, setAdding] = useState(false);
-
-  useEffect(() => {
-    const map = {};
-    rates.forEach((r) => {
-      map[r.id] = {
-        lc_pp_retail:    r.lc_pp_retail?.toString()    ?? "0",
-        lc_pp_showroom:  r.lc_pp_showroom?.toString()  ?? "0",
-        lc_pp_wholesale: r.lc_pp_wholesale?.toString() ?? "0",
-      };
-    });
-    setEdits(map);
-  }, [rates]);
-
-  const hasUnsaved = rates.some((r) => {
-    const e = edits[r.id];
-    if (!e) return false;
-    return (
-      parseFloat(e.lc_pp_retail)    !== (r.lc_pp_retail    || 0) ||
-      parseFloat(e.lc_pp_showroom)  !== (r.lc_pp_showroom  || 0) ||
-      parseFloat(e.lc_pp_wholesale) !== (r.lc_pp_wholesale || 0)
-    );
-  });
-
-  const setEdit = (id, field, value) =>
-    setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
-
-  const handleSave = async () => {
-    const updates = rates.map((r) => ({
-      id: r.id,
-      lc_pp_retail:    parseFloat(edits[r.id]?.lc_pp_retail)    || 0,
-      lc_pp_showroom:  parseFloat(edits[r.id]?.lc_pp_showroom)  || 0,
-      lc_pp_wholesale: parseFloat(edits[r.id]?.lc_pp_wholesale) || 0,
-    }));
-    setSaving(true);
-    try { await bulkUpdateObRates(updates); showToast(`${metalType} rates saved`); onReload(); }
-    catch { showToast("Failed to save rates", "error"); }
-    finally { setSaving(false); }
-  };
-
-  const handleAdd = async (data) => {
-    setAdding(true);
-    try { await addObRate(data); showToast(`Size "${data.size_label}" added`); setShowAddRow(false); onReload(); }
-    catch (err) { showToast(err.response?.data?.message || "Failed", "error"); }
-    finally { setAdding(false); }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    try { await deleteObRate(deleteTarget.id); showToast(`"${deleteTarget.size_label}" deleted`); setDeleteTarget(null); onReload(); }
-    catch { showToast("Failed to delete", "error"); }
-  };
-
-  return (
-    <>
-      {deleteTarget && (
-        <DeleteDialog
-          title="Delete Size?"
-          message={`Remove ${deleteTarget.size_label} from ${metalType}?`}
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="text-left px-4 py-3 font-black text-slate-600 text-xs uppercase tracking-wider w-32">Size</th>
-                <th className="text-right px-4 py-3 font-black text-slate-600 text-xs uppercase tracking-wider w-24">g / pc</th>
-                <th className="text-right px-4 py-3 font-black text-slate-500 text-xs uppercase tracking-wider">Retail</th>
-                <th className="text-right px-4 py-3 font-black text-purple-600 text-xs uppercase tracking-wider">Showroom</th>
-                <th className="text-right px-4 py-3 font-black text-blue-600 text-xs uppercase tracking-wider">Wholesale</th>
-                <th className="w-14 px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {rates.length === 0 && !showAddRow && (
-                <tr>
-                  <td colSpan={6} className="text-center py-10 text-slate-400">
-                    <p className="font-bold">No sizes configured</p>
-                  </td>
-                </tr>
-              )}
-              {rates.map((r, idx) => {
-                const e = edits[r.id] || {};
-                const isDirty =
-                  parseFloat(e.lc_pp_retail)    !== (r.lc_pp_retail    || 0) ||
-                  parseFloat(e.lc_pp_showroom)  !== (r.lc_pp_showroom  || 0) ||
-                  parseFloat(e.lc_pp_wholesale) !== (r.lc_pp_wholesale || 0);
-                return (
-                  <tr key={r.id}
-                    className={`border-b border-slate-100 ${isDirty ? "bg-amber-50/40" : idx % 2 === 0 ? "" : "bg-slate-50/30"}`}>
-                    <td className="px-4 py-2.5"><span className="font-bold text-slate-800">{r.size_label}</span></td>
-                    <td className="px-4 py-2.5 text-right font-mono text-slate-500 text-xs">
-                      {r.size_value != null ? r.size_value : <span className="text-slate-300">-</span>}
-                    </td>
-                    <td className="px-3 py-2">
-                      <RateInput value={e.lc_pp_retail ?? "0"} onChange={(v) => setEdit(r.id, "lc_pp_retail", v)}
-                        colorClass="border-slate-200 focus:ring-slate-300" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <RateInput value={e.lc_pp_showroom ?? "0"} onChange={(v) => setEdit(r.id, "lc_pp_showroom", v)}
-                        colorClass="border-purple-200 focus:ring-purple-300" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <RateInput value={e.lc_pp_wholesale ?? "0"} onChange={(v) => setEdit(r.id, "lc_pp_wholesale", v)}
-                        colorClass="border-blue-200 focus:ring-blue-300" />
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <button onClick={() => setDeleteTarget(r)}
-                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {showAddRow && (
-                <ObAddRowForm metalType={metalType} onAdd={handleAdd}
-                  onCancel={() => setShowAddRow(false)} adding={adding} />
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-t border-slate-100">
-          <button onClick={() => setShowAddRow((s) => !s)} disabled={showAddRow}
-            className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-700 disabled:text-slate-300">
-            <Plus size={15} /> Add Size
-          </button>
-          <div className="flex items-center gap-3">
-            {hasUnsaved && <span className="text-xs font-semibold text-amber-600">Unsaved</span>}
-            <button onClick={handleSave} disabled={saving || !hasUnsaved}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm px-5 py-2 rounded-xl shadow-sm">
-              <Save size={14} /> {saving ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-};
-
-const ObRatesAdmin = ({ showToast }) => {
-  const [obRates, setObRates] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [metalTab, setMetalTab] = useState("Gold 24K");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { setObRates(await getObRates()); }
-    catch { showToast("Failed to load rates", "error"); }
-    finally { setLoading(false); }
-  }, [showToast]);
-  useEffect(() => { load(); }, [load]);
-
-  const metalTypes = [
-    ...METAL_TAB_ORDER.filter((m) => obRates.some((r) => r.metal_type === m)),
-    ...obRates.map((r) => r.metal_type).filter((m, i, arr) => !METAL_TAB_ORDER.includes(m) && arr.indexOf(m) === i),
-  ];
-  const activeTab = metalTypes.includes(metalTab) ? metalTab : (metalTypes[0] ?? "");
-  const tabRates = obRates.filter((r) => r.metal_type === activeTab).sort((a, b) => a.sort_order - b.sort_order);
-
-  return (
-    <>
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700 flex items-start gap-2">
-        <span className="mt-0.5">Note:</span>
-        <div><span className="font-bold">Order Bill Rates:</span> Used specifically in Order Bills workflow.</div>
-      </div>
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-8 h-8 border-4 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
-        </div>
-      ) : (
-        <>
-          <div className="flex gap-2 border-b border-slate-200">
-            {metalTypes.map((mt) => {
-              const count = obRates.filter((r) => r.metal_type === mt).length;
-              return (
-                <button key={mt} onClick={() => setMetalTab(mt)}
-                  className={`px-5 py-2.5 text-sm font-bold rounded-t-xl border border-b-0 relative -mb-px ${
-                    activeTab === mt ? "bg-white border-slate-200 text-indigo-700 z-10"
-                      : "bg-slate-50 border-transparent text-slate-500 hover:text-slate-700"
-                  }`}>
-                  {mt}
-                  <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
-                    activeTab === mt ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-500"
-                  }`}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
-          {activeTab && <ObMetalPanel key={activeTab} metalType={activeTab} rates={tabRates} showToast={showToast} onReload={load} />}
-        </>
-      )}
-    </>
-  );
-};
+// ─── Page wrapper ─────────────────────────────────────────────────────────────
+// The former "Order Bill Rates" toggle was removed — the Labour Charges tree is
+// now the single source of truth for Estimate rates.
 
 export default function SellingAdmin() {
-  const [section, setSection] = useState("labour-charges");
-  const [toast, setToast]     = useState({ show: false, message: "", type: "success" });
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
   const showToast = useCallback((message, type = "success") =>
     setToast({ show: true, message, type }), []);
@@ -845,31 +586,11 @@ export default function SellingAdmin() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-black text-slate-800">Admin Settings</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Configure labour charges used in billing</p>
-        </div>
-        <div className="inline-flex rounded-xl bg-slate-100 p-1 text-sm font-bold">
-          <button
-            onClick={() => setSection("labour-charges")}
-            className={`px-4 py-1.5 rounded-lg transition-colors ${
-              section === "labour-charges" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Labour Charges
-          </button>
-          <button
-            onClick={() => setSection("ob-rates")}
-            className={`px-4 py-1.5 rounded-lg transition-colors ${
-              section === "ob-rates" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Order Bill Rates
-          </button>
+          <p className="text-sm text-slate-500 mt-0.5">Configure labour charges used in Estimates</p>
         </div>
       </div>
 
-      {section === "labour-charges"
-        ? <LabourChargesAdmin showToast={showToast} />
-        : <ObRatesAdmin       showToast={showToast} />}
+      <LabourChargesAdmin showToast={showToast} />
     </div>
   );
 }

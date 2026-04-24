@@ -18,8 +18,8 @@ const getAll = async (req, res) => {
 };
 
 const _validateBody = (body) => {
-  if (! body.metal_type || ! body.metal_type.trim()) return "metal_type is required";
-  if (! body.size_label || ! body.size_label.trim()) return "size_label is required";
+  if (!body.metal_type || !body.metal_type.trim()) return "metal_type is required";
+  if (!body.size_label || !body.size_label.trim()) return "size_label is required";
   if (body.lc_pp_retail != null && isNaN(parseFloat(body.lc_pp_retail))) return "lc_pp_retail must be a number";
   if (body.lc_pp_showroom != null && isNaN(parseFloat(body.lc_pp_showroom))) return "lc_pp_showroom must be a number";
   if (body.lc_pp_wholesale != null && isNaN(parseFloat(body.lc_pp_wholesale))) return "lc_pp_wholesale must be a number";
@@ -58,7 +58,7 @@ const update = async (req, res) => {
 const bulkUpdate = async (req, res) => {
   try {
     const updates = Array.isArray(req.body) ? req.body : req.body.updates;
-    if (! Array.isArray(updates)) {
+    if (!Array.isArray(updates)) {
       return formatResponse(res, 400, false, "updates must be an array");
     }
     for (const u of updates) {

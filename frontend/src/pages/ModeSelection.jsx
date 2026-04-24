@@ -65,7 +65,7 @@ const ModeSelection = () => {
           </div>
         </Link>
 
-        {/* Selling Counter Card */}
+        {/* Selling / Estimate Card */}
         <Link 
           to="/selling"
           className="group/card bg-white rounded-[2rem] p-10 shadow-xl shadow-slate-200/50 border border-slate-100 hover:border-indigo-400 hover:shadow-2xl hover:shadow-indigo-200 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-2 relative overflow-hidden"
@@ -80,7 +80,7 @@ const ModeSelection = () => {
             Selling Counter
           </h2>
           <p className="text-slate-500 font-medium leading-relaxed px-4">
-            Access the point of sale, view immediately available finished inventory, and process customer orders.
+            Manage estimates, counter inventory, customer records, and selling-side workflow.
           </p>
           
           <div className="mt-8 px-8 py-3 bg-slate-50 text-slate-600 font-bold rounded-full group-hover/card:bg-indigo-600 group-hover/card:text-white transition-colors duration-300">

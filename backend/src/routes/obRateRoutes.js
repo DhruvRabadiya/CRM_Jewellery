@@ -1,10 +1,4 @@
-const express = require("express");
-const router = express.Router();
-const ctrl = require("../controllers/obRateController");
-
-router.get("/",          ctrl.getAll);
-router.put("/bulk",      ctrl.bulkUpdate);
-router.post("/",         ctrl.add);
-router.delete("/:id",    ctrl.remove);
-
-module.exports = router;
+// DEPRECATED — OB Rates module replaced by labour_charges.
+// The /api/ob-rates route is no longer mounted in app.js; see /api/labour-charges.
+// Safe to `git rm` this file on the branch.
+module.exports = require("express").Router();

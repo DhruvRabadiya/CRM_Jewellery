@@ -16,7 +16,6 @@ import SvgCounter from "./pages/SvgCounter";
 import Customers from "./pages/Customers";
 import SellingAdmin from "./pages/SellingAdmin";
 import OrderBills from "./pages/OrderBills";
-import SellingBilling from "./pages/SellingBilling";
 import SellingDashboard from "./pages/SellingDashboard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
@@ -64,8 +63,11 @@ function App() {
             <Route path="stocks" element={<SellingCounter />} />
             <Route path="svg" element={<SvgCounter />} />
             <Route path="customers" element={<Customers />} />
-            <Route path="order-bills" element={<OrderBills />} />
-            <Route path="billing" element={<SellingBilling />} />
+            {/* Estimate - unified billing module (formerly Order Bills / Selling Counter Billing). */}
+            <Route path="estimate" element={<OrderBills />} />
+            {/* Back-compat: old /selling/order-bills and /selling/billing URLs redirect to /selling/estimate. */}
+            <Route path="order-bills" element={<Navigate to="/selling/estimate" replace />} />
+            <Route path="billing" element={<Navigate to="/selling/estimate" replace />} />
             <Route path="admin" element={<ProtectedRoute requireAdmin={true}><SellingAdmin /></ProtectedRoute>} />
           </Route>
 

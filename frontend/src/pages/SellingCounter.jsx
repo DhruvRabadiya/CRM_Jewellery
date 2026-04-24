@@ -478,7 +478,7 @@ const SellingCounter = () => {
                     >
                       Cancel
                     </button>
-                    <button
+                                        <button
                       type="submit"
                       disabled={isSubmitting || !piecesInput}
                       className={`flex-1 text-white px-4 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${mc.btnColor}`}

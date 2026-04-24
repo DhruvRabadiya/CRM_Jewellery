@@ -369,12 +369,12 @@ const SvgCounter = () => {
       )}
 
       {/* ── Info Footer ── */}
-      <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 font-semibold">
-        <ShieldCheck size={14} className="text-slate-400 mt-0.5 shrink-0" />
-        <span>
-          Items are stored here from the Selling Counter for safekeeping.
-          Use <strong>"Send"</strong> to move them back to the counter for sale.
-        </span>
+      <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+        <ShieldCheck size={18} className="text-indigo-500 mt-0.5" />
+        <div className="text-xs text-slate-600 font-medium">
+          SVG Vault tracks your gold & silver inventory before sending it to the selling counter.
+          Use <span className="font-bold text-indigo-600">Send</span> to move items.
+        </div>
       </div>
     </div>
   );

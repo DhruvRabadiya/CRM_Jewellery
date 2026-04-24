@@ -720,6 +720,7 @@ db.serialize(() => {
       customer_id INTEGER DEFAULT NULL,
       customer_name TEXT DEFAULT '',
       customer_city TEXT DEFAULT '',
+      customer_address TEXT DEFAULT '',
       customer_phone TEXT DEFAULT '',
       customer_type TEXT DEFAULT 'Retail',
       fine_jama REAL DEFAULT 0,
@@ -745,6 +746,7 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bill_id INTEGER NOT NULL REFERENCES order_bills(id) ON DELETE CASCADE,
       metal_type TEXT DEFAULT 'Gold 24K',
+      category TEXT NOT NULL DEFAULT 'Standard',
       size_label TEXT NOT NULL,
       size_value REAL DEFAULT 0,
       pcs INTEGER DEFAULT 0,
@@ -813,6 +815,7 @@ db.serialize(() => {
       const hasCashAmount   = columns.some((c) => c.name === 'cash_amount');
       const hasOnlineAmount = columns.some((c) => c.name === 'online_amount');
       const hasPaymentMode  = columns.some((c) => c.name === 'payment_mode');
+      const hasCustAddress  = columns.some((c) => c.name === 'customer_address');
 
       if (!hasCustomerId) {
         db.run(`ALTER TABLE order_bills ADD COLUMN customer_id INTEGER DEFAULT NULL`, (e) => {
@@ -847,6 +850,29 @@ db.serialize(() => {
         db.run(`ALTER TABLE order_bills ADD COLUMN payment_mode TEXT DEFAULT 'Cash'`, (e) => {
           if (e) console.error('Migration payment_mode:', e.message);
           else console.log("Added payment_mode column to order_bills (default 'Cash')");
+        });
+      }
+      if (!hasCustAddress) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN customer_address TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Migration customer_address:', e.message);
+          else console.log('Added customer_address column to order_bills');
+        });
+      }
+    }
+  });
+
+  db.all(`PRAGMA table_info(order_bill_items)`, (err, columns) => {
+    if (!err && columns) {
+      if (!columns.some((c) => c.name === 'metal_type')) {
+        db.run(`ALTER TABLE order_bill_items ADD COLUMN metal_type TEXT DEFAULT 'Gold 24K'`, (e) => {
+          if (e) console.error('Migration order_bill_items.metal_type:', e.message);
+          else console.log('Added metal_type column to order_bill_items');
+        });
+      }
+      if (!columns.some((c) => c.name === 'category')) {
+        db.run(`ALTER TABLE order_bill_items ADD COLUMN category TEXT NOT NULL DEFAULT 'Standard'`, (e) => {
+          if (e) console.error('Migration order_bill_items.category:', e.message);
+          else console.log('Added category column to order_bill_items');
         });
       }
     }
