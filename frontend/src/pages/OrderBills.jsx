@@ -91,7 +91,7 @@ const buildItemsFromCharges = (groupedCharges, selectedMetals, customerType, exi
   return rows;
 };
 
-const computeSummary = (items, metalPayments, amtJama) => {
+const computeSummary = (items, metalPayments, amtJama, discount = 0) => {
   let totalPcs = 0;
   let totalWeight = 0;
   let labourTotal = 0;
@@ -137,7 +137,17 @@ const computeSummary = (items, metalPayments, amtJama) => {
 
   const amountPaid = parseFloat(amtJama) || 0;
   const subtotal = parseFloat((labourTotal + totalMetalRs).toFixed(2));
-  const amountDue = parseFloat((subtotal - amountPaid).toFixed(2));
+
+  // Cap discount at subtotal so the totals never go below zero.
+  const rawDiscount = Math.max(0, parseFloat(discount) || 0);
+  const effectiveDiscount = parseFloat(Math.min(rawDiscount, Math.max(subtotal, 0)).toFixed(2));
+  const totalAmount = parseFloat((subtotal - effectiveDiscount).toFixed(2));
+
+  // If customer paid more than total, surface the surplus as refundDue.
+  const net = parseFloat((totalAmount - amountPaid).toFixed(2));
+  const amountDue = net > 0 ? net : 0;
+  const refundDue = net < 0 ? parseFloat((-net).toFixed(2)) : 0;
+
   const fineDiff = metalDiffs["Gold 24K"] || 0;
   const carryFine = totalMetalRs <= 0 && fineDiff > 0 ? parseFloat(fineDiff.toFixed(4)) : 0;
 
@@ -148,7 +158,10 @@ const computeSummary = (items, metalPayments, amtJama) => {
     fineDiff,
     goldRs: totalMetalRs,
     subtotal,
+    discount: effectiveDiscount,
+    totalAmount,
     amountDue,
+    refundDue,
     carryFine,
     ofgStatus: carryFine > 0 ? "OF.G AFSL" : "OF.G HDF",
     metalWeightTotals,
@@ -285,7 +298,7 @@ const PrintView = ({ bill, onClose }) => {
     "Gold 22K": { jama: bill.jama_gold_22k || 0, rate: bill.rate_gold_22k || 0 },
     "Silver": { jama: bill.jama_silver || 0, rate: bill.rate_silver || 0 },
   };
-  const summary = computeSummary(items, printMetalPayments, bill.amt_jama);
+  const summary = computeSummary(items, printMetalPayments, bill.amt_jama, bill.discount);
 
   useEffect(() => {
     const timeout = setTimeout(() => window.print(), 150);
@@ -407,13 +420,34 @@ const PrintView = ({ bill, onClose }) => {
             <span className="font-bold">{fmtMoney(summary.goldRs)}</span>
           </div>
           <div className="flex justify-between py-1 border-b">
+            <span className="text-slate-600">Subtotal</span>
+            <span className="font-bold">{fmtMoney(summary.subtotal)}</span>
+          </div>
+          {summary.discount > 0 && (
+            <div className="flex justify-between py-1 border-b text-emerald-700">
+              <span>Discount</span>
+              <span className="font-bold">- {fmtMoney(summary.discount)}</span>
+            </div>
+          )}
+          <div className="flex justify-between py-1 border-b">
+            <span className="text-slate-600">Total Amount</span>
+            <span className="font-bold">{fmtMoney(summary.totalAmount)}</span>
+          </div>
+          <div className="flex justify-between py-1 border-b">
             <span className="text-slate-600">Advance</span>
             <span className="font-bold">{fmtMoney(bill.amt_jama)}</span>
           </div>
-          <div className="flex justify-between py-1.5 text-base font-black border-b-2 border-slate-800">
-            <span>Balance</span>
-            <span>{fmtMoney(summary.amountDue)}</span>
-          </div>
+          {summary.refundDue > 0 ? (
+            <div className="flex justify-between py-1.5 text-base font-black border-b-2 border-slate-800 text-emerald-700">
+              <span>Refund Due</span>
+              <span>{fmtMoney(summary.refundDue)}</span>
+            </div>
+          ) : (
+            <div className="flex justify-between py-1.5 text-base font-black border-b-2 border-slate-800">
+              <span>Balance</span>
+              <span>{fmtMoney(summary.amountDue)}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -444,6 +478,7 @@ export default function OrderBills() {
   const emptyMetalPayments = { "Gold 24K": { jama: "", rate: "" }, "Gold 22K": { jama: "", rate: "" }, "Silver": { jama: "", rate: "" } };
   const [metalPayments, setMetalPayments] = useState({ ...emptyMetalPayments });
   const [amtJama, setAmtJama] = useState("");
+  const [discount, setDiscount] = useState("");
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ show: true, message, type });
@@ -475,6 +510,7 @@ export default function OrderBills() {
     setCustomerType("Retail");
     setMetalPayments({ "Gold 24K": { jama: "", rate: "" }, "Gold 22K": { jama: "", rate: "" }, "Silver": { jama: "", rate: "" } });
     setAmtJama("");
+    setDiscount("");
     setItems(buildItemsFromCharges(charges, ["Gold 24K"], "Retail"));
   }, []);
 
@@ -493,8 +529,8 @@ export default function OrderBills() {
   }, [loadBills, loadCharges, resetForm, showToast]);
 
   const summary = useMemo(
-    () => computeSummary(items, metalPayments, amtJama),
-    [items, metalPayments, amtJama]
+    () => computeSummary(items, metalPayments, amtJama, discount),
+    [items, metalPayments, amtJama, discount]
   );
 
   const handleProductToggle = useCallback((metalType) => {
@@ -563,6 +599,7 @@ export default function OrderBills() {
         "Silver": { jama: full.jama_silver != null ? String(full.jama_silver) : "", rate: full.rate_silver != null ? String(full.rate_silver) : "" },
       });
       setAmtJama(full.amt_jama != null ? String(full.amt_jama) : "");
+      setDiscount(full.discount != null && parseFloat(full.discount) > 0 ? String(full.discount) : "");
       setItems(buildItemsFromCharges(charges, products, full.customer_type || "Retail", full.items || []));
       setView("form");
     } catch (error) {
@@ -621,6 +658,7 @@ export default function OrderBills() {
       jama_silver: parseFloat(metalPayments["Silver"]?.jama) || 0,
       rate_silver: parseFloat(metalPayments["Silver"]?.rate) || 0,
       amt_jama: parseFloat(amtJama) || 0,
+      discount: parseFloat(discount) || 0,
       items: nonZeroItems,
     };
 
@@ -654,6 +692,7 @@ export default function OrderBills() {
     customerName,
     customerPhone,
     customerType,
+    discount,
     editBill,
     metalPayments,
     formDate,
@@ -724,9 +763,9 @@ export default function OrderBills() {
                     <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Estimate</th>
                     <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Customer</th>
                     <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Metals</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Subtotal</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Total</th>
                     <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Advance</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Balance</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Balance / Refund</th>
                     <th className="text-center px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -742,9 +781,20 @@ export default function OrderBills() {
                         {bill.customer_phone ? <p className="text-xs text-slate-400">{bill.customer_phone}</p> : null}
                       </td>
                       <td className="px-4 py-3 text-slate-600">{parseProducts(bill.products).join(", ")}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-800">{fmtMoney(bill.subtotal)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-800">
+                        {fmtMoney(bill.total_amount != null && parseFloat(bill.total_amount) > 0 ? bill.total_amount : bill.subtotal)}
+                        {parseFloat(bill.discount) > 0 && (
+                          <span className="block text-[10px] text-emerald-600 font-semibold">disc {fmtMoney(bill.discount)}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right font-semibold text-green-700">{fmtMoney(bill.amt_jama)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-red-600">{fmtMoney(bill.amt_baki)}</td>
+                      <td className="px-4 py-3 text-right font-bold">
+                        {parseFloat(bill.refund_due) > 0 ? (
+                          <span className="text-emerald-600">+ {fmtMoney(bill.refund_due)}<span className="block text-[10px] font-semibold">refund</span></span>
+                        ) : (
+                          <span className="text-red-600">{fmtMoney(bill.amt_baki)}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <button
@@ -1171,9 +1221,33 @@ export default function OrderBills() {
               <span className="text-slate-500">Total Metal Rs.</span>
               <span className="font-bold text-slate-800">{fmtMoney(summary.goldRs)}</span>
             </div>
+            <div className="flex justify-between text-sm border-t border-slate-200 pt-2">
+              <span className="text-slate-500">Subtotal</span>
+              <span className="font-bold text-slate-800">{fmtMoney(summary.subtotal)}</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Discount</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={discount}
+                onChange={(event) => setDiscount(event.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                placeholder="0.00"
+              />
+              {summary.discount > 0 && (
+                <div className="flex justify-between text-xs text-emerald-700 font-semibold mt-1">
+                  <span>Discount applied</span>
+                  <span>- {fmtMoney(summary.discount)}</span>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between text-base font-black border-t border-slate-200 pt-2">
-              <span>Subtotal</span>
-              <span>{fmtMoney(summary.subtotal)}</span>
+              <span>Total Amount</span>
+              <span>{fmtMoney(summary.totalAmount)}</span>
             </div>
 
             <div>
@@ -1189,10 +1263,22 @@ export default function OrderBills() {
               />
             </div>
 
-            <div className="rounded-xl px-4 py-3 border bg-red-50 border-red-200 text-red-700 font-black flex justify-between items-center text-base">
-              <span>Balance</span>
-              <span>{fmtMoney(summary.amountDue)}</span>
-            </div>
+            {summary.refundDue > 0 ? (
+              <div className="rounded-xl px-4 py-3 border bg-emerald-50 border-emerald-200 text-emerald-800 font-black flex justify-between items-center text-base">
+                <span>Refund Due</span>
+                <span>{fmtMoney(summary.refundDue)}</span>
+              </div>
+            ) : (
+              <div className="rounded-xl px-4 py-3 border bg-red-50 border-red-200 text-red-700 font-black flex justify-between items-center text-base">
+                <span>Balance</span>
+                <span>{fmtMoney(summary.amountDue)}</span>
+              </div>
+            )}
+            {summary.refundDue > 0 && (
+              <p className="text-[11px] text-emerald-700 -mt-2">
+                Customer over-paid by {fmtMoney(summary.refundDue)} (cash + metal exceeds bill total). Hand back / adjust accordingly.
+              </p>
+            )}
 
             <div className="rounded-xl px-4 py-3 border bg-slate-50 border-slate-200 text-sm">
               <p className="font-black text-slate-700">{summary.ofgStatus}</p>

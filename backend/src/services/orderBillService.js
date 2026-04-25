@@ -103,6 +103,13 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     }
   });
 
+  if (data.discount != null && data.discount !== "") {
+    const discount = parseFloat(data.discount);
+    if (!Number.isFinite(discount) || discount < 0) {
+      throw createAppError("Discount cannot be negative", 400, "DISCOUNT_INVALID");
+    }
+  }
+
   const hasCustomerDraft = (data.customer_name || "").trim() || (data.customer_phone || "").trim() || (data.customer_address || "").trim();
   if (!data.customer_id && hasCustomerDraft) {
     if (!(data.customer_name || "").trim()) {
@@ -252,7 +259,15 @@ const getBillById = (id) =>
 // --- Server-side Recalculation ---
 // Re-derives every summary field from items + per-metal jama/rate + payments.
 // Computes per-metal-type weight diffs and metal RS values independently.
-const _computeSummary = (items, metalPayments, cash, online) => {
+//
+// Returned shape:
+//   subtotal      = labour_total + total_metal_rs (pre-discount line total)
+//   discount      = capped at subtotal so total_amount never goes negative
+//   total_amount  = subtotal - discount (what the customer actually owes)
+//   amt_jama      = cash + online (net amount paid by customer)
+//   amt_baki      = max(0, total_amount - amt_jama)        — customer still owes
+//   refund_due    = max(0, amt_jama - total_amount)        — shop owes customer
+const _computeSummary = (items, metalPayments, cash, online, discount = 0) => {
   let total_pcs = 0;
   let total_weight = 0;
   let labour_total = 0;
@@ -304,7 +319,15 @@ const _computeSummary = (items, metalPayments, cash, online) => {
 
   const aj       = parseFloat((cash + online).toFixed(2));
   const subtotal = parseFloat((labour_total + total_metal_rs).toFixed(2));
-  const amt_baki = parseFloat((subtotal - aj).toFixed(2));
+
+  // Cap discount at subtotal so total_amount can't go negative.
+  const rawDiscount = Math.max(0, parseFloat(discount) || 0);
+  const effectiveDiscount = parseFloat(Math.min(rawDiscount, Math.max(subtotal, 0)).toFixed(2));
+  const total_amount = parseFloat((subtotal - effectiveDiscount).toFixed(2));
+
+  const net = parseFloat((total_amount - aj).toFixed(2));
+  const amt_baki   = net > 0 ? net : 0;
+  const refund_due = net < 0 ? parseFloat((-net).toFixed(2)) : 0;
 
   // Backward compat: fine_diff stores Gold 24K diff only
   const fine_diff = metal_diffs["Gold 24K"] || 0;
@@ -320,7 +343,9 @@ const _computeSummary = (items, metalPayments, cash, online) => {
 
   return {
     total_pcs, total_weight, labour_total, fine_diff,
-    gold_rs: total_metal_rs, subtotal, amt_baki,
+    gold_rs: total_metal_rs, subtotal,
+    discount: effectiveDiscount, total_amount,
+    amt_baki, refund_due,
     ofg_status, fine_carry, amt_jama: aj,
     metal_diffs, metal_rs_map,
   };
@@ -393,6 +418,7 @@ const _insertAccountingEntries = async (
 ) => {
   if (customerId) {
     const subtotal = parseFloat(summary.subtotal) || 0;
+    const discount = parseFloat(summary.discount) || 0;
     if (subtotal !== 0) {
       await run(
         `INSERT INTO customer_ledger_entries
@@ -401,6 +427,19 @@ const _insertAccountingEntries = async (
         [
           customerId, date, REFERENCE_TYPE, billId, String(obNo),
           "BILL_TOTAL", subtotal, "Order bill #" + obNo,
+        ]
+      );
+    }
+
+    if (discount > 0) {
+      // Discount = a credit (reduces what the customer owes)
+      await run(
+        `INSERT INTO customer_ledger_entries
+          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          customerId, date, REFERENCE_TYPE, billId, String(obNo),
+          "BILL_DISCOUNT", -discount, "Discount on estimate #" + obNo,
         ]
       );
     }
@@ -503,7 +542,8 @@ const createBill = async (data) => {
   }
 
   const payments = _normalisePayments(data);
-  const summary  = _computeSummary(data.items || [], metalPayments, payments.cash, payments.online);
+  const discount = Math.max(0, parseFloat(data.discount) || 0);
+  const summary  = _computeSummary(data.items || [], metalPayments, payments.cash, payments.online, discount);
   const productsJson = JSON.stringify(
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
@@ -521,8 +561,8 @@ const createBill = async (data) => {
          fine_jama, rate_10g, jama_gold_22k, rate_gold_22k, jama_silver, rate_silver,
          amt_jama, cash_amount, online_amount, payment_mode,
          total_pcs, total_weight, labour_total, fine_diff, gold_rs,
-         subtotal, amt_baki, ofg_status, fine_carry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         subtotal, discount, total_amount, amt_baki, refund_due, ofg_status, fine_carry)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         ob_no, data.date, data.product || "", productsJson,
         resolvedCustomerId || null,
@@ -537,7 +577,9 @@ const createBill = async (data) => {
         summary.amt_jama, payments.cash, payments.online, payments.payment_mode,
         summary.total_pcs, summary.total_weight, summary.labour_total,
         summary.fine_diff, summary.gold_rs,
-        summary.subtotal, summary.amt_baki, summary.ofg_status, summary.fine_carry,
+        summary.subtotal, summary.discount, summary.total_amount,
+        summary.amt_baki, summary.refund_due,
+        summary.ofg_status, summary.fine_carry,
       ]
     );
 
@@ -567,7 +609,8 @@ const updateBill = async (id, data) => {
 
   const metalPayments = _extractMetalPayments(data);
   const payments = _normalisePayments(data);
-  const summary  = _computeSummary(data.items || [], metalPayments, payments.cash, payments.online);
+  const discount = Math.max(0, parseFloat(data.discount) || 0);
+  const summary  = _computeSummary(data.items || [], metalPayments, payments.cash, payments.online, discount);
   const productsJson = JSON.stringify(
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
@@ -592,7 +635,7 @@ const updateBill = async (id, data) => {
          fine_jama=?, rate_10g=?, jama_gold_22k=?, rate_gold_22k=?, jama_silver=?, rate_silver=?,
          amt_jama=?, cash_amount=?, online_amount=?, payment_mode=?,
          total_pcs=?, total_weight=?, labour_total=?, fine_diff=?, gold_rs=?,
-         subtotal=?, amt_baki=?, ofg_status=?, fine_carry=?
+         subtotal=?, discount=?, total_amount=?, amt_baki=?, refund_due=?, ofg_status=?, fine_carry=?
        WHERE id=?`,
       [
         ob_no, data.date, data.product || "", productsJson,
@@ -608,7 +651,9 @@ const updateBill = async (id, data) => {
         summary.amt_jama, payments.cash, payments.online, payments.payment_mode,
         summary.total_pcs, summary.total_weight, summary.labour_total,
         summary.fine_diff, summary.gold_rs,
-        summary.subtotal, summary.amt_baki, summary.ofg_status, summary.fine_carry,
+        summary.subtotal, summary.discount, summary.total_amount,
+        summary.amt_baki, summary.refund_due,
+        summary.ofg_status, summary.fine_carry,
         id,
       ]
     );

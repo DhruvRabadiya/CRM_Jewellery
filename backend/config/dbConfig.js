@@ -709,7 +709,10 @@ db.serialize(() => {
       fine_diff REAL DEFAULT 0,
       gold_rs REAL DEFAULT 0,
       subtotal REAL DEFAULT 0,
+      discount REAL DEFAULT 0,
+      total_amount REAL DEFAULT 0,
       amt_baki REAL DEFAULT 0,
+      refund_due REAL DEFAULT 0,
       ofg_status TEXT DEFAULT 'OF.G HDF',
       fine_carry REAL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -825,6 +828,42 @@ db.serialize(() => {
         db.run(`ALTER TABLE order_bills ADD COLUMN customer_address TEXT DEFAULT ''`, (e) => {
           if (e) console.error('Migration customer_address:', e.message);
           else console.log('Added customer_address column to order_bills');
+        });
+      }
+
+      // Discount + total_amount + refund_due — added so estimates can record a
+      // negotiated discount and capture any over-payment that has to be returned
+      // to the customer (when cash + metal value exceeds the bill total).
+      const hasDiscount    = columns.some((c) => c.name === 'discount');
+      const hasTotalAmount = columns.some((c) => c.name === 'total_amount');
+      const hasRefundDue   = columns.some((c) => c.name === 'refund_due');
+
+      if (!hasDiscount) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN discount REAL DEFAULT 0`, (e) => {
+          if (e) console.error('Migration discount:', e.message);
+          else console.log('Added discount column to order_bills');
+        });
+      }
+      if (!hasTotalAmount) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN total_amount REAL DEFAULT 0`, (e) => {
+          if (e) return console.error('Migration total_amount:', e.message);
+          console.log('Added total_amount column to order_bills');
+          // Backfill: total_amount = subtotal for existing rows (no historical discount).
+          db.run(
+            `UPDATE order_bills
+               SET total_amount = COALESCE(subtotal, 0)
+             WHERE total_amount = 0 AND COALESCE(subtotal, 0) > 0`,
+            (ue) => {
+              if (ue) console.error('Backfill total_amount from subtotal:', ue.message);
+              else console.log('Backfilled total_amount from subtotal');
+            }
+          );
+        });
+      }
+      if (!hasRefundDue) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN refund_due REAL DEFAULT 0`, (e) => {
+          if (e) console.error('Migration refund_due:', e.message);
+          else console.log('Added refund_due column to order_bills');
         });
       }
     }
