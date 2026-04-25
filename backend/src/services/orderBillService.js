@@ -1,5 +1,6 @@
 const db = require("../../config/dbConfig");
 const customerService = require("./customerService");
+const counterService = require("./counterService");
 const { createAppError, isValidMetalType } = require("../utils/common");
 
 // --- Constants ---
@@ -422,11 +423,11 @@ const _insertAccountingEntries = async (
     if (subtotal !== 0) {
       await run(
         `INSERT INTO customer_ledger_entries
-          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (customer_id, entry_date, reference_type, reference_id, reference_no, transaction_type, line_type, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           customerId, date, REFERENCE_TYPE, billId, String(obNo),
-          "BILL_TOTAL", subtotal, "Order bill #" + obNo,
+          "Estimate", "BILL_TOTAL", subtotal, "Order bill #" + obNo,
         ]
       );
     }
@@ -435,11 +436,11 @@ const _insertAccountingEntries = async (
       // Discount = a credit (reduces what the customer owes)
       await run(
         `INSERT INTO customer_ledger_entries
-          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (customer_id, entry_date, reference_type, reference_id, reference_no, transaction_type, line_type, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           customerId, date, REFERENCE_TYPE, billId, String(obNo),
-          "BILL_DISCOUNT", -discount, "Discount on estimate #" + obNo,
+          "Estimate", "BILL_DISCOUNT", -discount, "Discount on estimate #" + obNo,
         ]
       );
     }
@@ -447,11 +448,11 @@ const _insertAccountingEntries = async (
     if (cash > 0) {
       await run(
         `INSERT INTO customer_ledger_entries
-          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (customer_id, entry_date, reference_type, reference_id, reference_no, transaction_type, payment_mode, line_type, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           customerId, date, REFERENCE_TYPE, billId, String(obNo),
-          "PAYMENT_CASH", -cash, "Cash payment",
+          "Estimate", "Cash", "PAYMENT_CASH", -cash, "Cash payment",
         ]
       );
     }
@@ -459,11 +460,11 @@ const _insertAccountingEntries = async (
     if (online > 0) {
       await run(
         `INSERT INTO customer_ledger_entries
-          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, amount_delta, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (customer_id, entry_date, reference_type, reference_id, reference_no, transaction_type, payment_mode, line_type, amount_delta, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           customerId, date, REFERENCE_TYPE, billId, String(obNo),
-          "PAYMENT_ONLINE", -online, "Online payment",
+          "Estimate", "Online", "PAYMENT_ONLINE", -online, "Online payment",
         ]
       );
     }
@@ -474,11 +475,11 @@ const _insertAccountingEntries = async (
       if (jama > 0) {
         await run(
           `INSERT INTO customer_ledger_entries
-            (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, metal_type, metal_purity, weight_delta, amount_delta, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (customer_id, entry_date, reference_type, reference_id, reference_no, transaction_type, line_type, metal_type, metal_purity, weight_delta, amount_delta, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             customerId, date, REFERENCE_TYPE, billId, String(obNo),
-            "METAL_IN", metalType, METAL_PURITY[metalType] || "99.99",
+            "Estimate", "METAL_IN", metalType, METAL_PURITY[metalType] || "99.99",
             jama, 0, `${metalType} JAMA on estimate #${obNo}`,
           ]
         );
@@ -554,6 +555,7 @@ const createBill = async (data) => {
   }
 
   return db.runTransaction(async (run) => {
+    await counterService.assertStockAvailable(data.items || []);
     const { lastID } = await run(
       `INSERT INTO order_bills
         (ob_no, date, product, products,
@@ -584,6 +586,7 @@ const createBill = async (data) => {
     );
 
     await _insertItems(run, lastID, data.items || []);
+    await counterService.reserveEstimateStock(run, lastID, ob_no, data.date, data.items || []);
     await _insertAccountingEntries(
       run, lastID, ob_no, data.date, resolvedCustomerId, summary,
       payments.cash, payments.online, metalPayments
@@ -628,6 +631,9 @@ const updateBill = async (id, data) => {
     );
     if (!oldBill) throw createAppError("Estimate not found", 404, "ESTIMATE_NOT_FOUND");
 
+    await counterService.releaseEstimateStock(run, id);
+    await counterService.assertStockAvailable(data.items || []);
+
     await run(
       `UPDATE order_bills SET
          ob_no=?, date=?, product=?, products=?,
@@ -660,6 +666,7 @@ const updateBill = async (id, data) => {
 
     await run(`DELETE FROM order_bill_items WHERE bill_id = ?`, [id]);
     await _insertItems(run, id, data.items || []);
+    await counterService.reserveEstimateStock(run, id, ob_no, data.date, data.items || []);
 
     await _deleteAccountingEntries(run, id);
     const oldOutstanding = Math.max(0, parseFloat(oldBill.amt_baki) || 0);
@@ -688,6 +695,7 @@ const deleteBill = (id) =>
     if (!bill) return 0;
 
     await _deleteAccountingEntries(run, id);
+    await counterService.releaseEstimateStock(run, id);
     const outstanding = Math.max(0, parseFloat(bill.amt_baki) || 0);
     if (bill.customer_id && outstanding > 0) {
       await _applyOutstandingDelta(run, bill.customer_id, -outstanding);
@@ -698,6 +706,12 @@ const deleteBill = (id) =>
     return result.changes || 0;
   });
 
+const validateStock = async (data = {}) => {
+  return counterService.getStockValidation(data.items || [], {
+    reference_id: data.estimate_id || null,
+  });
+};
+
 module.exports = {
   getNextObNo,
   listBills,
@@ -705,5 +719,6 @@ module.exports = {
   createBill,
   updateBill,
   deleteBill,
+  validateStock,
   _computeSummary,
 };

@@ -14,6 +14,9 @@ export const getOrderBill = (id) =>
 export const createOrderBill = (payload) =>
   axios.post(BASE, payload).then((r) => r.data?.data || r.data);
 
+export const validateOrderBillStock = (payload) =>
+  axios.post(`${BASE}/validate-stock`, payload).then((r) => r.data?.data || r.data);
+
 export const updateOrderBill = (id, payload) =>
   axios.put(`${BASE}/${id}`, payload).then((r) => r.data?.data || r.data);
 

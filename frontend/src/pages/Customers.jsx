@@ -7,6 +7,7 @@ import {
   getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomerLedger,
 } from "../api/customerService";
 import Toast from "../components/Toast";
+import { useSellingSync } from "../context/SellingSyncContext";
 
 const EMPTY_FORM = {
   party_name: "",
@@ -30,6 +31,7 @@ const FIELD_CONFIG = [
 ];
 
 const Customers = () => {
+  const { versions, markDirty } = useSellingSync();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,7 +77,7 @@ const Customers = () => {
       fetchCustomers();
     }, 300);
     return () => clearTimeout(debounce);
-  }, [fetchCustomers]);
+  }, [fetchCustomers, versions.customers, versions.ledger]);
 
   // Validation
   const validateForm = () => {
@@ -171,6 +173,7 @@ const Customers = () => {
 
       if (result.success) {
         showToast(result.message, "success");
+        markDirty(["customers", "ledger"]);
         closeModal();
         fetchCustomers();
       }
@@ -187,6 +190,7 @@ const Customers = () => {
       const result = await deleteCustomer(deleteTarget.id);
       if (result.success) {
         showToast(result.message, "success");
+        markDirty(["customers", "ledger"]);
         setShowDeleteConfirm(false);
         setDeleteTarget(null);
         fetchCustomers();

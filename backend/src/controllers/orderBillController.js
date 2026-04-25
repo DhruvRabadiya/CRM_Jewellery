@@ -50,6 +50,15 @@ const getBill = async (req, res) => {
   }
 };
 
+const validateStock = async (req, res) => {
+  try {
+    const validation = await svc.validateStock(req.body || {});
+    return formatResponse(res, 200, true, "Estimate stock validated", validation);
+  } catch (err) {
+    return handleEstimateError(res, err);
+  }
+};
+
 const createBill = async (req, res) => {
   try {
     const { date } = req.body;
@@ -85,4 +94,4 @@ const deleteBill = async (req, res) => {
   }
 };
 
-module.exports = { getNextNo, listBills, getBill, createBill, updateBill, deleteBill };
+module.exports = { getNextNo, listBills, getBill, validateStock, createBill, updateBill, deleteBill };

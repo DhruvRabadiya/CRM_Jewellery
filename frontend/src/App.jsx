@@ -14,6 +14,7 @@ import SellingLayout from "./layouts/SellingLayout";
 import SellingCounter from "./pages/SellingCounter";
 import SvgCounter from "./pages/SvgCounter";
 import Customers from "./pages/Customers";
+import SellingLedger from "./pages/SellingLedger";
 import SellingAdmin from "./pages/SellingAdmin";
 import OrderBills from "./pages/OrderBills";
 import SellingDashboard from "./pages/SellingDashboard";
@@ -63,6 +64,7 @@ function App() {
             <Route path="stocks" element={<SellingCounter />} />
             <Route path="svg" element={<SvgCounter />} />
             <Route path="customers" element={<Customers />} />
+            <Route path="ledger" element={<SellingLedger />} />
             {/* Estimate - unified billing module (formerly Order Bills / Selling Counter Billing). */}
             <Route path="estimate" element={<OrderBills />} />
             {/* Back-compat: old /selling/order-bills and /selling/billing URLs redirect to /selling/estimate. */}

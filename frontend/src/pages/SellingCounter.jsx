@@ -6,6 +6,7 @@ import {
 import { getCounterInventory, returnFromCounter } from "../api/counterService";
 import { addToSvg } from "../api/svgService";
 import Toast from "../components/Toast";
+import { useSellingSync } from "../context/SellingSyncContext";
 
 /**
  * Parse the unit weight (grams) from a category/target_product string.
@@ -55,6 +56,7 @@ const TAB_CONFIG = {
 };
 
 const SellingCounter = () => {
+  const { versions, markDirty } = useSellingSync();
   const [inventory, setInventory] = useState({ "Gold 24K": [], Silver: [], "Gold 22K": [] });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Gold 24K");
@@ -96,7 +98,7 @@ const SellingCounter = () => {
 
   useEffect(() => {
     fetchInventory();
-  }, [fetchInventory]);
+  }, [fetchInventory, versions.inventory]);
 
   const handleOpenModal = (item, type) => {
     setSelectedItem(item);
@@ -140,6 +142,7 @@ const SellingCounter = () => {
       if (result?.success) {
         showToast(result.message, "success");
         closeModal();
+        markDirty(["inventory", "dashboard"]);
         fetchInventory();
       }
     } catch (error) {
@@ -290,7 +293,7 @@ const SellingCounter = () => {
                 <thead>
                   <tr className="bg-slate-50">
                     <th scope="col" className="text-left py-3 px-4 font-black text-slate-500 text-[10px] uppercase tracking-wider">
-                      Category
+                      Size / Category
                     </th>
                     <th scope="col" className="text-center py-3 px-4 font-black text-slate-500 text-[10px] uppercase tracking-wider">
                       Metal
@@ -318,7 +321,12 @@ const SellingCounter = () => {
                         <div className={`p-2 rounded-lg ${cfg.iconBg} group-hover:scale-110 transition-transform`}>
                           <PackageCheck size={14} />
                         </div>
-                        <span>{item.target_product}</span>
+                        <div>
+                          <span>{item.size_label || item.target_product}</span>
+                          {(item.category || item.target_product) !== (item.size_label || item.target_product) ? (
+                            <p className="text-[11px] text-slate-400 font-semibold">{item.category}</p>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span

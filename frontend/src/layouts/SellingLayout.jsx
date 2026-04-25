@@ -1,7 +1,8 @@
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings, FileText, LayoutDashboard } from "lucide-react";
+import { Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings, FileText, LayoutDashboard, BookOpen } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { SellingSyncProvider } from "../context/SellingSyncContext";
 
 const SellingLayout = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -33,6 +34,12 @@ const SellingLayout = () => {
       match: (path) => path.includes("/selling/customers"),
     },
     {
+      to: "/selling/ledger",
+      icon: <BookOpen size={20} />,
+      label: "Ledger",
+      match: (path) => path.includes("/selling/ledger"),
+    },
+    {
       to: "/selling/estimate",
       icon: <FileText size={20} />,
       label: "Estimate",
@@ -53,7 +60,8 @@ const SellingLayout = () => {
   const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
+    <SellingSyncProvider>
+      <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
       {/* Top Navigation Bar */}
       <header className="bg-white border-b border-gray-200 shadow-sm flex-none z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -158,7 +166,8 @@ const SellingLayout = () => {
           </div>
         </main>
       </div>
-    </div>
+      </div>
+    </SellingSyncProvider>
   );
 };
 

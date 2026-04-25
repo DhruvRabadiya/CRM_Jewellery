@@ -18,9 +18,11 @@ import {
   getOrderBill,
   listOrderBills,
   updateOrderBill,
+  validateOrderBillStock,
 } from "../api/orderBillApiService";
 import { getLabourChargesGrouped } from "../api/labourChargeService";
 import { getCustomers } from "../api/customerService";
+import { useSellingSync } from "../context/SellingSyncContext";
 
 const METAL_TYPES = ["Gold 24K", "Gold 22K", "Silver"];
 const CUSTOMER_TYPES = ["Retail", "Showroom", "Wholesale"];
@@ -455,6 +457,7 @@ const PrintView = ({ bill, onClose }) => {
 };
 
 export default function OrderBills() {
+  const { versions, markDirty } = useSellingSync();
   const [view, setView] = useState("list");
   const [bills, setBills] = useState([]);
   const [groupedCharges, setGroupedCharges] = useState({});
@@ -479,6 +482,8 @@ export default function OrderBills() {
   const [metalPayments, setMetalPayments] = useState({ ...emptyMetalPayments });
   const [amtJama, setAmtJama] = useState("");
   const [discount, setDiscount] = useState("");
+  const [stockValidation, setStockValidation] = useState({ valid: true, items: [] });
+  const [validatingStock, setValidatingStock] = useState(false);
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ show: true, message, type });
@@ -528,10 +533,67 @@ export default function OrderBills() {
     init();
   }, [loadBills, loadCharges, resetForm, showToast]);
 
+  useEffect(() => {
+    loadBills().catch(() => {});
+  }, [loadBills, versions.estimates]);
+
   const summary = useMemo(
     () => computeSummary(items, metalPayments, amtJama, discount),
     [items, metalPayments, amtJama, discount]
   );
+  const stockValidationMap = useMemo(
+    () =>
+      new Map(
+        (stockValidation.items || []).map((item) => [
+          itemKey(item.metal_type, item.category, item.size_label),
+          item,
+        ])
+      ),
+    [stockValidation.items]
+  );
+
+  useEffect(() => {
+    if (view !== "form") return undefined;
+
+    const nonZeroItems = items
+      .filter((item) => (parseInt(item.pcs, 10) || 0) > 0)
+      .map((item) => ({
+        metal_type: item.metal_type,
+        category: item.category,
+        size_label: item.size_label,
+        pcs: parseInt(item.pcs, 10) || 0,
+      }));
+
+    if (!nonZeroItems.length) {
+      setStockValidation({ valid: true, items: [] });
+      return undefined;
+    }
+
+    const timeout = setTimeout(async () => {
+      setValidatingStock(true);
+      try {
+        const validation = await validateOrderBillStock({
+          estimate_id: editBill?.id || null,
+          items: nonZeroItems,
+        });
+        setStockValidation(validation || { valid: true, items: [] });
+      } catch (error) {
+        setStockValidation({
+          valid: false,
+          items: nonZeroItems.map((item) => ({
+            ...item,
+            available_pieces: 0,
+            valid: false,
+            message: error?.message || "Unable to validate stock",
+          })),
+        });
+      } finally {
+        setValidatingStock(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [editBill?.id, items, view]);
 
   const handleProductToggle = useCallback((metalType) => {
     setSelectedProducts((current) => {
@@ -634,6 +696,11 @@ export default function OrderBills() {
       return;
     }
 
+    if (stockValidation.items.length > 0 && !stockValidation.valid) {
+      showToast("Insufficient stock available for selected size/category", "error");
+      return;
+    }
+
     const hasCustomerDraft = customerName || customerPhone || customerAddress;
     if (!selectedCustomer && hasCustomerDraft && (!customerName || !customerPhone || !customerAddress)) {
       showToast("New customer entries need name, phone number, and address", "error");
@@ -672,6 +739,7 @@ export default function OrderBills() {
         saved = await createOrderBill(payload);
         showToast("Estimate created");
       }
+      markDirty(["inventory", "ledger", "customers", "estimates", "dashboard"]);
       await loadBills();
 
       if (andPrint) {
@@ -703,6 +771,9 @@ export default function OrderBills() {
     selectedCustomer,
     selectedProducts,
     showToast,
+    stockValidation.items.length,
+    stockValidation.valid,
+    markDirty,
   ]);
 
   const handleDelete = useCallback(async (id) => {
@@ -710,11 +781,12 @@ export default function OrderBills() {
       await deleteOrderBill(id);
       setDeleteConfirm(null);
       showToast("Estimate deleted");
+      markDirty(["inventory", "ledger", "customers", "estimates", "dashboard"]);
       await loadBills();
     } catch (error) {
       showToast(error?.message || "Failed to delete estimate", "error");
     }
-  }, [loadBills, showToast]);
+  }, [loadBills, showToast, markDirty]);
 
   if (view === "print" && printBill) {
     return <PrintView bill={printBill} onClose={() => { setPrintBill(null); setView("list"); }} />;
@@ -1085,10 +1157,20 @@ export default function OrderBills() {
                                   const weight = parseFloat((sizeValue * pcs).toFixed(4));
                                   const totalLabour = parseFloat(((parseFloat(currentItem?.lc_pp) || 0) * pcs).toFixed(2));
                                   const key = itemKey(metalType, category, row.size_label);
+                                  const validation = stockValidationMap.get(key);
 
                                   return (
                                     <tr key={key} className="border-b border-slate-100 last:border-b-0">
-                                      <td className="px-4 py-2.5 font-semibold text-slate-800">{row.size_label}</td>
+                                      <td className="px-4 py-2.5 font-semibold text-slate-800">
+                                        <div>
+                                          <p>{row.size_label}</p>
+                                          {pcs > 0 && validation ? (
+                                            <p className={`text-[11px] font-bold mt-1 ${validation.valid ? "text-emerald-600" : "text-red-600"}`}>
+                                              Available: {validation.available_pieces} pcs
+                                            </p>
+                                          ) : null}
+                                        </div>
+                                      </td>
                                       <td className="px-4 py-2.5 text-right font-mono text-slate-500">
                                         {row.size_value != null ? fmt(row.size_value, 3) : "-"}
                                       </td>
@@ -1102,7 +1184,11 @@ export default function OrderBills() {
                                           step="1"
                                           value={currentItem?.pcs || ""}
                                           onChange={(event) => updatePieces(key, event.target.value)}
-                                          className="w-20 text-center text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                          className={`w-20 text-center text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 ${
+                                            validation && !validation.valid
+                                              ? "border-red-300 bg-red-50 text-red-700 focus:ring-red-300"
+                                              : "border-slate-200 focus:ring-indigo-300"
+                                          }`}
                                           placeholder="0"
                                         />
                                       </td>
@@ -1181,6 +1267,20 @@ export default function OrderBills() {
         <div className="space-y-5">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3 sticky top-4">
             <h2 className="font-black text-slate-700 text-sm uppercase tracking-wider">Estimate Summary</h2>
+            {validatingStock ? (
+              <div className="rounded-xl px-4 py-3 border bg-slate-50 border-slate-200 text-xs font-bold text-slate-500">
+                Validating stock against selling counter inventory...
+              </div>
+            ) : stockValidation.items.length > 0 && !stockValidation.valid ? (
+              <div className="rounded-xl px-4 py-3 border bg-red-50 border-red-200 text-sm text-red-700">
+                <p className="font-black">Insufficient stock available for selected size/category</p>
+                <p className="text-xs mt-1">Reduce PCS or update counter stock before saving the estimate.</p>
+              </div>
+            ) : stockValidation.items.length > 0 ? (
+              <div className="rounded-xl px-4 py-3 border bg-emerald-50 border-emerald-200 text-xs font-bold text-emerald-700">
+                Stock validated for all selected estimate items.
+              </div>
+            ) : null}
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">Total Pcs</span>
               <span className="font-bold text-slate-800">{summary.totalPcs}</span>
@@ -1292,14 +1392,14 @@ export default function OrderBills() {
             <div className="pt-3 space-y-2">
               <button
                 onClick={() => handleSave(false)}
-                disabled={saving}
+                disabled={saving || validatingStock || !stockValidation.valid}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2"
               >
                 <Save size={14} /> {saving ? "Saving..." : editBill ? "Update Estimate" : "Save Estimate"}
               </button>
               <button
                 onClick={() => handleSave(true)}
-                disabled={saving}
+                disabled={saving || validatingStock || !stockValidation.valid}
                 className="w-full py-2.5 bg-slate-700 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2"
               >
                 <Printer size={14} /> {saving ? "Saving..." : "Save and Print"}

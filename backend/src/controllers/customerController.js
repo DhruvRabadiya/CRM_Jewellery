@@ -56,6 +56,31 @@ const getLedger = async (req, res) => {
   }
 };
 
+const createLedgerEntry = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await customerService.getCustomerById(id);
+    if (!customer) {
+      return formatResponse(res, 404, false, "Customer not found");
+    }
+
+    const entryId = await customerService.createLedgerEntry(id, req.body || {});
+    const ledger = await customerService.getCustomerLedger(id);
+    const createdEntry =
+      (ledger.entries || []).find((entry) => entry.id === entryId) ||
+      (ledger.statement || []).find((entry) => entry.id === `entry:${entryId}`) ||
+      null;
+
+    return formatResponse(res, 201, true, "Ledger entry created", {
+      customer,
+      entry: createdEntry,
+      ...ledger,
+    });
+  } catch (error) {
+    return formatResponse(res, 400, false, error.message);
+  }
+};
+
 const VALID_CUSTOMER_TYPES = ["Wholesale", "Showroom", "Retail"];
 
 const create = async (req, res) => {
@@ -176,6 +201,7 @@ module.exports = {
   getAll,
   getById,
   getLedger,
+  createLedgerEntry,
   create,
   update,
   remove,

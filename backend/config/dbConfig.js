@@ -278,7 +278,13 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       metal_type TEXT,
       target_product TEXT,
+      category TEXT DEFAULT '',
+      size_label TEXT DEFAULT '',
+      size_value REAL DEFAULT 0,
       pieces INTEGER,
+      reference_type TEXT DEFAULT '',
+      reference_id INTEGER,
+      notes TEXT DEFAULT '',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -612,6 +618,8 @@ db.serialize(() => {
       reference_type TEXT NOT NULL,
       reference_id INTEGER,
       reference_no TEXT DEFAULT '',
+      transaction_type TEXT DEFAULT '',
+      payment_mode TEXT DEFAULT '',
       line_type TEXT NOT NULL,
       metal_type TEXT DEFAULT '',
       metal_purity TEXT DEFAULT '',
@@ -647,6 +655,74 @@ db.serialize(() => {
         db.run(`ALTER TABLE customers ADD COLUMN outstanding_balance REAL DEFAULT 0`, (e) => {
           if (e) console.error('Error adding outstanding_balance:', e.message);
           else console.log('Added outstanding_balance to customers');
+        });
+      }
+    }
+  });
+
+  db.all(`PRAGMA table_info(counter_inventory)`, (err, columns) => {
+    if (!err && columns) {
+      if (!columns.some((c) => c.name === 'category')) {
+        db.run(`ALTER TABLE counter_inventory ADD COLUMN category TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Error adding category to counter_inventory:', e.message);
+          else console.log('Added category to counter_inventory');
+        });
+      }
+      if (!columns.some((c) => c.name === 'size_label')) {
+        db.run(`ALTER TABLE counter_inventory ADD COLUMN size_label TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Error adding size_label to counter_inventory:', e.message);
+          else console.log('Added size_label to counter_inventory');
+        });
+      }
+      if (!columns.some((c) => c.name === 'size_value')) {
+        db.run(`ALTER TABLE counter_inventory ADD COLUMN size_value REAL DEFAULT 0`, (e) => {
+          if (e) console.error('Error adding size_value to counter_inventory:', e.message);
+          else console.log('Added size_value to counter_inventory');
+        });
+      }
+      if (!columns.some((c) => c.name === 'reference_type')) {
+        db.run(`ALTER TABLE counter_inventory ADD COLUMN reference_type TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Error adding reference_type to counter_inventory:', e.message);
+          else console.log('Added reference_type to counter_inventory');
+        });
+      }
+      if (!columns.some((c) => c.name === 'reference_id')) {
+        db.run(`ALTER TABLE counter_inventory ADD COLUMN reference_id INTEGER`, (e) => {
+          if (e) console.error('Error adding reference_id to counter_inventory:', e.message);
+          else console.log('Added reference_id to counter_inventory');
+        });
+      }
+      if (!columns.some((c) => c.name === 'notes')) {
+        db.run(`ALTER TABLE counter_inventory ADD COLUMN notes TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Error adding notes to counter_inventory:', e.message);
+          else console.log('Added notes to counter_inventory');
+        });
+      }
+
+      db.run(
+        `UPDATE counter_inventory
+            SET category = CASE WHEN COALESCE(category, '') = '' THEN target_product ELSE category END,
+                size_label = CASE WHEN COALESCE(size_label, '') = '' THEN target_product ELSE size_label END
+          WHERE COALESCE(category, '') = '' OR COALESCE(size_label, '') = ''`,
+        (e) => {
+          if (e) console.error('Error backfilling counter_inventory category/size_label:', e.message);
+        }
+      );
+    }
+  });
+
+  db.all(`PRAGMA table_info(customer_ledger_entries)`, (err, columns) => {
+    if (!err && columns) {
+      if (!columns.some((c) => c.name === 'transaction_type')) {
+        db.run(`ALTER TABLE customer_ledger_entries ADD COLUMN transaction_type TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Error adding transaction_type to customer_ledger_entries:', e.message);
+          else console.log('Added transaction_type to customer_ledger_entries');
+        });
+      }
+      if (!columns.some((c) => c.name === 'payment_mode')) {
+        db.run(`ALTER TABLE customer_ledger_entries ADD COLUMN payment_mode TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Error adding payment_mode to customer_ledger_entries:', e.message);
+          else console.log('Added payment_mode to customer_ledger_entries');
         });
       }
     }
@@ -923,8 +999,8 @@ db.serialize(() => {
 // Helper to run multiple operations inside a SQLite transaction.
 db.runTransaction = (fn) => {
   return new Promise((resolve, reject) => {
-    db.run("BEGIN TRANSACTION", async (beginErr) => {
-      if (beginErr) return reject(beginErr);
+      db.run("BEGIN IMMEDIATE TRANSACTION", async (beginErr) => {
+        if (beginErr) return reject(beginErr);
       try {
         const run = (sql, params = []) =>
           new Promise((res, rej) => {

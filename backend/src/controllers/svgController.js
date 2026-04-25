@@ -61,7 +61,12 @@ const addToSvg = async (req, res) => {
       : 0; // Mix/Other items get 0 weight in SVG - proportional not reliable
 
     // Double-entry: Remove from Counter, Add to SVG Vault
-    await counterService.addCounterInventory(metal_type, target_product, -piecesToMove);
+    await counterService.addCounterInventory(metal_type, target_product, -piecesToMove, {
+      category: target_product,
+      size_label: target_product,
+      size_value: unitWeight || 0,
+      notes: "Moved from counter to SVG vault",
+    });
     await svgService.addSvgInventory(metal_type, target_product, piecesToMove, weight);
 
     return formatResponse(res, 200, true, `Successfully moved ${piecesToMove} pieces to SVG Vault`);
@@ -112,7 +117,12 @@ const removeFromSvg = async (req, res) => {
 
     // Double-entry: Remove from SVG, Add back to Counter
     await svgService.addSvgInventory(metal_type, target_product, -piecesToMove, -weight);
-    await counterService.addCounterInventory(metal_type, target_product, piecesToMove);
+    await counterService.addCounterInventory(metal_type, target_product, piecesToMove, {
+      category: target_product,
+      size_label: target_product,
+      size_value: unitWeight || 0,
+      notes: "Returned from SVG vault",
+    });
 
     return formatResponse(res, 200, true, `Successfully returned ${piecesToMove} pieces to Selling Counter`);
   } catch (error) {
