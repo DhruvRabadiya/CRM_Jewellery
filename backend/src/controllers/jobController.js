@@ -26,6 +26,29 @@ const getFinishedGoods = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
+
+// Delete invalid finished goods entry (admin only)
+const deleteFinishedGoodsEntry = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return formatResponse(res, 400, false, "Entry ID is required");
+    }
+
+    const result = await jobService.deleteFinishedGoodsById(id);
+    
+    if (!result.success) {
+      return formatResponse(res, 404, false, result.message);
+    }
+
+    return formatResponse(res, 200, true, "Finished goods entry deleted successfully", {
+      deleted_id: id,
+    });
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
 const getAllReturnItems = () => {
   return new Promise((resolve, reject) => {
     db.all(`SELECT * FROM process_return_items`, [], (err, rows) => {
@@ -90,4 +113,5 @@ module.exports = {
   getNextJobId,
   getFinishedGoods,
   getCombinedProcesses,
+  deleteFinishedGoodsEntry,
 };

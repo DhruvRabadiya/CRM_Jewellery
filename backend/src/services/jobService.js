@@ -91,7 +91,33 @@ const getFinishedGoodsInventory = () => {
   });
 };
 
+// Delete finished goods entry by ID
+const deleteFinishedGoodsById = (id) => {
+  return new Promise((resolve, reject) => {
+    const query = `DELETE FROM finished_goods WHERE id = ?`;
+    
+    db.run(query, [id], function (err) {
+      if (err) {
+        return reject(err);
+      }
+      
+      if (this.changes === 0) {
+        return resolve({
+          success: false,
+          message: `No finished goods entry found with ID: ${id}`,
+        });
+      }
+      
+      resolve({
+        success: true,
+        message: `Finished goods entry with ID ${id} deleted successfully`,
+      });
+    });
+  });
+};
+
 module.exports = {
   getNextJobNumber,
   getFinishedGoodsInventory,
+  deleteFinishedGoodsById,
 };

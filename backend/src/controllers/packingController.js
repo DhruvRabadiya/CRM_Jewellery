@@ -140,13 +140,11 @@ const completePacking = async (req, res) => {
             (err) => err ? reject(err) : resolve()
           );
         });
-        if (itemRetW > 0) {
-          await packingService.addFinishedGoods(process.metal_type, itemCategory, itemRetPieces, itemRetW);
-        }
+        // REMOVED: addFinishedGoods call - process_return_items are counted in inventory query
       }
     } else if (totalRetW > 0) {
       // Fallback: single return weight
-      await packingService.addFinishedGoods(process.metal_type, process.category, totalRetPieces, totalRetW);
+      // REMOVED: addFinishedGoods call - process_return_items are counted in inventory query
     }
 
     const scrWeightDiff = scrW - (process.scrap_weight || 0);
@@ -246,9 +244,7 @@ const editPacking = async (req, res) => {
         if ((process.return_weight || 0) > 0) {
           await removeFinishedGoodsForProcess(process);
         }
-        if (newRetWeight > 0) {
-          await packingService.addFinishedGoods(process.metal_type, updates.category || process.category, newPieces, newRetWeight);
-        }
+        // REMOVED: addFinishedGoods call - process_return_items are counted in inventory query
       }
 
       const scrWeightDiff = newScrWeight - process.scrap_weight;
