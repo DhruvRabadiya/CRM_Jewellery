@@ -4,7 +4,7 @@ const { formatResponse, isValidMetalType, sanitizePieces } = require("../utils/c
 
 /**
  * Parse the unit weight (grams) from a category/target_product string.
- * Examples: "1 gm" → 1, "0.05gm" → 0.05, "10g -C|B" → 10, "Mix" → null
+ * Examples: "1 gm" => 1, "0.05gm" => 0.05, "10g -C|B" => 10, "Mix" => null
  */
 const parseUnitWeight = (category) => {
   if (!category) return null;
@@ -24,8 +24,8 @@ const getInventory = async (req, res) => {
 };
 
 /**
- * Add to SVG Vault — moves items FROM the Selling Counter INTO the SVG vault.
- * Counter → SVG
+ * Add to SVG Vault - moves items FROM the Selling Counter INTO the SVG vault.
+ * Counter -> SVG
  */
 const addToSvg = async (req, res) => {
   try {
@@ -58,7 +58,7 @@ const addToSvg = async (req, res) => {
     const unitWeight = parseUnitWeight(target_product);
     const weight = unitWeight != null
       ? piecesToMove * unitWeight
-      : 0; // Mix/Other items get 0 weight in SVG — proportional not reliable
+      : 0; // Mix/Other items get 0 weight in SVG - proportional not reliable
 
     // Double-entry: Remove from Counter, Add to SVG Vault
     await counterService.addCounterInventory(metal_type, target_product, -piecesToMove);
@@ -71,8 +71,8 @@ const addToSvg = async (req, res) => {
 };
 
 /**
- * Remove from SVG Vault — moves items FROM the SVG vault BACK TO the Selling Counter.
- * SVG → Counter
+ * Remove from SVG Vault - moves items FROM the SVG vault BACK TO the Selling Counter.
+ * SVG -> Counter
  */
 const removeFromSvg = async (req, res) => {
   try {
@@ -101,7 +101,7 @@ const removeFromSvg = async (req, res) => {
       return formatResponse(res, 400, false, "Insufficient items in SVG Vault");
     }
 
-    // Calculate weight to remove — use unit weight or proportional from SVG stock
+    // Calculate weight to remove - use unit weight or proportional from SVG stock
     const unitWeight = parseUnitWeight(target_product);
     let weight = 0;
     if (unitWeight != null) {

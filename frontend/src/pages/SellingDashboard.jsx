@@ -113,7 +113,7 @@ export default function SellingDashboard() {
                       <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Customer</th>
                       <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Type</th>
                       <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Total</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Paid</th>
+                      <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Cash/Online</th>
                       <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Balance</th>
                     </tr>
                   </thead>
@@ -179,7 +179,7 @@ export default function SellingDashboard() {
             </div>
             <p className="text-sm text-slate-600 leading-relaxed">
               Cash is derived from recorded estimate receipts. Customer metal availability is derived from ledgered
-              metal-in entries captured during estimate creation.
+              metal-in entries captured during estimate creation for Gold 24K, Gold 22K, and Silver.
             </p>
           </div>
         </div>

@@ -9,11 +9,13 @@ const { createAppError, isValidMetalType } = require("../utils/common");
 // independently deletable/updatable.
 const REFERENCE_TYPE = "ORDER_BILL";
 
-// F. JAMA in the Excel bill is unqualified fine gold - always recorded as
-// Gold 24K at 99.99 purity in the ledger. Any future requirement to record
-// 22K-as-jama can extend this to a per-line purity, but today it's singular.
-const FINE_METAL_TYPE  = "Gold 24K";
-const FINE_METAL_PURITY = "99.99";
+// Metal purity map for ledger entries
+const METAL_PURITY = {
+  "Gold 24K": "99.99",
+  "Gold 22K": "91.67",
+  "Silver":   "99.90",
+};
+const METAL_TYPES = Object.keys(METAL_PURITY);
 
 // --- Helpers ---
 
@@ -88,6 +90,19 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     }
   });
 
+  METAL_TYPES.forEach((metalType) => {
+    const payment = _extractMetalPayments(data)[metalType] || {};
+    const jama = parseFloat(payment.jama);
+    const rate = parseFloat(payment.rate);
+
+    if (Number.isFinite(jama) && jama < 0) {
+      throw createAppError(`${metalType} JAMA cannot be negative`, 400, "METAL_JAMA_INVALID");
+    }
+    if (Number.isFinite(rate) && rate < 0) {
+      throw createAppError(`${metalType} rate cannot be negative`, 400, "METAL_RATE_INVALID");
+    }
+  });
+
   const hasCustomerDraft = (data.customer_name || "").trim() || (data.customer_phone || "").trim() || (data.customer_address || "").trim();
   if (!data.customer_id && hasCustomerDraft) {
     if (!(data.customer_name || "").trim()) {
@@ -128,6 +143,27 @@ const _resolveCustomerId = async (data) => {
   });
   return customer ? customer.id : null;
 };
+
+// Build a metalPayments map from the flat data fields.
+// Returns { 'Gold 24K': { jama, rate }, 'Gold 22K': { jama, rate }, 'Silver': { jama, rate } }
+const _extractMetalPayments = (data) => ({
+  "Gold 24K": {
+    jama: parseFloat(data.fine_jama) || 0,
+    rate: parseFloat(data.rate_10g)  || 0,
+  },
+  "Gold 22K": {
+    jama: parseFloat(data.jama_gold_22k) || 0,
+    rate: parseFloat(data.rate_gold_22k) || 0,
+  },
+  "Silver": {
+    jama: parseFloat(data.jama_silver) || 0,
+    rate: parseFloat(data.rate_silver) || 0,
+  },
+});
+
+// Check if any metal jama is provided
+const _hasAnyMetalJama = (metalPayments) =>
+  Object.values(metalPayments).some((p) => (p.jama || 0) > 0);
 
 // Given user-entered cash + online amounts, derive the canonical amt_jama
 // and payment_mode. amt_jama is always cash + online so frontend rounding
@@ -214,12 +250,15 @@ const getBillById = (id) =>
   });
 
 // --- Server-side Recalculation ---
-// Re-derives every summary field from items + fine gold inputs + payments.
-// Formulas mirror the Excel "Sample Bill Format" sheet exactly.
-const _computeSummary = (items, fine_jama, rate_10g, cash, online) => {
+// Re-derives every summary field from items + per-metal jama/rate + payments.
+// Computes per-metal-type weight diffs and metal RS values independently.
+const _computeSummary = (items, metalPayments, cash, online) => {
   let total_pcs = 0;
   let total_weight = 0;
   let labour_total = 0;
+
+  // Per-metal weight accumulators
+  const metalWeightTotals = {};
 
   for (const item of items) {
     const pcs    = parseInt(item.pcs)        || 0;
@@ -230,23 +269,48 @@ const _computeSummary = (items, fine_jama, rate_10g, cash, online) => {
     total_pcs   += pcs;
     total_weight = parseFloat((total_weight + weight).toFixed(4));
     labour_total = parseFloat((labour_total + t_lc).toFixed(2));
+
+    const mt = item.metal_type || "Gold 24K";
+    metalWeightTotals[mt] = parseFloat(((metalWeightTotals[mt] || 0) + weight).toFixed(4));
   }
 
-  const fj  = parseFloat(fine_jama) || 0;
-  const r10 = parseFloat(rate_10g)  || 0;
-  const aj  = parseFloat((cash + online).toFixed(2));
+  // Compute per-metal diffs and metal RS
+  let total_metal_rs = 0;
+  const metal_diffs = {};
+  const metal_rs_map = {};
 
-  const fine_diff = parseFloat((total_weight - fj).toFixed(4));
+  const relevantMetals = new Set([
+    ...Object.keys(metalWeightTotals),
+    ...METAL_TYPES.filter((metalType) => {
+      const payment = metalPayments[metalType] || {};
+      return (parseFloat(payment.jama) || 0) > 0 || (parseFloat(payment.rate) || 0) > 0;
+    }),
+  ]);
 
-  // Excel ROUND(C25,-1) rounds to nearest 10; JS Math.round(x/10)*10 agrees.
-  const rawGoldRs = fine_diff * r10 / 10;
-  const gold_rs   = Math.round(rawGoldRs / 10) * 10;
+  for (const metalType of relevantMetals) {
+    const weight = metalWeightTotals[metalType] || 0;
+    const payment = metalPayments[metalType] || {};
+    const jama = parseFloat(payment.jama) || 0;
+    const rate = parseFloat(payment.rate) || 0;
+    const diff = parseFloat((weight - jama).toFixed(4));
+    metal_diffs[metalType] = diff;
 
-  const subtotal = parseFloat((labour_total + gold_rs).toFixed(2));
+    // Excel ROUND(C25,-1) rounds to nearest 10; JS Math.round(x/10)*10 agrees.
+    const rawRs = diff * rate / 10;
+    const rs    = Math.round(rawRs / 10) * 10;
+    metal_rs_map[metalType] = rs;
+    total_metal_rs += rs;
+  }
+
+  const aj       = parseFloat((cash + online).toFixed(2));
+  const subtotal = parseFloat((labour_total + total_metal_rs).toFixed(2));
   const amt_baki = parseFloat((subtotal - aj).toFixed(2));
 
+  // Backward compat: fine_diff stores Gold 24K diff only
+  const fine_diff = metal_diffs["Gold 24K"] || 0;
+
   let ofg_status, fine_carry;
-  if (gold_rs <= 0 && fine_diff > 0) {
+  if (total_metal_rs <= 0 && fine_diff > 0) {
     ofg_status = "OF.G AFSL";
     fine_carry = parseFloat(fine_diff.toFixed(4));
   } else {
@@ -256,7 +320,9 @@ const _computeSummary = (items, fine_jama, rate_10g, cash, online) => {
 
   return {
     total_pcs, total_weight, labour_total, fine_diff,
-    gold_rs, subtotal, amt_baki, ofg_status, fine_carry, amt_jama: aj,
+    gold_rs: total_metal_rs, subtotal, amt_baki,
+    ofg_status, fine_carry, amt_jama: aj,
+    metal_diffs, metal_rs_map,
   };
 };
 
@@ -301,6 +367,11 @@ const _deleteAccountingEntries = async (run, billId) => {
     `DELETE FROM counter_cash_ledger WHERE reference_type = ? AND reference_id = ?`,
     [REFERENCE_TYPE, billId]
   );
+  // Also remove any stock transactions created for customer metal deposits
+  await run(
+    `DELETE FROM stock_transactions WHERE reference_type = ? AND reference_id = ?`,
+    [REFERENCE_TYPE, billId]
+  );
 };
 
 const _applyOutstandingDelta = async (run, customerId, delta) => {
@@ -318,7 +389,7 @@ const _applyOutstandingDelta = async (run, customerId, delta) => {
 // means customer owes more (debit), NEGATIVE means customer paid (credit).
 // weight_delta POSITIVE means metal flowed FROM customer TO shop.
 const _insertAccountingEntries = async (
-  run, billId, obNo, date, customerId, summary, cash, online, fine_jama
+  run, billId, obNo, date, customerId, summary, cash, online, metalPayments
 ) => {
   if (customerId) {
     const subtotal = parseFloat(summary.subtotal) || 0;
@@ -358,18 +429,21 @@ const _insertAccountingEntries = async (
       );
     }
 
-    const fj = parseFloat(fine_jama) || 0;
-    if (fj > 0) {
-      await run(
-        `INSERT INTO customer_ledger_entries
-          (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, metal_type, metal_purity, weight_delta, amount_delta, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          customerId, date, REFERENCE_TYPE, billId, String(obNo),
-          "METAL_IN", FINE_METAL_TYPE, FINE_METAL_PURITY,
-          fj, 0, "F. JAMA on order bill #" + obNo,
-        ]
-      );
+    // Create METAL_IN ledger entries for each metal type with jama > 0
+    for (const [metalType, payment] of Object.entries(metalPayments)) {
+      const jama = parseFloat(payment.jama) || 0;
+      if (jama > 0) {
+        await run(
+          `INSERT INTO customer_ledger_entries
+            (customer_id, entry_date, reference_type, reference_id, reference_no, line_type, metal_type, metal_purity, weight_delta, amount_delta, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            customerId, date, REFERENCE_TYPE, billId, String(obNo),
+            "METAL_IN", metalType, METAL_PURITY[metalType] || "99.99",
+            jama, 0, `${metalType} JAMA on estimate #${obNo}`,
+          ]
+        );
+      }
     }
   }
 
@@ -389,6 +463,23 @@ const _insertAccountingEntries = async (
       [date, REFERENCE_TYPE, billId, String(obNo), "Online", online, "Order bill #" + obNo]
     );
   }
+
+  // Create stock transactions for each metal received from customer
+  for (const [metalType, payment] of Object.entries(metalPayments)) {
+    const jama = parseFloat(payment.jama) || 0;
+    if (jama > 0) {
+      await run(
+        `INSERT INTO stock_transactions
+          (date, metal_type, transaction_type, weight, description, reference_type, reference_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          date, metalType, "ESTIMATE_METAL_IN", jama,
+          `Customer metal deposit on Estimate #${obNo}`,
+          REFERENCE_TYPE, billId,
+        ]
+      );
+    }
+  }
 };
 
 // --- Create Bill ---
@@ -403,22 +494,23 @@ const createBill = async (data) => {
   );
   if (existing) throw createAppError("Estimate No. " + ob_no + " already exists. Please use a different number.", 409, "ESTIMATE_NO_CONFLICT");
 
-  const fj = parseFloat(data.fine_jama) || 0;
+  const metalPayments = _extractMetalPayments(data);
+  const hasJama = _hasAnyMetalJama(metalPayments);
   const hasCustHint = !!(data.customer_id ||
     ((data.customer_phone || "").trim() && (data.customer_name || "").trim()));
-  if (fj > 0 && !hasCustHint) {
-    throw createAppError("F. JAMA (metal deposit) requires a customer. Please select or add one.", 400, "CUSTOMER_REQUIRED_FOR_FINE");
+  if (hasJama && !hasCustHint) {
+    throw createAppError("Metal deposit (JAMA) requires a customer. Please select or add one.", 400, "CUSTOMER_REQUIRED_FOR_METAL_PAYMENT");
   }
 
   const payments = _normalisePayments(data);
-  const summary  = _computeSummary(data.items || [], data.fine_jama, data.rate_10g, payments.cash, payments.online);
+  const summary  = _computeSummary(data.items || [], metalPayments, payments.cash, payments.online);
   const productsJson = JSON.stringify(
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
 
   const resolvedCustomerId = await _resolveCustomerId(data);
-  if (fj > 0 && !resolvedCustomerId) {
-    throw createAppError("F. JAMA (metal deposit) requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
+  if (hasJama && !resolvedCustomerId) {
+    throw createAppError("Metal deposit (JAMA) requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
   }
 
   return db.runTransaction(async (run) => {
@@ -426,10 +518,11 @@ const createBill = async (data) => {
       `INSERT INTO order_bills
         (ob_no, date, product, products,
          customer_id, customer_name, customer_city, customer_address, customer_phone, customer_type,
-         fine_jama, rate_10g, amt_jama, cash_amount, online_amount, payment_mode,
+         fine_jama, rate_10g, jama_gold_22k, rate_gold_22k, jama_silver, rate_silver,
+         amt_jama, cash_amount, online_amount, payment_mode,
          total_pcs, total_weight, labour_total, fine_diff, gold_rs,
          subtotal, amt_baki, ofg_status, fine_carry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         ob_no, data.date, data.product || "", productsJson,
         resolvedCustomerId || null,
@@ -438,8 +531,9 @@ const createBill = async (data) => {
         data.customer_address || "",
         data.customer_phone || "",
         data.customer_type || "Retail",
-        parseFloat(data.fine_jama) || 0,
-        parseFloat(data.rate_10g) || 0,
+        metalPayments["Gold 24K"].jama, metalPayments["Gold 24K"].rate,
+        metalPayments["Gold 22K"].jama, metalPayments["Gold 22K"].rate,
+        metalPayments["Silver"].jama,   metalPayments["Silver"].rate,
         summary.amt_jama, payments.cash, payments.online, payments.payment_mode,
         summary.total_pcs, summary.total_weight, summary.labour_total,
         summary.fine_diff, summary.gold_rs,
@@ -450,7 +544,7 @@ const createBill = async (data) => {
     await _insertItems(run, lastID, data.items || []);
     await _insertAccountingEntries(
       run, lastID, ob_no, data.date, resolvedCustomerId, summary,
-      payments.cash, payments.online, parseFloat(data.fine_jama) || 0
+      payments.cash, payments.online, metalPayments
     );
     if (resolvedCustomerId && summary.amt_baki > 0) {
       await _applyOutstandingDelta(run, resolvedCustomerId, summary.amt_baki);
@@ -471,16 +565,17 @@ const updateBill = async (id, data) => {
   );
   if (conflict) throw createAppError("Estimate No. " + ob_no + " already exists. Please use a different number.", 409, "ESTIMATE_NO_CONFLICT");
 
-  const fj = parseFloat(data.fine_jama) || 0;
+  const metalPayments = _extractMetalPayments(data);
   const payments = _normalisePayments(data);
-  const summary  = _computeSummary(data.items || [], data.fine_jama, data.rate_10g, payments.cash, payments.online);
+  const summary  = _computeSummary(data.items || [], metalPayments, payments.cash, payments.online);
   const productsJson = JSON.stringify(
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
 
   const resolvedCustomerId = await _resolveCustomerId(data);
-  if (fj > 0 && !resolvedCustomerId) {
-    throw createAppError("F. JAMA (metal deposit) requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
+  const hasJama = _hasAnyMetalJama(metalPayments);
+  if (hasJama && !resolvedCustomerId) {
+    throw createAppError("Metal deposit (JAMA) requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
   }
 
   return db.runTransaction(async (run, get) => {
@@ -494,7 +589,8 @@ const updateBill = async (id, data) => {
       `UPDATE order_bills SET
          ob_no=?, date=?, product=?, products=?,
          customer_id=?, customer_name=?, customer_city=?, customer_address=?, customer_phone=?, customer_type=?,
-         fine_jama=?, rate_10g=?, amt_jama=?, cash_amount=?, online_amount=?, payment_mode=?,
+         fine_jama=?, rate_10g=?, jama_gold_22k=?, rate_gold_22k=?, jama_silver=?, rate_silver=?,
+         amt_jama=?, cash_amount=?, online_amount=?, payment_mode=?,
          total_pcs=?, total_weight=?, labour_total=?, fine_diff=?, gold_rs=?,
          subtotal=?, amt_baki=?, ofg_status=?, fine_carry=?
        WHERE id=?`,
@@ -506,8 +602,9 @@ const updateBill = async (id, data) => {
         data.customer_address || "",
         data.customer_phone || "",
         data.customer_type || "Retail",
-        parseFloat(data.fine_jama) || 0,
-        parseFloat(data.rate_10g) || 0,
+        metalPayments["Gold 24K"].jama, metalPayments["Gold 24K"].rate,
+        metalPayments["Gold 22K"].jama, metalPayments["Gold 22K"].rate,
+        metalPayments["Silver"].jama,   metalPayments["Silver"].rate,
         summary.amt_jama, payments.cash, payments.online, payments.payment_mode,
         summary.total_pcs, summary.total_weight, summary.labour_total,
         summary.fine_diff, summary.gold_rs,
@@ -527,7 +624,7 @@ const updateBill = async (id, data) => {
 
     await _insertAccountingEntries(
       run, id, ob_no, data.date, resolvedCustomerId, summary,
-      payments.cash, payments.online, parseFloat(data.fine_jama) || 0
+      payments.cash, payments.online, metalPayments
     );
     if (resolvedCustomerId && summary.amt_baki > 0) {
       await _applyOutstandingDelta(run, resolvedCustomerId, summary.amt_baki);

@@ -91,10 +91,11 @@ const buildItemsFromCharges = (groupedCharges, selectedMetals, customerType, exi
   return rows;
 };
 
-const computeSummary = (items, fineJama, rate10g, amtJama) => {
+const computeSummary = (items, metalPayments, amtJama) => {
   let totalPcs = 0;
   let totalWeight = 0;
   let labourTotal = 0;
+  const metalWeightTotals = {};
 
   (items || []).forEach((item) => {
     const pcs = parseInt(item.pcs, 10) || 0;
@@ -104,29 +105,55 @@ const computeSummary = (items, fineJama, rate10g, amtJama) => {
     totalPcs += pcs;
     totalWeight = parseFloat((totalWeight + weight).toFixed(4));
     labourTotal = parseFloat((labourTotal + totalLabour).toFixed(2));
+
+    const mt = item.metal_type || "Gold 24K";
+    metalWeightTotals[mt] = parseFloat(((metalWeightTotals[mt] || 0) + weight).toFixed(4));
   });
 
-  const fineJamaValue = parseFloat(fineJama) || 0;
-  const rate10gValue = parseFloat(rate10g) || 0;
-  const amountPaid = parseFloat(amtJama) || 0;
+  let totalMetalRs = 0;
+  const metalDiffs = {};
+  const metalRsMap = {};
 
-  const fineDiff = parseFloat((totalWeight - fineJamaValue).toFixed(4));
-  const rawGoldRs = (fineDiff * rate10gValue) / 10;
-  const goldRs = Math.round(rawGoldRs / 10) * 10;
-  const subtotal = parseFloat((labourTotal + goldRs).toFixed(2));
+  const relevantMetals = new Set([
+    ...Object.keys(metalWeightTotals),
+    ...METAL_TYPES.filter((metalType) => {
+      const payment = metalPayments[metalType] || {};
+      return (parseFloat(payment.jama) || 0) > 0 || (parseFloat(payment.rate) || 0) > 0;
+    }),
+  ]);
+
+  for (const metalType of relevantMetals) {
+    const weight = metalWeightTotals[metalType] || 0;
+    const payment = metalPayments[metalType] || {};
+    const jama = parseFloat(payment.jama) || 0;
+    const rate = parseFloat(payment.rate) || 0;
+    const diff = parseFloat((weight - jama).toFixed(4));
+    metalDiffs[metalType] = diff;
+    const rawRs = (diff * rate) / 10;
+    const rs = Math.round(rawRs / 10) * 10;
+    metalRsMap[metalType] = rs;
+    totalMetalRs += rs;
+  }
+
+  const amountPaid = parseFloat(amtJama) || 0;
+  const subtotal = parseFloat((labourTotal + totalMetalRs).toFixed(2));
   const amountDue = parseFloat((subtotal - amountPaid).toFixed(2));
-  const carryFine = goldRs <= 0 && fineDiff > 0 ? parseFloat(fineDiff.toFixed(4)) : 0;
+  const fineDiff = metalDiffs["Gold 24K"] || 0;
+  const carryFine = totalMetalRs <= 0 && fineDiff > 0 ? parseFloat(fineDiff.toFixed(4)) : 0;
 
   return {
     totalPcs,
     totalWeight,
     labourTotal,
     fineDiff,
-    goldRs,
+    goldRs: totalMetalRs,
     subtotal,
     amountDue,
     carryFine,
     ofgStatus: carryFine > 0 ? "OF.G AFSL" : "OF.G HDF",
+    metalWeightTotals,
+    metalDiffs,
+    metalRsMap,
   };
 };
 
@@ -253,7 +280,12 @@ const CustomerLookup = ({ selectedCustomer, onSelect, onClear }) => {
 const PrintView = ({ bill, onClose }) => {
   const items = bill.items || [];
   const products = parseProducts(bill.products);
-  const summary = computeSummary(items, bill.fine_jama, bill.rate_10g, bill.amt_jama);
+  const printMetalPayments = {
+    "Gold 24K": { jama: bill.fine_jama || 0, rate: bill.rate_10g || 0 },
+    "Gold 22K": { jama: bill.jama_gold_22k || 0, rate: bill.rate_gold_22k || 0 },
+    "Silver": { jama: bill.jama_silver || 0, rate: bill.rate_silver || 0 },
+  };
+  const summary = computeSummary(items, printMetalPayments, bill.amt_jama);
 
   useEffect(() => {
     const timeout = setTimeout(() => window.print(), 150);
@@ -358,8 +390,20 @@ const PrintView = ({ bill, onClose }) => {
             <span className="text-slate-600">Labour Total</span>
             <span className="font-bold">{fmtMoney(summary.labourTotal)}</span>
           </div>
+          {summary.metalWeightTotals && Object.entries(summary.metalWeightTotals).map(([mt]) => (
+            <div key={mt} className="py-1 border-b">
+              <div className="flex justify-between">
+                <span className="text-slate-600">{mt} Diff</span>
+                <span className="font-bold">{fmt(summary.metalDiffs?.[mt] || 0, 4)}g</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">{mt} Rs.</span>
+                <span className="font-bold">{fmtMoney(summary.metalRsMap?.[mt] || 0)}</span>
+              </div>
+            </div>
+          ))}
           <div className="flex justify-between py-1 border-b">
-            <span className="text-slate-600">Gold Rs.</span>
+            <span className="text-slate-600">Total Metal Rs.</span>
             <span className="font-bold">{fmtMoney(summary.goldRs)}</span>
           </div>
           <div className="flex justify-between py-1 border-b">
@@ -397,8 +441,8 @@ export default function OrderBills() {
   const [customerAddress, setCustomerAddress] = useState("");
   const [customerType, setCustomerType] = useState("Retail");
   const [items, setItems] = useState([]);
-  const [fineJama, setFineJama] = useState("");
-  const [rate10g, setRate10g] = useState("");
+  const emptyMetalPayments = { "Gold 24K": { jama: "", rate: "" }, "Gold 22K": { jama: "", rate: "" }, "Silver": { jama: "", rate: "" } };
+  const [metalPayments, setMetalPayments] = useState({ ...emptyMetalPayments });
   const [amtJama, setAmtJama] = useState("");
 
   const showToast = useCallback((message, type = "success") => {
@@ -429,8 +473,7 @@ export default function OrderBills() {
     setCustomerPhone("");
     setCustomerAddress("");
     setCustomerType("Retail");
-    setFineJama("");
-    setRate10g("");
+    setMetalPayments({ "Gold 24K": { jama: "", rate: "" }, "Gold 22K": { jama: "", rate: "" }, "Silver": { jama: "", rate: "" } });
     setAmtJama("");
     setItems(buildItemsFromCharges(charges, ["Gold 24K"], "Retail"));
   }, []);
@@ -450,8 +493,8 @@ export default function OrderBills() {
   }, [loadBills, loadCharges, resetForm, showToast]);
 
   const summary = useMemo(
-    () => computeSummary(items, fineJama, rate10g, amtJama),
-    [items, fineJama, rate10g, amtJama]
+    () => computeSummary(items, metalPayments, amtJama),
+    [items, metalPayments, amtJama]
   );
 
   const handleProductToggle = useCallback((metalType) => {
@@ -514,8 +557,11 @@ export default function OrderBills() {
       setCustomerPhone(full.customer_phone || "");
       setCustomerAddress(full.customer_address || "");
       setCustomerType(full.customer_type || "Retail");
-      setFineJama(full.fine_jama != null ? String(full.fine_jama) : "");
-      setRate10g(full.rate_10g != null ? String(full.rate_10g) : "");
+      setMetalPayments({
+        "Gold 24K": { jama: full.fine_jama != null ? String(full.fine_jama) : "", rate: full.rate_10g != null ? String(full.rate_10g) : "" },
+        "Gold 22K": { jama: full.jama_gold_22k != null ? String(full.jama_gold_22k) : "", rate: full.rate_gold_22k != null ? String(full.rate_gold_22k) : "" },
+        "Silver": { jama: full.jama_silver != null ? String(full.jama_silver) : "", rate: full.rate_silver != null ? String(full.rate_silver) : "" },
+      });
       setAmtJama(full.amt_jama != null ? String(full.amt_jama) : "");
       setItems(buildItemsFromCharges(charges, products, full.customer_type || "Retail", full.items || []));
       setView("form");
@@ -568,8 +614,12 @@ export default function OrderBills() {
       customer_address: customerAddress.trim(),
       customer_city: "",
       customer_type: customerType,
-      fine_jama: parseFloat(fineJama) || 0,
-      rate_10g: parseFloat(rate10g) || 0,
+      fine_jama: parseFloat(metalPayments["Gold 24K"]?.jama) || 0,
+      rate_10g: parseFloat(metalPayments["Gold 24K"]?.rate) || 0,
+      jama_gold_22k: parseFloat(metalPayments["Gold 22K"]?.jama) || 0,
+      rate_gold_22k: parseFloat(metalPayments["Gold 22K"]?.rate) || 0,
+      jama_silver: parseFloat(metalPayments["Silver"]?.jama) || 0,
+      rate_silver: parseFloat(metalPayments["Silver"]?.rate) || 0,
       amt_jama: parseFloat(amtJama) || 0,
       items: nonZeroItems,
     };
@@ -605,13 +655,12 @@ export default function OrderBills() {
     customerPhone,
     customerType,
     editBill,
-    fineJama,
+    metalPayments,
     formDate,
     items,
     loadBills,
     obNo,
     product,
-    rate10g,
     selectedCustomer,
     selectedProducts,
     showToast,
@@ -1029,33 +1078,53 @@ export default function OrderBills() {
           })}
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <h2 className="font-black text-slate-700 text-sm uppercase tracking-wider">Fine Gold</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">F. JAMA (g)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={fineJama}
-                  onChange={(event) => setFineJama(event.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  placeholder="0.000"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">10g Rate</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={rate10g}
-                  onChange={(event) => setRate10g(event.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  placeholder="0"
-                />
-              </div>
-            </div>
+            <h2 className="font-black text-slate-700 text-sm uppercase tracking-wider">Metal Payment (Customer JAMA)</h2>
+            <p className="text-xs text-slate-400">Enter metal weight deposited by the customer and the rate per 10g for each metal type.</p>
+            {selectedProducts.map((metalType) => {
+              const colorMap = { "Gold 24K": "amber", "Gold 22K": "yellow", "Silver": "slate" };
+              const color = colorMap[metalType] || "slate";
+              return (
+                <div key={metalType} className={`border border-${color}-200 rounded-xl p-4 bg-${color}-50/30`}>
+                  <p className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">{metalType}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">JAMA (g)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={metalPayments[metalType]?.jama || ""}
+                        onChange={(event) =>
+                          setMetalPayments((prev) => ({
+                            ...prev,
+                            [metalType]: { ...prev[metalType], jama: event.target.value },
+                          }))
+                        }
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        placeholder="0.000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">Rate / 10g</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={metalPayments[metalType]?.rate || ""}
+                        onChange={(event) =>
+                          setMetalPayments((prev) => ({
+                            ...prev,
+                            [metalType]: { ...prev[metalType], rate: event.target.value },
+                          }))
+                        }
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -1074,12 +1143,32 @@ export default function OrderBills() {
               <span className="text-slate-500">Labour Total</span>
               <span className="font-bold text-slate-800">{fmtMoney(summary.labourTotal)}</span>
             </div>
+
+            {/* Per-metal breakdown */}
+            {summary.metalWeightTotals && Object.keys(summary.metalWeightTotals).length > 0 && (
+              <div className="border-t border-slate-100 pt-2 space-y-2">
+                {Object.entries(summary.metalWeightTotals).map(([metalType, weight]) => (
+                  <div key={metalType} className="bg-slate-50 rounded-lg p-2.5 space-y-1">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">{metalType}</p>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Weight</span>
+                      <span className="font-bold text-slate-700">{fmt(weight, 4)}g</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Diff (+/-)</span>
+                      <span className="font-bold text-slate-700">{fmt(summary.metalDiffs?.[metalType] || 0, 4)}g</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Metal Rs.</span>
+                      <span className="font-bold text-slate-700">{fmtMoney(summary.metalRsMap?.[metalType] || 0)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Fine +/-</span>
-              <span className="font-bold text-slate-800">{fmt(summary.fineDiff, 4)}g</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Gold Rs.</span>
+              <span className="text-slate-500">Total Metal Rs.</span>
               <span className="font-bold text-slate-800">{fmtMoney(summary.goldRs)}</span>
             </div>
             <div className="flex justify-between text-base font-black border-t border-slate-200 pt-2">

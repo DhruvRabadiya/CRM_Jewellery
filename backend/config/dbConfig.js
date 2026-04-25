@@ -11,7 +11,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// ─── OB Labour Rates seed helper (matches screenshot data) ───────────────────
+// --- OB Labour Rates seed helper (matches screenshot data) ---
 // Called on fresh DB and on migration from old size structure.
 function _seedObRates(db) {
   // [size_label, size_value, lc_pp_retail, lc_pp_showroom, lc_pp_wholesale, is_custom, sort_order]
@@ -73,12 +73,12 @@ db.serialize(() => {
   // 1. STOCK MASTER (Raw Material and Pooled Stages)
   db.run(`CREATE TABLE IF NOT EXISTS stock_master (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        metal_type TEXT UNIQUE, -- 'Gold' or 'Silver'
-        opening_stock REAL DEFAULT 0, -- Raw Material
-        rolling_stock REAL DEFAULT 0, -- Completed Rolling (Source for Press)
-        press_stock REAL DEFAULT 0,   -- Completed Press (Source for TPP)
-        tpp_stock REAL DEFAULT 0,     -- Completed TPP (Source for Packing)
-        total_loss REAL DEFAULT 0     -- Cumulative Loss
+        metal_type TEXT UNIQUE,
+        opening_stock REAL DEFAULT 0,
+        rolling_stock REAL DEFAULT 0,
+        press_stock REAL DEFAULT 0,
+        tpp_stock REAL DEFAULT 0,
+        total_loss REAL DEFAULT 0
     )`);
 
   // Initialize default rows if they don't exist
@@ -125,7 +125,7 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT DEFAULT CURRENT_TIMESTAMP,
         metal_type TEXT,
-        transaction_type TEXT, 
+        transaction_type TEXT,
         weight REAL,
         description TEXT
     )`);
@@ -270,32 +270,6 @@ db.serialize(() => {
       target_product TEXT,
       pieces INTEGER,
       weight REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // 5b. PRODUCTION JOBS (Legacy job tracking system)
-  db.run(`CREATE TABLE IF NOT EXISTS production_jobs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      job_number TEXT UNIQUE,
-      metal_type TEXT,
-      target_product TEXT,
-      current_step TEXT,
-      status TEXT DEFAULT 'PENDING',
-      issue_weight REAL,
-      current_weight REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // 5c. JOB STEPS (Legacy step logging)
-  db.run(`CREATE TABLE IF NOT EXISTS job_steps (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      job_id INTEGER,
-      step_name TEXT,
-      issue_weight REAL,
-      return_weight REAL,
-      scrap_weight REAL,
-      loss_weight REAL,
-      return_pieces INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -710,7 +684,7 @@ db.serialize(() => {
     }
   });
 
-  // 14. ORDER BILLS (OB — Order Book bills from Selling Counter)
+  // 14. ORDER BILLS (Estimates - keeping table name for back-compat)
   db.run(`CREATE TABLE IF NOT EXISTS order_bills (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ob_no INTEGER UNIQUE NOT NULL,
@@ -741,7 +715,7 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // 15. ORDER BILL ITEMS (line items for each OB bill)
+  // 15. ORDER BILL ITEMS (line items for each estimate)
   db.run(`CREATE TABLE IF NOT EXISTS order_bill_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bill_id INTEGER NOT NULL REFERENCES order_bills(id) ON DELETE CASCADE,
@@ -757,7 +731,7 @@ db.serialize(() => {
       sort_order INTEGER DEFAULT 0
   )`);
 
-  // Migration: order_bills rate_tier → customer_type (R1→Retail, R2→Showroom, R3→Wholesale)
+  // Migration: order_bills rate_tier -> customer_type (R1->Retail, R2->Showroom, R3->Wholesale)
   //            + add 'products' column if missing (multi-metal JSON array)
   db.all(`PRAGMA table_info(order_bills)`, (err, columns) => {
     if (!err && columns) {
@@ -776,7 +750,7 @@ db.serialize(() => {
                 ELSE 'Retail'
               END`, (ue) => {
               if (ue) console.error('Migration rate_tier values:', ue.message);
-              else console.log('Migrated order_bills rate_tier → customer_type');
+              else console.log('Migrated order_bills rate_tier -> customer_type');
             });
           }
         });
@@ -788,7 +762,6 @@ db.serialize(() => {
             if (e) console.error('Migration products:', e.message);
             else {
               console.log('Added products column to order_bills');
-              // Backfill existing rows from legacy single `product` column when present
               const hasProduct = columns.some((c) => c.name === 'product');
               if (hasProduct) {
                 db.run(
@@ -809,8 +782,6 @@ db.serialize(() => {
         );
       }
 
-      // Phase 1 (selling-counter-billing-ledger): add customer FK + payment split columns.
-      // All additive & nullable with safe defaults so existing bills continue to read.
       const hasCustomerId   = columns.some((c) => c.name === 'customer_id');
       const hasCashAmount   = columns.some((c) => c.name === 'cash_amount');
       const hasOnlineAmount = columns.some((c) => c.name === 'online_amount');
@@ -827,8 +798,6 @@ db.serialize(() => {
         db.run(`ALTER TABLE order_bills ADD COLUMN cash_amount REAL DEFAULT 0`, (e) => {
           if (e) return console.error('Migration cash_amount:', e.message);
           console.log('Added cash_amount column to order_bills');
-          // Backfill: treat legacy amt_jama as cash. Only touch rows still at zero
-          // so this is idempotent if run after partial data entry.
           db.run(
             `UPDATE order_bills
                SET cash_amount = amt_jama
@@ -878,16 +847,15 @@ db.serialize(() => {
     }
   });
 
-  // Migration: ob_labour_rates 'Gold' → 'Gold 24K' (idempotent)
+  // Migration: ob_labour_rates 'Gold' -> 'Gold 24K' (idempotent)
   db.run(`UPDATE ob_labour_rates SET metal_type = 'Gold 24K' WHERE metal_type = 'Gold'`, (err) => {
     if (err && !err.message.includes('no such table'))
-      console.error('Migration ob_labour_rates Gold→Gold 24K:', err.message);
+      console.error('Migration ob_labour_rates Gold->Gold 24K:', err.message);
   });
 
-  // Migration: reseed if old size labels detected (e.g., '0.10g' or '2.5g' present)
-  // or if Gold 22K is missing entirely. Ensures screenshot-exact initial data.
+  // Migration: reseed if old size labels detected
   db.get(`SELECT id FROM ob_labour_rates WHERE metal_type='Gold 24K' AND size_label='0.05g'`, [], (err, row) => {
-    if (err || row) return; // already on new structure, or table error
+    if (err || row) return;
     console.log('Reseeding ob_labour_rates with updated size structure...');
     db.run(`DELETE FROM ob_labour_rates`, [], (delErr) => {
       if (delErr) return console.error('Failed to clear ob_labour_rates for reseed:', delErr.message);
@@ -897,7 +865,6 @@ db.serialize(() => {
 
   // Migration: rename legacy 'Gold' metal_type to 'Gold 24K' across all tables
   // Only runs if 'Gold' rows still exist (idempotent on re-run).
-  // Placed after all CREATE TABLE statements so tables exist.
   const migrateTables = [
     'stock_master', 'stock_transactions', 'melting_process',
     'rolling_processes', 'press_processes', 'tpp_processes',
@@ -905,7 +872,6 @@ db.serialize(() => {
   ];
   migrateTables.forEach((tbl) => {
     db.run(`UPDATE ${tbl} SET metal_type = 'Gold 24K' WHERE metal_type = 'Gold'`, (err) => {
-      // Silently ignore errors (table may not exist on fresh DB)
       if (err && !err.message.includes('no such table')) {
         console.error(`Migration Gold->Gold 24K in ${tbl}:`, err.message);
       }
@@ -916,9 +882,6 @@ db.serialize(() => {
 });
 
 // Helper to run multiple operations inside a SQLite transaction.
-// Usage: await runTransaction(async (run, get) => { ... });
-// `run` and `get` are promisified wrappers around db.run/db.get that execute
-// within the same BEGIN/COMMIT/ROLLBACK block.
 db.runTransaction = (fn) => {
   return new Promise((resolve, reject) => {
     db.run("BEGIN TRANSACTION", async (beginErr) => {

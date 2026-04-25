@@ -96,7 +96,7 @@ const getLossStats = () => {
 
 const getPurchases = () => {
   return new Promise((resolve, reject) => {
-    const query = `SELECT * FROM stock_transactions WHERE transaction_type IN ('PURCHASE', 'DHAL_ADDITION') ORDER BY date DESC`;
+    const query = `SELECT * FROM stock_transactions WHERE transaction_type IN ('PURCHASE', 'DHAL_ADDITION', 'ESTIMATE_METAL_IN') ORDER BY date DESC`;
     db.all(query, [], (err, rows) => {
       if (err) reject(err);
       resolve(rows || []);
@@ -179,6 +179,9 @@ const recalculateOpeningStock = (metalType) => {
       SELECT
         (SELECT COALESCE(SUM(weight), 0) FROM stock_transactions
           WHERE metal_type = $metal AND transaction_type IN ('PURCHASE', 'DHAL_ADDITION'))
+
+        + (SELECT COALESCE(SUM(weight), 0) FROM stock_transactions
+          WHERE metal_type = $metal AND transaction_type = 'ESTIMATE_METAL_IN')
 
         - (SELECT COALESCE(SUM(w), 0) FROM (
             SELECT COALESCE(issue_size, issue_weight, 0) as w FROM melting_process WHERE metal_type = $metal AND status = 'PENDING'

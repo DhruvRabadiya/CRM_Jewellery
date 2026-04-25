@@ -6,6 +6,15 @@ const handleEstimateError = (res, err) => {
     return formatResponse(res, err.statusCode, false, err.message, err.details || null);
   }
 
+  if (err?.message?.includes("SQLITE_ERROR") && err?.message?.includes("no column named")) {
+    return formatResponse(
+      res,
+      500,
+      false,
+      "Estimate database schema is out of date. Please restart the backend/app once so the latest migrations can run."
+    );
+  }
+
   if (err?.message?.includes("SQLITE_CONSTRAINT")) {
     return formatResponse(res, 409, false, "A conflicting estimate record already exists");
   }
