@@ -281,6 +281,8 @@ const PrintView = ({ bill, onClose }) => {
   const products = parseProducts(bill.products);
   const paymentEntries = normalizePaymentEntries(bill.payment_entries || [], bill);
   const summary = computeEstimateBalance(items, paymentEntries, bill.discount, extractSettlementRates(bill));
+  // Retail customers see the total but NOT the labour breakdown line-by-line
+  const isRetail = (bill.customer_type || "Retail").toLowerCase() === "retail";
 
   useEffect(() => {
     const t = setTimeout(() => window.print(), 150);
@@ -341,8 +343,12 @@ const PrintView = ({ bill, onClose }) => {
                           <th className="border border-slate-200 px-2 py-1.5 text-left font-black">Size</th>
                           <th className="border border-slate-200 px-2 py-1.5 text-center font-black">Pcs</th>
                           <th className="border border-slate-200 px-2 py-1.5 text-right font-black">Weight (g)</th>
-                          <th className="border border-slate-200 px-2 py-1.5 text-right font-black">LC/pc</th>
-                          <th className="border border-slate-200 px-2 py-1.5 text-right font-black">T. LC</th>
+                          {!isRetail && (
+                            <>
+                              <th className="border border-slate-200 px-2 py-1.5 text-right font-black">LC/pc</th>
+                              <th className="border border-slate-200 px-2 py-1.5 text-right font-black">T. LC</th>
+                            </>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
@@ -355,8 +361,12 @@ const PrintView = ({ bill, onClose }) => {
                               <td className="border border-slate-200 px-2 py-1.5">{item.size_label}</td>
                               <td className="border border-slate-200 px-2 py-1.5 text-center font-bold">{pcs}</td>
                               <td className="border border-slate-200 px-2 py-1.5 text-right">{fmt(weight, 4)}</td>
-                              <td className="border border-slate-200 px-2 py-1.5 text-right">{fmt(item.lc_pp, 0)}</td>
-                              <td className="border border-slate-200 px-2 py-1.5 text-right font-semibold">{fmt(lc, 0)}</td>
+                              {!isRetail && (
+                                <>
+                                  <td className="border border-slate-200 px-2 py-1.5 text-right">{fmt(item.lc_pp, 0)}</td>
+                                  <td className="border border-slate-200 px-2 py-1.5 text-right font-semibold">{fmt(lc, 0)}</td>
+                                </>
+                              )}
                             </tr>
                           );
                         })}
@@ -372,36 +382,42 @@ const PrintView = ({ bill, onClose }) => {
         {/* Summary */}
         <div className="ml-auto w-72 text-sm space-y-1 border border-slate-200 rounded-xl p-4 mt-4">
           {[
-            ["Total Pcs",    summary.totalPcs, false],
-            ["Total Weight", `${fmt(summary.totalWeight, 4)}g`, false],
-            ["Labour Total", fmtMoney(summary.labourTotal), false],
+            ["Total Pcs",    String(summary.totalPcs)],
+            ["Total Weight", `${fmt(summary.totalWeight, 4)}g`],
+            // Labour Total is hidden for retail — it's included in Final Payable
+            ...(!isRetail ? [["Labour Total", fmtMoney(summary.labourTotal)]] : []),
           ].map(([label, value]) => (
             <div key={label} className="flex justify-between py-1 border-b border-slate-100">
               <span className="text-slate-600">{label}</span>
               <span className="font-bold">{value}</span>
             </div>
           ))}
-          {Object.entries(summary.requiredMetal || {}).map(([mt, required]) => (
-            <div key={mt} className="py-1 border-b border-slate-100">
-              <div className="flex justify-between"><span className="text-slate-600">{mt} Required</span><span className="font-bold">{fmt(required || 0, 4)}g</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">{mt} Received</span><span className="font-bold">{fmt(summary.metalReceived?.[mt] || 0, 4)}g</span></div>
-              <div className="flex justify-between">
-                <span className="text-slate-600">{mt} Metal Due</span>
-                <span className={`font-bold ${(summary.metalDueUnsettled?.[mt] || 0) > 0 ? "text-rose-700" : ""}`}>
-                  {fmt(summary.metalDueUnsettled?.[mt] || 0, 4)}g
-                </span>
+          {Object.entries(summary.requiredMetal || {}).map(([mt, required]) => {
+            if ((required || 0) === 0 && (summary.metalReceived?.[mt] || 0) === 0) return null;
+            return (
+              <div key={mt} className="py-1 border-b border-slate-100">
+                <div className="flex justify-between"><span className="text-slate-600">{mt} Needed</span><span className="font-bold">{fmt(required || 0, 4)}g</span></div>
+                {(summary.metalReceived?.[mt] || 0) > 0 && (
+                  <div className="flex justify-between"><span className="text-slate-600">{mt} Received</span><span className="font-bold">{fmt(summary.metalReceived?.[mt] || 0, 4)}g</span></div>
+                )}
+                {(summary.metalDueUnsettled?.[mt] || 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">{mt} Still Owed</span>
+                    <span className="font-bold text-rose-700">{fmt(summary.metalDueUnsettled?.[mt] || 0, 4)}g</span>
+                  </div>
+                )}
+                {(summary.metalShortfallSettled?.[mt] || 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 italic text-xs">&#8627; Paid in Cash</span>
+                    <span className="font-bold text-amber-700">{fmt(summary.metalShortfallSettled?.[mt], 4)}g</span>
+                  </div>
+                )}
+                {(summary.metalCredit?.[mt] || 0) > 0 && (
+                  <div className="flex justify-between"><span className="text-slate-600">{mt} Extra Metal</span><span className="font-bold text-emerald-700">{fmt(summary.metalCredit?.[mt] || 0, 4)}g</span></div>
+                )}
               </div>
-              {(summary.metalShortfallSettled?.[mt] || 0) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-slate-400 italic text-xs">&#8627; {mt} Settled in Cash</span>
-                  <span className="font-bold text-amber-700">{fmt(summary.metalShortfallSettled?.[mt], 4)}g</span>
-                </div>
-              )}
-              {(summary.metalCredit?.[mt] || 0) > 0 && (
-                <div className="flex justify-between"><span className="text-slate-600">{mt} Excess</span><span className="font-bold text-emerald-700">{fmt(summary.metalCredit?.[mt] || 0, 4)}g</span></div>
-              )}
-            </div>
-          ))}
+            );
+          })}
           <div className="flex justify-between py-1 border-b border-slate-100">
             <span className="text-slate-600">Money Received</span>
             <span className="font-bold">{fmtMoney(summary.moneyPaid)}</span>
@@ -419,24 +435,26 @@ const PrintView = ({ bill, onClose }) => {
           {/* Settlement outcome — single authoritative row */}
           {summary.amountGiven > 0 ? (
             <div className="flex justify-between py-1.5 font-black text-base text-amber-700">
-              <span>Amount Given to Customer</span>
+              <span>Return to Customer</span>
               <span>{fmtMoney(summary.amountGiven)}</span>
             </div>
           ) : summary.refundDue > 0 ? (
             <div className="flex justify-between py-1.5 font-black text-base text-emerald-700">
-              <span>Refund Due</span>
+              <span>Cash Refund</span>
               <span>{fmtMoney(summary.refundDue)}</span>
             </div>
           ) : (
             <>
               <div className="flex justify-between py-1 border-b border-slate-200 font-black text-base">
-                <span>Balance Due</span>
+                <span>Cash Remaining</span>
                 <span>{fmtMoney(summary.amountDue)}</span>
               </div>
-              <div className="flex justify-between py-1.5 font-semibold text-sm">
-                <span className="text-slate-600">Metal Due</span>
-                <span>{Object.values(summary.metalDueUnsettled || {}).some((v) => v > 0) ? "See above" : "Clear"}</span>
-              </div>
+              {Object.values(summary.metalDueUnsettled || {}).some((v) => v > 0) && (
+                <div className="flex justify-between py-1.5 font-semibold text-sm">
+                  <span className="text-slate-600">Metal Still Owed</span>
+                  <span className="text-rose-700">See above</span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -584,6 +602,7 @@ export default function OrderBills() {
   const { versions, markDirty } = useSellingSync();
   const initialSelectedDateRef = useRef(getTodayLocalISO());
   const latestBillsRequestRef = useRef(0);
+  const dateDebounceRef = useRef(null);
 
 // --- State ---
   const [view, setView] = useState("list");
@@ -595,6 +614,8 @@ export default function OrderBills() {
   const [listPage, setListPage]   = useState(1);
   const [listSort, setListSort]   = useState("newest");
   const [selectedDate, setSelectedDate] = useState(initialSelectedDateRef.current);
+  // Separate display value for the date input so typing doesn't trigger fetches mid-edit
+  const [dateInputValue, setDateInputValue] = useState(initialSelectedDateRef.current);
 
 // --- State ---
   const [groupedCharges, setGroupedCharges] = useState({});
@@ -634,7 +655,8 @@ export default function OrderBills() {
     const requestId = latestBillsRequestRef.current + 1;
     latestBillsRequestRef.current = requestId;
     setListLoading(true);
-    setBills([]);
+    // Do NOT clear bills here — keep existing rows visible while the new date loads.
+    // This prevents the table flash and makes date navigation feel instant.
 
     try {
       const data = await listOrderBills(date ? { date } : {});
@@ -751,6 +773,10 @@ export default function OrderBills() {
 
   // Reset search when date changes so the new day opens clean
   useEffect(() => { setListSearch(""); }, [selectedDate]);
+
+  // Keep the date input display value in sync when selectedDate changes programmatically
+  // (e.g. from prev/next buttons or after save)
+  useEffect(() => { setDateInputValue(selectedDate); }, [selectedDate]);
 
   // Stats scoped to the selected day
   const listStats = useMemo(() => ({
@@ -1105,8 +1131,25 @@ export default function OrderBills() {
               </button>
               <input
                 type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                value={dateInputValue}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDateInputValue(val);
+                  // Debounce: only commit to selectedDate once the user stops typing
+                  // (also fires immediately when using the browser date-picker)
+                  clearTimeout(dateDebounceRef.current);
+                  if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                    dateDebounceRef.current = setTimeout(() => setSelectedDate(val), 300);
+                  }
+                }}
+                onBlur={(e) => {
+                  // Commit on blur in case debounce hasn't fired yet
+                  const val = e.target.value;
+                  if (val && /^\d{4}-\d{2}-\d{2}$/.test(val) && val !== selectedDate) {
+                    clearTimeout(dateDebounceRef.current);
+                    setSelectedDate(val);
+                  }
+                }}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 font-semibold text-slate-700"
               />
               <button
@@ -1117,26 +1160,29 @@ export default function OrderBills() {
                 <ChevronRight size={16} />
               </button>
             </div>
-            <div className="text-xs text-slate-500 font-semibold">
-              Showing estimates for {fmtDate(selectedDate)}
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
+              <span>{fmtDate(selectedDate)}</span>
+              {listLoading && (
+                <div className="w-3.5 h-3.5 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin flex-shrink-0" />
+              )}
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2.5">
             <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              value={listSearch}
-              onChange={(e) => setListSearch(e.target.value)}
-              placeholder="Search by estimate no., customer name, or date..."
-              className="w-full pl-8 pr-8 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 placeholder:text-slate-400"
-            />
-            {listSearch && (
-              <button onClick={() => setListSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X size={13} />
-              </button>
-            )}
-          </div>
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={listSearch}
+                onChange={(e) => setListSearch(e.target.value)}
+                placeholder="Search by estimate no., customer name..."
+                className="w-full pl-8 pr-8 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 placeholder:text-slate-400"
+              />
+              {listSearch && (
+                <button onClick={() => setListSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <SortAsc size={14} className="text-slate-400 flex-shrink-0" />
               <select
@@ -1153,17 +1199,13 @@ export default function OrderBills() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {listLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
-                <div className="w-7 h-7 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-              </div>
-              <div className="text-center">
-                <p className="font-bold text-slate-500">Loading estimates for {fmtDate(selectedDate)}</p>
-                <p className="text-sm text-slate-400 mt-1">The table is refreshed day-wise for better visibility.</p>
-              </div>
+        {/* Table — always rendered; date changes show inline spinner, no full-page flash */}
+        <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-opacity duration-150 ${listLoading && bills.length > 0 ? "opacity-60 pointer-events-none" : ""}`}>
+          {listLoading && bills.length === 0 ? (
+            // First-time load: compact spinner
+            <div className="flex items-center justify-center gap-3 py-14">
+              <div className="w-5 h-5 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+              <p className="text-sm font-semibold text-slate-400">Loading…</p>
             </div>
           ) : (
             <>
