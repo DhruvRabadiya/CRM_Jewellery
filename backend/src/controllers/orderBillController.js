@@ -33,7 +33,7 @@ const getNextNo = async (req, res) => {
 
 const listBills = async (req, res) => {
   try {
-    const bills = await svc.listBills();
+    const bills = await svc.listBills({ date: req.query?.date });
     return formatResponse(res, 200, true, "Estimates fetched", bills);
   } catch (err) {
     return handleEstimateError(res, err);

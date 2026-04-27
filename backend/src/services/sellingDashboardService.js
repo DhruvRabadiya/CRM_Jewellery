@@ -43,7 +43,7 @@ const getDashboard = async () => {
   const cashRow = await get(
     `SELECT
         ROUND(COALESCE(SUM(CASE WHEN mode = 'Cash'   THEN amount ELSE 0 END), 0), 2) AS cash_total,
-        ROUND(COALESCE(SUM(CASE WHEN mode = 'Online' THEN amount ELSE 0 END), 0), 2) AS online_total
+        ROUND(COALESCE(SUM(CASE WHEN mode = 'Bank / UPI' THEN amount ELSE 0 END), 0), 2) AS online_total
      FROM counter_cash_ledger`
   );
 

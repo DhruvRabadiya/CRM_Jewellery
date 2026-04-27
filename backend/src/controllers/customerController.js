@@ -12,7 +12,20 @@ const isValidPhone = (phone) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, paginate, page, limit } = req.query;
+
+    // When the caller requests paginated data (paginate=true) we return
+    // { customers, total, page, limit } so the UI can render page controls.
+    // All other callers get the original flat array, preserving backward compat.
+    if (paginate === "true") {
+      const result = await customerService.getAllCustomersPaginated(
+        search?.trim() || "",
+        page,
+        limit
+      );
+      return formatResponse(res, 200, true, "Customers fetched", result);
+    }
+
     let customers;
     if (search && search.trim()) {
       customers = await customerService.searchCustomers(search.trim());

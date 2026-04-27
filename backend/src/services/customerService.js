@@ -1,4 +1,11 @@
 const db = require("../../config/dbConfig");
+const {
+  METAL_PAYMENT_TYPES,
+  METAL_PURITY,
+  createEmptyMetalMap,
+  roundMoney,
+  roundWeight,
+} = require("../utils/sellingPayments");
 
 const getAllCustomers = () => {
   return new Promise((resolve, reject) => {
@@ -63,18 +70,25 @@ const deleteCustomer = (id) => {
   });
 };
 
+const groupMetalDelta = (bucket, metalType, value, direction) => {
+  if (!metalType || !value) return;
+  if (!bucket[metalType]) bucket[metalType] = { debit: 0, credit: 0 };
+  bucket[metalType][direction] = roundWeight((bucket[metalType][direction] || 0) + Math.abs(value));
+};
+
 const getCustomerStatementSummary = (entries = []) => {
   const grouped = [];
   const groupedMap = new Map();
-  let runningBalance = 0;
+  let runningCashBalance = 0;
+  const runningMetalBalances = createEmptyMetalMap();
 
   entries.forEach((row) => {
-    const amountDelta = parseFloat(row.amount_delta) || 0;
-    const weightDelta = parseFloat(row.weight_delta) || 0;
+    const amountDelta = roundMoney(row.amount_delta);
+    const weightDelta = roundWeight(row.weight_delta);
     const transactionType =
       row.transaction_type ||
       (row.reference_type === "ORDER_BILL" ? "Estimate" : row.line_type?.startsWith("PAYMENT") ? "Payment" : "Adjustment");
-    const entryMode = row.payment_mode || (row.line_type === "PAYMENT_ONLINE" ? "Online" : row.line_type === "PAYMENT_CASH" ? "Cash" : "");
+    const entryMode = row.payment_mode || "";
     const groupKey =
       row.reference_id && row.reference_type === "ORDER_BILL"
         ? `${row.reference_type}:${row.reference_id}`
@@ -92,26 +106,43 @@ const getCustomerStatementSummary = (entries = []) => {
         notes: row.notes || "",
         debit_amount: 0,
         credit_amount: 0,
-        raw_amount_delta: 0,
+        cash_received: 0,
+        bank_received: 0,
+        cash_returned: 0,
+        metal_debits: {},
+        metal_credits: {},
         metal_movements: [],
       });
       grouped.push(groupedMap.get(groupKey));
     }
 
     const group = groupedMap.get(groupKey);
-    group.raw_amount_delta = parseFloat((group.raw_amount_delta + amountDelta).toFixed(2));
+    if (entryMode && !group.payment_mode) group.payment_mode = entryMode;
 
     if (amountDelta > 0) {
-      group.debit_amount = parseFloat((group.debit_amount + amountDelta).toFixed(2));
+      group.debit_amount = roundMoney(group.debit_amount + amountDelta);
     } else if (amountDelta < 0) {
-      group.credit_amount = parseFloat((group.credit_amount + Math.abs(amountDelta)).toFixed(2));
+      group.credit_amount = roundMoney(group.credit_amount + Math.abs(amountDelta));
+    }
+
+    if (row.line_type === "PAYMENT_CASH" && amountDelta < 0) {
+      group.cash_received = roundMoney(group.cash_received + Math.abs(amountDelta));
+    }
+    if (row.line_type === "PAYMENT_BANK" && amountDelta < 0) {
+      group.bank_received = roundMoney(group.bank_received + Math.abs(amountDelta));
+    }
+    if (row.line_type === "REFUND_CASH_OUT" && amountDelta > 0) {
+      group.cash_returned = roundMoney(group.cash_returned + amountDelta);
     }
 
     if (row.metal_type && weightDelta !== 0) {
+      if (weightDelta > 0) groupMetalDelta(group.metal_debits, row.metal_type, weightDelta, "debit");
+      if (weightDelta < 0) groupMetalDelta(group.metal_credits, row.metal_type, weightDelta, "credit");
       group.metal_movements.push({
         metal_type: row.metal_type,
-        weight_delta: weightDelta,
         metal_purity: row.metal_purity || "",
+        reference_rate: roundMoney(row.reference_rate),
+        weight_delta: weightDelta,
       });
     }
   });
@@ -124,40 +155,92 @@ const getCustomerStatementSummary = (entries = []) => {
       return String(a.transaction_date).localeCompare(String(b.transaction_date));
     })
     .map((row) => {
-      runningBalance = parseFloat((runningBalance + row.debit_amount - row.credit_amount).toFixed(2));
-      const txnNet = parseFloat((row.debit_amount - row.credit_amount).toFixed(2));
-      let paymentStatus = "Completed";
+      runningCashBalance = roundMoney(runningCashBalance + row.debit_amount - row.credit_amount);
 
-      if (row.transaction_type === "Estimate" || row.transaction_type === "Sale") {
-        if (txnNet > 0 && row.credit_amount === 0) {
-          paymentStatus = "Pending";
-        } else if (txnNet > 0 && row.credit_amount > 0) {
-          paymentStatus = "Partial";
-        } else {
-          paymentStatus = "Completed";
+      const nextMetalBalances = { ...runningMetalBalances };
+      METAL_PAYMENT_TYPES.forEach((metalType) => {
+        const debit = roundWeight(row.metal_debits?.[metalType]?.debit || 0);
+        const credit = roundWeight(row.metal_credits?.[metalType]?.credit || 0);
+        nextMetalBalances[metalType] = roundWeight((nextMetalBalances[metalType] || 0) + debit - credit);
+      });
+
+      Object.assign(runningMetalBalances, nextMetalBalances);
+
+      const hasMetalDue = METAL_PAYMENT_TYPES.some((metalType) => (nextMetalBalances[metalType] || 0) > 0);
+      const rowHasPartialMetal = METAL_PAYMENT_TYPES.some((metalType) => {
+        const debit = row.metal_debits?.[metalType]?.debit || 0;
+        const credit = row.metal_credits?.[metalType]?.credit || 0;
+        return debit > 0 && credit > 0 && credit < debit;
+      });
+
+      let paymentStatus = "Completed";
+      if (["Estimate", "Sale"].includes(row.transaction_type)) {
+        const hasCashDue = row.debit_amount > row.credit_amount;
+        if (hasCashDue || hasMetalDue) {
+          paymentStatus = row.credit_amount > 0 || rowHasPartialMetal ? "Partial" : "Pending";
         }
-      } else if (row.transaction_type === "Payment" && row.credit_amount > 0) {
-        paymentStatus = "Completed";
       }
 
       return {
         ...row,
-        running_balance: runningBalance,
+        running_balance: runningCashBalance,
+        running_cash_balance: runningCashBalance,
+        running_metal_balances: { ...nextMetalBalances },
         payment_status: paymentStatus,
       };
     });
 
-  const totalDebit = statement.reduce((sum, row) => sum + (parseFloat(row.debit_amount) || 0), 0);
-  const totalCredit = statement.reduce((sum, row) => sum + (parseFloat(row.credit_amount) || 0), 0);
+  const totalDebit = statement.reduce((sum, row) => sum + (row.debit_amount || 0), 0);
+  const totalCredit = statement.reduce((sum, row) => sum + (row.credit_amount || 0), 0);
 
   return {
     statement,
     summary: {
-      total_payable: parseFloat(totalDebit.toFixed(2)),
-      total_paid: parseFloat(totalCredit.toFixed(2)),
-      remaining_balance: Math.max(parseFloat((totalDebit - totalCredit).toFixed(2)), 0),
+      total_payable: roundMoney(totalDebit),
+      total_paid: roundMoney(totalCredit),
+      remaining_balance: Math.max(roundMoney(totalDebit - totalCredit), 0),
+      metal_balances: { ...runningMetalBalances },
     },
   };
+};
+
+const getAllCustomersPaginated = (search, page, limit) => {
+  const safePage = Math.max(1, parseInt(page, 10) || 1);
+  const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 15));
+  const offset = (safePage - 1) * safeLimit;
+
+  return new Promise((resolve, reject) => {
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      const countSql = `SELECT COUNT(*) AS total FROM customers
+                        WHERE party_name LIKE ? OR firm_name LIKE ? OR city LIKE ? OR phone_no LIKE ?`;
+      const dataSql = `SELECT * FROM customers
+                        WHERE party_name LIKE ? OR firm_name LIKE ? OR city LIKE ? OR phone_no LIKE ?
+                        ORDER BY party_name ASC LIMIT ? OFFSET ?`;
+
+      db.get(countSql, [term, term, term, term], (err, countRow) => {
+        if (err) return reject(err);
+        const total = countRow?.total || 0;
+        db.all(dataSql, [term, term, term, term, safeLimit, offset], (err2, rows) => {
+          if (err2) return reject(err2);
+          resolve({ customers: rows || [], total, page: safePage, limit: safeLimit });
+        });
+      });
+    } else {
+      db.get(`SELECT COUNT(*) AS total FROM customers`, [], (err, countRow) => {
+        if (err) return reject(err);
+        const total = countRow?.total || 0;
+        db.all(
+          `SELECT * FROM customers ORDER BY party_name ASC LIMIT ? OFFSET ?`,
+          [safeLimit, offset],
+          (err2, rows) => {
+            if (err2) return reject(err2);
+            resolve({ customers: rows || [], total, page: safePage, limit: safeLimit });
+          }
+        );
+      });
+    }
+  });
 };
 
 const searchCustomers = (searchTerm) => {
@@ -171,7 +254,6 @@ const searchCustomers = (searchTerm) => {
   });
 };
 
-// Look up a customer by exact phone number. Returns row or null.
 const getCustomerByPhone = (phone_no) => {
   return new Promise((resolve, reject) => {
     if (!phone_no) return resolve(null);
@@ -186,8 +268,6 @@ const getCustomerByPhone = (phone_no) => {
   });
 };
 
-// Find-or-create a customer by phone number. Used by auto-create during billing.
-// Only creates when phone + party_name are both provided. Returns the customer row (existing or new).
 const findOrCreateByPhone = async ({ party_name, phone_no, address, city, firm_name, telephone_no, customer_type }) => {
   const trimmedPhone = (phone_no || "").toString().trim();
   const trimmedName = (party_name || "").toString().trim();
@@ -220,16 +300,16 @@ const getCustomerLedger = (id) => {
         if (err) return reject(err);
 
         let runningAmountBalance = 0;
-        const runningMetalBalances = { "Gold 24K": 0, "Gold 22K": 0, Silver: 0 };
+        const runningMetalBalances = createEmptyMetalMap();
 
         const entries = (rows || []).map((row) => {
-          const amountDelta = parseFloat(row.amount_delta) || 0;
-          const weightDelta = parseFloat(row.weight_delta) || 0;
-          runningAmountBalance = parseFloat((runningAmountBalance + amountDelta).toFixed(2));
+          const amountDelta = roundMoney(row.amount_delta);
+          const weightDelta = roundWeight(row.weight_delta);
+          runningAmountBalance = roundMoney(runningAmountBalance + amountDelta);
 
           if (row.metal_type) {
-            runningMetalBalances[row.metal_type] = parseFloat(
-              ((runningMetalBalances[row.metal_type] || 0) + weightDelta).toFixed(4)
+            runningMetalBalances[row.metal_type] = roundWeight(
+              (runningMetalBalances[row.metal_type] || 0) + weightDelta
             );
           }
 
@@ -237,6 +317,7 @@ const getCustomerLedger = (id) => {
             ...row,
             amount_delta: amountDelta,
             weight_delta: weightDelta,
+            reference_rate: roundMoney(row.reference_rate),
             running_amount_balance: runningAmountBalance,
             running_metal_balances: { ...runningMetalBalances },
           };
@@ -248,7 +329,7 @@ const getCustomerLedger = (id) => {
           entries,
           summary: {
             outstanding_amount: Math.max(runningAmountBalance, 0),
-            metal_balances: runningMetalBalances,
+            metal_balances: { ...runningMetalBalances },
           },
           statement: statement.statement,
           ledger_summary: statement.summary,
@@ -266,7 +347,12 @@ const createLedgerEntry = (customerId, payload) =>
     const referenceNo = (payload.reference_no || "").trim();
     const paymentMode = (payload.payment_mode || "").trim();
     const amount = Math.max(0, parseFloat(payload.amount) || 0);
+    const weight = Math.max(0, parseFloat(payload.weight) || 0);
+    const balanceType = payload.balance_type === "Metal" ? "Metal" : "Money";
     const adjustmentDirection = payload.adjustment_direction === "debit" ? "debit" : "credit";
+    const metalType = String(payload.metal_type || "").trim();
+    const metalPurity = String(payload.metal_purity || METAL_PURITY[metalType] || "").trim();
+    const referenceRate = roundMoney(payload.reference_rate);
 
     if (!entryDate) {
       throw new Error("Transaction date is required");
@@ -274,47 +360,92 @@ const createLedgerEntry = (customerId, payload) =>
     if (!["Payment", "Adjustment"].includes(transactionType)) {
       throw new Error("Invalid transaction type");
     }
-    if (amount <= 0) {
-      throw new Error("Amount must be greater than zero");
-    }
 
     let lineType = "ADJUSTMENT";
     let amountDelta = 0;
+    let weightDelta = 0;
     let cashLedgerMode = "";
+    let effectivePaymentMode = "";
 
     if (transactionType === "Payment") {
-      cashLedgerMode = paymentMode === "Online" ? "Online" : "Cash";
-      lineType = cashLedgerMode === "Online" ? "PAYMENT_ONLINE" : "PAYMENT_CASH";
-      amountDelta = -amount;
+      if (paymentMode === "Metal") {
+        if (!METAL_PAYMENT_TYPES.includes(metalType)) {
+          throw new Error("Valid metal type is required");
+        }
+        if (weight <= 0) {
+          throw new Error("Metal weight must be greater than zero");
+        }
+        lineType = "PAYMENT_METAL";
+        effectivePaymentMode = "Metal";
+        weightDelta = -roundWeight(weight);
+      } else {
+        if (amount <= 0) {
+          throw new Error("Amount must be greater than zero");
+        }
+        cashLedgerMode = paymentMode === "Bank / UPI" ? "Bank / UPI" : "Cash";
+        effectivePaymentMode = cashLedgerMode;
+        lineType = cashLedgerMode === "Bank / UPI" ? "PAYMENT_BANK" : "PAYMENT_CASH";
+        amountDelta = -roundMoney(amount);
+      }
+    } else if (balanceType === "Metal") {
+      if (!METAL_PAYMENT_TYPES.includes(metalType)) {
+        throw new Error("Valid metal type is required");
+      }
+      if (weight <= 0) {
+        throw new Error("Metal weight must be greater than zero");
+      }
+      effectivePaymentMode = "Metal";
+      lineType = adjustmentDirection === "debit" ? "ADJUSTMENT_METAL_DEBIT" : "ADJUSTMENT_METAL_CREDIT";
+      weightDelta = adjustmentDirection === "debit" ? roundWeight(weight) : -roundWeight(weight);
     } else {
+      if (amount <= 0) {
+        throw new Error("Amount must be greater than zero");
+      }
       lineType = adjustmentDirection === "debit" ? "ADJUSTMENT_DEBIT" : "ADJUSTMENT_CREDIT";
-      amountDelta = adjustmentDirection === "debit" ? amount : -amount;
+      amountDelta = adjustmentDirection === "debit" ? roundMoney(amount) : -roundMoney(amount);
     }
 
     const referenceType = "CUSTOMER_LEDGER";
     const { lastID } = await run(
       `INSERT INTO customer_ledger_entries
-        (customer_id, entry_date, reference_type, reference_no, transaction_type, payment_mode, line_type, amount_delta, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (customer_id, entry_date, reference_type, reference_no, transaction_type, payment_mode, line_type, metal_type, metal_purity, reference_rate, weight_delta, amount_delta, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customerId,
         entryDate,
         referenceType,
         referenceNo,
         transactionType,
-        transactionType === "Payment" ? cashLedgerMode : "",
+        effectivePaymentMode,
         lineType,
+        effectivePaymentMode === "Metal" ? metalType : "",
+        effectivePaymentMode === "Metal" ? metalPurity : "",
+        effectivePaymentMode === "Metal" ? referenceRate : 0,
+        weightDelta,
         amountDelta,
         notes,
       ]
     );
 
-    if (transactionType === "Payment") {
+    if (transactionType === "Payment" && cashLedgerMode) {
       await run(
         `INSERT INTO counter_cash_ledger
           (entry_date, reference_type, reference_id, reference_no, mode, amount, notes)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [entryDate, referenceType, lastID, referenceNo, cashLedgerMode, amount, notes || "Customer payment"]
+        [entryDate, referenceType, lastID, referenceNo, cashLedgerMode, roundMoney(amount), notes || "Customer payment"]
+      );
+    }
+
+    if (transactionType === "Payment" && effectivePaymentMode === "Metal") {
+      await run(
+        `INSERT INTO stock_transactions
+          (date, metal_type, transaction_type, weight, description, reference_type, reference_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          entryDate, metalType, "CUSTOMER_METAL_IN", roundWeight(weight),
+          "Customer metal payment",
+          referenceType, lastID,
+        ]
       );
     }
 
@@ -331,6 +462,7 @@ const createLedgerEntry = (customerId, payload) =>
 
 module.exports = {
   getAllCustomers,
+  getAllCustomersPaginated,
   getCustomerById,
   getCustomerByPhone,
   findOrCreateByPhone,

@@ -5,8 +5,8 @@ const BASE = "/estimates";
 export const getNextObNo = () =>
   axios.get(`${BASE}/next-no`).then((r) => r.data?.data || r.data);
 
-export const listOrderBills = () =>
-  axios.get(BASE).then((r) => r.data?.data || r.data || []);
+export const listOrderBills = (params = {}) =>
+  axios.get(BASE, { params }).then((r) => r.data?.data || r.data || []);
 
 export const getOrderBill = (id) =>
   axios.get(`${BASE}/${id}`).then((r) => r.data?.data || r.data);

@@ -25,7 +25,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ charset: 'utf-8' }));
+app.use(bodyParser.text({ charset: 'utf-8' }));
+app.use((req, res, next) => {
+  res.set('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
 
 // Public Auth routes (login)
 app.use("/api/auth", authRoutes);

@@ -623,6 +623,7 @@ db.serialize(() => {
       line_type TEXT NOT NULL,
       metal_type TEXT DEFAULT '',
       metal_purity TEXT DEFAULT '',
+      reference_rate REAL DEFAULT 0,
       weight_delta REAL DEFAULT 0,
       amount_delta REAL DEFAULT 0,
       notes TEXT DEFAULT '',
@@ -725,6 +726,12 @@ db.serialize(() => {
           else console.log('Added payment_mode to customer_ledger_entries');
         });
       }
+      if (!columns.some((c) => c.name === 'reference_rate')) {
+        db.run(`ALTER TABLE customer_ledger_entries ADD COLUMN reference_rate REAL DEFAULT 0`, (e) => {
+          if (e) console.error('Error adding reference_rate to customer_ledger_entries:', e.message);
+          else console.log('Added reference_rate to customer_ledger_entries');
+        });
+      }
     }
   });
 
@@ -779,6 +786,8 @@ db.serialize(() => {
       cash_amount REAL DEFAULT 0,
       online_amount REAL DEFAULT 0,
       payment_mode TEXT DEFAULT 'Cash',
+      payment_entries TEXT DEFAULT '[]',
+      balance_snapshot TEXT DEFAULT '{}',
       total_pcs INTEGER DEFAULT 0,
       total_weight REAL DEFAULT 0,
       labour_total REAL DEFAULT 0,
@@ -865,6 +874,8 @@ db.serialize(() => {
       const hasCashAmount   = columns.some((c) => c.name === 'cash_amount');
       const hasOnlineAmount = columns.some((c) => c.name === 'online_amount');
       const hasPaymentMode  = columns.some((c) => c.name === 'payment_mode');
+      const hasPaymentEntries = columns.some((c) => c.name === 'payment_entries');
+      const hasBalanceSnapshot = columns.some((c) => c.name === 'balance_snapshot');
       const hasCustAddress  = columns.some((c) => c.name === 'customer_address');
 
       if (!hasCustomerId) {
@@ -898,6 +909,18 @@ db.serialize(() => {
         db.run(`ALTER TABLE order_bills ADD COLUMN payment_mode TEXT DEFAULT 'Cash'`, (e) => {
           if (e) console.error('Migration payment_mode:', e.message);
           else console.log("Added payment_mode column to order_bills (default 'Cash')");
+        });
+      }
+      if (!hasPaymentEntries) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN payment_entries TEXT DEFAULT '[]'`, (e) => {
+          if (e) console.error('Migration payment_entries:', e.message);
+          else console.log('Added payment_entries column to order_bills');
+        });
+      }
+      if (!hasBalanceSnapshot) {
+        db.run(`ALTER TABLE order_bills ADD COLUMN balance_snapshot TEXT DEFAULT '{}'`, (e) => {
+          if (e) console.error('Migration balance_snapshot:', e.message);
+          else console.log('Added balance_snapshot column to order_bills');
         });
       }
       if (!hasCustAddress) {

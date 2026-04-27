@@ -12,6 +12,21 @@ export const getCustomers = async (search = "") => {
   }
 };
 
+/**
+ * Paginated customer fetch used by the Ledger page.
+ * Returns { data: { customers, total, page, limit } }
+ */
+export const getCustomersPaginated = async (search = "", page = 1, limit = 15) => {
+  try {
+    const params = { paginate: "true", page, limit };
+    if (search) params.search = search;
+    const response = await api.get(API_URL, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export const getCustomerById = async (id) => {
   try {
     const response = await api.get(`${API_URL}/${id}`);

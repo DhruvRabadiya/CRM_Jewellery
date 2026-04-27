@@ -85,6 +85,19 @@ const _buildAvailabilityMap = (rows = []) => {
     exact.set(exactKey, (exact.get(exactKey) || 0) + normalized.total_pieces);
     legacySize.set(sizeKey, (legacySize.get(sizeKey) || 0) + normalized.total_pieces);
     legacyCategory.set(categoryKey, (legacyCategory.get(categoryKey) || 0) + normalized.total_pieces);
+
+    // For Silver items with suffixes (e.g., "10g -C|B", "10g COLOUR"), also create a base size key
+    // This allows matching with labour charges that only have the base size (e.g., "10g")
+    if (normalized.metal_type === "Silver") {
+      // Extract base size: "10g -C|B" -> "10g", "100g COLOUR" -> "100g"
+      const baseSize = normalized.size_label.split(/\s+/)[0]; // Get first part before space
+      if (baseSize !== normalized.size_label) {
+        const baseSizeKey = `${normalized.metal_type}::${baseSize}`;
+        const baseCategoryKey = `${normalized.metal_type}::${baseSize}`;
+        legacySize.set(baseSizeKey, (legacySize.get(baseSizeKey) || 0) + normalized.total_pieces);
+        legacyCategory.set(baseCategoryKey, (legacyCategory.get(baseCategoryKey) || 0) + normalized.total_pieces);
+      }
+    }
   });
 
   return { exact, legacySize, legacyCategory };
@@ -98,7 +111,7 @@ const getStockValidation = async (items = [], options = {}) => {
       size_label: item.size_label || "",
       pcs: parseInt(item.pcs, 10) || 0,
     }))
-    .filter((item) => item.metal_type && item.category && item.size_label && item.pcs > 0);
+    .filter((item) => item.metal_type && item.category && item.size_label);
 
   if (!normalizedItems.length) {
     return {
