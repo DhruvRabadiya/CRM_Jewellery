@@ -15,7 +15,7 @@ const StockManagement = () => {
   const [stock, setStock] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [ledger, setLedger] = useState([]);
-  const [activeTab, setActiveTab] = useState("Gold 22K");
+  const [activeTab, setActiveTab] = useState("Gold 24K");
   const [loading, setLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -204,12 +204,6 @@ const StockManagement = () => {
           </div>
           <div className="flex bg-gray-100 rounded-lg p-1 text-sm font-semibold">
             <button
-              onClick={() => setActiveTab("Gold 22K")}
-              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 22K" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Gold 22K
-            </button>
-            <button
               onClick={() => setActiveTab("Gold 24K")}
               className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 24K" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
@@ -220,6 +214,12 @@ const StockManagement = () => {
               className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Silver" ? "bg-white text-gray-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
               Silver
+            </button>
+            <button
+              onClick={() => setActiveTab("Gold 22K")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 22K" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Gold 22K
             </button>
           </div>
         </div>
@@ -299,12 +299,6 @@ const StockManagement = () => {
           </div>
           <div className="flex bg-gray-100 rounded-lg p-1 text-sm font-semibold">
             <button
-              onClick={() => setActiveTab("Gold 22K")}
-              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 22K" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Gold 22K
-            </button>
-            <button
               onClick={() => setActiveTab("Gold 24K")}
               className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 24K" ? "bg-white text-yellow-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
@@ -315,6 +309,12 @@ const StockManagement = () => {
               className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Silver" ? "bg-white text-gray-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
               Silver
+            </button>
+            <button
+              onClick={() => setActiveTab("Gold 22K")}
+              className={`px-4 py-1.5 rounded-md transition-colors ${activeTab === "Gold 22K" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Gold 22K
             </button>
           </div>
         </div>

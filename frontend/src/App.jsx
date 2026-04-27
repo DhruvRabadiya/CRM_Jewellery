@@ -13,6 +13,11 @@ import ModeSelection from "./pages/ModeSelection";
 import SellingLayout from "./layouts/SellingLayout";
 import SellingCounter from "./pages/SellingCounter";
 import SvgCounter from "./pages/SvgCounter";
+import Customers from "./pages/Customers";
+import SellingLedger from "./pages/SellingLedger";
+import SellingAdmin from "./pages/SellingAdmin";
+import OrderBills from "./pages/OrderBills";
+import SellingDashboard from "./pages/SellingDashboard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 // Guard wrapper to ensure user is logged in
@@ -54,9 +59,18 @@ function App() {
 
           {/* Protected Routes inside SellingLayout (Selling Mode) */}
           <Route path="/selling" element={<ProtectedRoute><SellingLayout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="stocks" replace />} />
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<SellingDashboard />} />
             <Route path="stocks" element={<SellingCounter />} />
             <Route path="svg" element={<SvgCounter />} />
+            <Route path="customers" element={<Customers />} />
+            <Route path="ledger" element={<SellingLedger />} />
+            {/* Estimate - unified billing module (formerly Order Bills / Selling Counter Billing). */}
+            <Route path="estimate" element={<OrderBills />} />
+            {/* Back-compat: old /selling/order-bills and /selling/billing URLs redirect to /selling/estimate. */}
+            <Route path="order-bills" element={<Navigate to="/selling/estimate" replace />} />
+            <Route path="billing" element={<Navigate to="/selling/estimate" replace />} />
+            <Route path="admin" element={<ProtectedRoute requireAdmin={true}><SellingAdmin /></ProtectedRoute>} />
           </Route>
 
           {/* Fallback */}

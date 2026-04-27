@@ -14,7 +14,15 @@ const formatResponse = (res, statusCode, success, message, data = null) => {
   });
 };
 
-const VALID_METAL_TYPES = ["Gold 22K", "Gold 24K", "Silver"];
+const createAppError = (message, statusCode = 400, code = "APP_ERROR", details = null) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  if (details != null) error.details = details;
+  return error;
+};
+
+const VALID_METAL_TYPES = ["Gold 24K", "Silver", "Gold 22K"];
 
 const isValidMetalType = (metalType) => {
   return VALID_METAL_TYPES.includes(metalType);
@@ -29,6 +37,7 @@ const sanitizePieces = (value) => {
 module.exports = {
   calculateLoss,
   formatResponse,
+  createAppError,
   isValidMetalType,
   sanitizePieces,
 };

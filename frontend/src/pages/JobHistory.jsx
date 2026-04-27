@@ -935,9 +935,9 @@ const JobHistory = () => {
                       })
                     }
                   >
-                    <option value="Gold 22K">Gold 22K</option>
                     <option value="Gold 24K">Gold 24K</option>
                     <option value="Silver">Silver</option>
+                    <option value="Gold 22K">Gold 22K</option>
                   </select>
                 )}
               </div>

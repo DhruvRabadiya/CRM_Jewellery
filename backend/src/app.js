@@ -13,6 +13,11 @@ const pressRoutes = require("./routes/pressRoutes");
 const tppRoutes = require("./routes/tppRoutes");
 const packingRoutes = require("./routes/packingRoutes");
 const svgRoutes = require("./routes/svgRoutes");
+const counterRoutes = require("./routes/counterRoutes");
+const customerRoutes = require("./routes/customerRoutes");
+const sellingDashboardRoutes = require("./routes/sellingDashboardRoutes");
+const labourChargeRoutes = require("./routes/labourChargeRoutes");
+const estimateRoutes = require("./routes/orderBillRoutes");
 const authRoutes = require("./routes/authRoutes");
 const { authenticateToken } = require("./middleware/authMiddleware");
 
@@ -20,7 +25,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ charset: 'utf-8' }));
+app.use(bodyParser.text({ charset: 'utf-8' }));
+app.use((req, res, next) => {
+  res.set('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
 
 // Public Auth routes (login)
 app.use("/api/auth", authRoutes);
@@ -34,6 +44,17 @@ app.use("/api/press", authenticateToken, pressRoutes);
 app.use("/api/tpp", authenticateToken, tppRoutes);
 app.use("/api/packing", authenticateToken, packingRoutes);
 app.use("/api/svg", authenticateToken, svgRoutes);
+app.use("/api/counter", authenticateToken, counterRoutes);
+app.use("/api/customers", authenticateToken, customerRoutes);
+app.use("/api/selling/dashboard", authenticateToken, sellingDashboardRoutes);
+
+// Labour charges - admin-configured Metal > Category > Size rates, used by Estimate.
+app.use("/api/labour-charges", authenticateToken, labourChargeRoutes);
+
+// Estimates (formerly Order Bills / Selling Counter) - unified billing module.
+// Backward-compat alias at /api/order-bills keeps older clients working.
+app.use("/api/estimates", authenticateToken, estimateRoutes);
+app.use("/api/order-bills", authenticateToken, estimateRoutes);
 
 app.get("/", (req, res) => {
   res.send("Jewelry CRM Backend is Running");

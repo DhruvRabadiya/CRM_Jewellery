@@ -4,6 +4,7 @@ module.exports = {
     GOLD_24K: "Gold 24K",
     SILVER: "Silver",
   },
+  METAL_ORDER: ["Gold 24K", "Silver", "Gold 22K"],
   STATUS: {
     PENDING: "PENDING",
     RUNNING: "RUNNING",

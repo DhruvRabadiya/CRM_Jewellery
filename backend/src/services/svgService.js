@@ -26,7 +26,23 @@ const addSvgInventory = (metal_type, target_product, pieces, weight) => {
   });
 };
 
+const getSvgHistory = (limit = 50) =>
+  new Promise((resolve, reject) => {
+    db.all(
+      `SELECT id, metal_type, target_product, pieces, weight, created_at
+       FROM svg_inventory
+       ORDER BY id DESC
+       LIMIT ?`,
+      [limit],
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows || []);
+      }
+    );
+  });
+
 module.exports = {
   getSvgInventory,
   addSvgInventory,
+  getSvgHistory,
 };

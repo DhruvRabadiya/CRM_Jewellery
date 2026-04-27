@@ -471,9 +471,9 @@ const MeltingProcess = () => {
                     setStartForm({ ...startForm, metal_type: e.target.value })
                   }
                 >
-                  <option value="Gold 22K">Gold 22K</option>
                   <option value="Gold 24K">Gold 24K</option>
                   <option value="Silver">Silver</option>
+                  <option value="Gold 22K">Gold 22K</option>
                 </select>
                 <ArrowDownLeft
                   className="absolute right-3 top-3 text-gray-400 pointer-events-none"
