@@ -157,6 +157,13 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     throw createAppError("At least one estimate item is required", 400, "ITEMS_REQUIRED");
   }
 
+  data.items.forEach((item, index) => {
+    const pcsRaw = Number(item?.pcs);
+    if (item?.pcs != null && item?.pcs !== "" && (!Number.isFinite(pcsRaw) || pcsRaw < 0 || !Number.isInteger(pcsRaw))) {
+      throw createAppError(`PCS must be a whole number 0 or greater on item ${index + 1}`, 400, "ITEM_PCS_INVALID");
+    }
+  });
+
   const nonZeroItems = data.items.filter((item) => (parseInt(item.pcs, 10) || 0) > 0);
   if (nonZeroItems.length === 0) {
     throw createAppError("Enter quantity for at least one size", 400, "PCS_REQUIRED");
@@ -176,7 +183,61 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
       throw createAppError(`Size value must be greater than 0 on item ${index + 1}`, 400, "ITEM_SIZE_INVALID");
     }
+    const lcPp = parseFloat(item.lc_pp);
+    if (!Number.isFinite(lcPp) || lcPp < 0) {
+      throw createAppError(`Labour charge must be 0 or greater on item ${index + 1}`, 400, "ITEM_LABOUR_INVALID");
+    }
   });
+
+  if (data.customer_id != null && data.customer_id !== "") {
+    const customerId = parseInt(data.customer_id, 10);
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      throw createAppError("Selected customer is invalid", 400, "CUSTOMER_INVALID");
+    }
+  }
+
+  if (data.settlement_rates && typeof data.settlement_rates === "object") {
+    METAL_PAYMENT_TYPES.forEach((metalType) => {
+      const rawRate = data.settlement_rates?.[metalType];
+      if (rawRate == null || rawRate === "") return;
+      const parsedRate = parseFloat(rawRate);
+      if (!Number.isFinite(parsedRate) || parsedRate < 0) {
+        throw createAppError(`Settlement rate for ${metalType} must be 0 or greater`, 400, "SETTLEMENT_RATE_INVALID");
+      }
+    });
+  }
+
+  if (Array.isArray(data.payment_entries)) {
+    data.payment_entries.forEach((entry, index) => {
+      const paymentType = String(entry?.payment_type || "").trim();
+      if (!["Cash", "Bank / UPI", "Metal"].includes(paymentType)) {
+        throw createAppError(`Invalid payment type on entry ${index + 1}`, 400, "PAYMENT_TYPE_INVALID");
+      }
+
+      if (paymentType === "Metal") {
+        if (!METAL_PAYMENT_TYPES.includes(String(entry?.metal_type || "").trim())) {
+          throw createAppError(`Invalid metal type on payment entry ${index + 1}`, 400, "PAYMENT_METAL_INVALID");
+        }
+        const weight = parseFloat(entry?.weight);
+        if (!Number.isFinite(weight) || weight <= 0) {
+          throw createAppError(`Metal weight must be greater than 0 on payment entry ${index + 1}`, 400, "PAYMENT_WEIGHT_INVALID");
+        }
+        const referenceRate = entry?.reference_rate;
+        if (referenceRate != null && referenceRate !== "") {
+          const parsedRate = parseFloat(referenceRate);
+          if (!Number.isFinite(parsedRate) || parsedRate < 0) {
+            throw createAppError(`Reference rate must be 0 or greater on payment entry ${index + 1}`, 400, "PAYMENT_RATE_INVALID");
+          }
+        }
+        return;
+      }
+
+      const amount = parseFloat(entry?.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw createAppError(`Payment amount must be greater than 0 on entry ${index + 1}`, 400, "PAYMENT_AMOUNT_INVALID");
+      }
+    });
+  }
 
   const paymentEntries = normalizePaymentEntries(data.payment_entries, data);
   if (Array.isArray(data.payment_entries) && data.payment_entries.length > 0 && paymentEntries.length === 0) {
@@ -232,7 +293,17 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
 };
 
 const _resolveCustomerId = async (data) => {
-  if (data.customer_id) return parseInt(data.customer_id, 10) || null;
+  if (data.customer_id != null && data.customer_id !== "") {
+    const customerId = parseInt(data.customer_id, 10);
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      throw createAppError("Selected customer is invalid", 400, "CUSTOMER_INVALID");
+    }
+    const customer = await customerService.getCustomerById(customerId);
+    if (!customer) {
+      throw createAppError("Selected customer does not exist", 400, "CUSTOMER_NOT_FOUND");
+    }
+    return customer.id;
+  }
   const phone = (data.customer_phone || "").toString().trim();
   const name = (data.customer_name || "").toString().trim();
   if (!phone || !name) return null;
@@ -381,13 +452,26 @@ const _deleteAccountingEntries = async (run, billId) => {
 };
 
 const _applyOutstandingDelta = async (run, customerId, delta) => {
-  if (!customerId || !delta) return;
+  if (!customerId) return;
+  const row = await new Promise((resolve, reject) => {
+    db.get(
+      `SELECT ROUND(COALESCE(SUM(amount_delta), 0), 2) AS outstanding_balance
+         FROM customer_ledger_entries
+        WHERE customer_id = ?`,
+      [customerId],
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result || { outstanding_balance: 0 });
+      }
+    );
+  });
+
   await run(
     `UPDATE customers
-        SET outstanding_balance = MAX(0, outstanding_balance + ?),
+        SET outstanding_balance = ?,
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`,
-    [delta, customerId]
+    [Math.max(roundMoney(row?.outstanding_balance || 0), 0), customerId]
   );
 };
 
@@ -640,8 +724,8 @@ const createBill = async (data) => {
     await _insertItems(run, lastID, data.items || []);
     await counterService.reserveEstimateStock(run, lastID, obNo, data.date, data.items || []);
     await _insertAccountingEntries(run, lastID, obNo, data.date, resolvedCustomerId, summary, paymentEntries);
-    if (resolvedCustomerId && summary.amt_baki > 0) {
-      await _applyOutstandingDelta(run, resolvedCustomerId, summary.amt_baki);
+    if (resolvedCustomerId) {
+      await _applyOutstandingDelta(run, resolvedCustomerId);
     }
     return lastID;
   });
@@ -671,7 +755,7 @@ const updateBill = async (id, data) => {
   }
 
   return db.runTransaction(async (run, get) => {
-    const oldBill = await get(`SELECT customer_id, amt_baki FROM order_bills WHERE id = ?`, [id]);
+    const oldBill = await get(`SELECT customer_id FROM order_bills WHERE id = ?`, [id]);
     if (!oldBill) throw createAppError("Estimate not found", 404, "ESTIMATE_NOT_FOUND");
 
     await counterService.releaseEstimateStock(run, id);
@@ -711,32 +795,30 @@ const updateBill = async (id, data) => {
     await counterService.reserveEstimateStock(run, id, obNo, data.date, data.items || []);
 
     await _deleteAccountingEntries(run, id);
-    const oldOutstanding = Math.max(0, parseFloat(oldBill.amt_baki) || 0);
-    if (oldBill.customer_id && oldOutstanding > 0) {
-      await _applyOutstandingDelta(run, oldBill.customer_id, -oldOutstanding);
-    }
-
     await _insertAccountingEntries(run, id, obNo, data.date, resolvedCustomerId, summary, paymentEntries);
-    if (resolvedCustomerId && summary.amt_baki > 0) {
-      await _applyOutstandingDelta(run, resolvedCustomerId, summary.amt_baki);
+
+    const customerIdsToSync = new Set(
+      [oldBill.customer_id, resolvedCustomerId].filter((customerId) => Number.isInteger(customerId) && customerId > 0)
+    );
+    for (const customerId of customerIdsToSync) {
+      await _applyOutstandingDelta(run, customerId);
     }
   });
 };
 
 const deleteBill = (id) =>
   db.runTransaction(async (run, get) => {
-    const bill = await get(`SELECT customer_id, amt_baki FROM order_bills WHERE id = ?`, [id]);
+    const bill = await get(`SELECT customer_id FROM order_bills WHERE id = ?`, [id]);
     if (!bill) return 0;
 
     await _deleteAccountingEntries(run, id);
     await counterService.releaseEstimateStock(run, id);
-    const outstanding = Math.max(0, parseFloat(bill.amt_baki) || 0);
-    if (bill.customer_id && outstanding > 0) {
-      await _applyOutstandingDelta(run, bill.customer_id, -outstanding);
-    }
 
     await run(`DELETE FROM order_bill_items WHERE bill_id = ?`, [id]);
     const result = await run(`DELETE FROM order_bills WHERE id = ?`, [id]);
+    if (bill.customer_id) {
+      await _applyOutstandingDelta(run, bill.customer_id);
+    }
     return result.changes || 0;
   });
 

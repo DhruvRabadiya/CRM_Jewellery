@@ -87,7 +87,7 @@ export default function SellingDashboard() {
             <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Customer Metal</p>
             <p className="text-xl font-black text-slate-800 mt-1">{card.key}</p>
             <p className="text-3xl font-black text-slate-900 mt-3">{fmtWeight(metalInventory[card.key])}</p>
-            <p className="text-xs text-slate-500 mt-1">Available from customer-provided metal</p>
+            <p className="text-xs text-slate-500 mt-1">Net customer metal credit currently held at the counter</p>
           </div>
         ))}
       </div>
@@ -113,7 +113,7 @@ export default function SellingDashboard() {
                       <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Customer</th>
                       <th className="text-left px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Type</th>
                       <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Total</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Cash/Online</th>
+                      <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Net Collected</th>
                       <th className="text-right px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Balance</th>
                     </tr>
                   </thead>
@@ -178,8 +178,8 @@ export default function SellingDashboard() {
               <h2 className="font-black text-slate-800">Accounting Note</h2>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Cash is derived from recorded estimate receipts. Customer metal availability is derived from ledgered
-              metal-in entries captured during estimate creation for Gold 24K, Gold 22K, and Silver.
+              Cash reflects recorded estimate receipts after refunds. Customer metal reflects only the net credit
+              currently held for Gold 24K, Gold 22K, and Silver.
             </p>
           </div>
         </div>

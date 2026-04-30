@@ -3,6 +3,7 @@ const {
   METAL_PAYMENT_TYPES,
   METAL_PURITY,
   createEmptyMetalMap,
+  parseJsonSafe,
   roundMoney,
   roundWeight,
 } = require("../utils/sellingPayments");
@@ -76,6 +77,43 @@ const groupMetalDelta = (bucket, metalType, value, direction) => {
   bucket[metalType][direction] = roundWeight((bucket[metalType][direction] || 0) + Math.abs(value));
 };
 
+const formatGroupedPaymentMode = (modes) => {
+  if (!modes || modes.size === 0) return "";
+  if (modes.size === 1) return [...modes][0];
+  return "Mixed";
+};
+
+const getDisplayPaymentMode = (row) => {
+  if (!row) return "";
+  if (row.line_type === "PAYMENT_CASH") return "Cash";
+  if (row.line_type === "PAYMENT_BANK") return "Bank / UPI";
+  if (row.line_type === "PAYMENT_METAL") return "Metal";
+  return "";
+};
+
+const syncOutstandingBalance = async (run, customerId) => {
+  const row = await new Promise((resolve, reject) => {
+    db.get(
+      `SELECT ROUND(COALESCE(SUM(amount_delta), 0), 2) AS outstanding_balance
+         FROM customer_ledger_entries
+        WHERE customer_id = ?`,
+      [customerId],
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result || { outstanding_balance: 0 });
+      }
+    );
+  });
+
+  await run(
+    `UPDATE customers
+        SET outstanding_balance = ?,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+    [Math.max(roundMoney(row?.outstanding_balance || 0), 0), customerId]
+  );
+};
+
 const getCustomerStatementSummary = (entries = []) => {
   const grouped = [];
   const groupedMap = new Map();
@@ -88,7 +126,7 @@ const getCustomerStatementSummary = (entries = []) => {
     const transactionType =
       row.transaction_type ||
       (row.reference_type === "ORDER_BILL" ? "Estimate" : row.line_type?.startsWith("PAYMENT") ? "Payment" : "Adjustment");
-    const entryMode = row.payment_mode || "";
+    const entryMode = getDisplayPaymentMode(row);
     const groupKey =
       row.reference_id && row.reference_type === "ORDER_BILL"
         ? `${row.reference_type}:${row.reference_id}`
@@ -102,7 +140,7 @@ const getCustomerStatementSummary = (entries = []) => {
         reference_type: row.reference_type,
         reference_id: row.reference_id,
         reference_no: row.reference_no || "",
-        payment_mode: entryMode,
+        payment_mode: "",
         notes: row.notes || "",
         debit_amount: 0,
         credit_amount: 0,
@@ -112,12 +150,19 @@ const getCustomerStatementSummary = (entries = []) => {
         metal_debits: {},
         metal_credits: {},
         metal_movements: [],
+        payment_modes: new Set(),
+        order_bill_balance_snapshot: row.order_bill_balance_snapshot || null,
+        order_bill_amount_due: roundMoney(row.order_bill_amount_due),
+        order_bill_refund_due: roundMoney(row.order_bill_refund_due),
       });
       grouped.push(groupedMap.get(groupKey));
     }
 
     const group = groupedMap.get(groupKey);
-    if (entryMode && !group.payment_mode) group.payment_mode = entryMode;
+    if (entryMode) group.payment_modes.add(entryMode);
+    if (!group.order_bill_balance_snapshot && row.order_bill_balance_snapshot) {
+      group.order_bill_balance_snapshot = row.order_bill_balance_snapshot;
+    }
 
     if (amountDelta > 0) {
       group.debit_amount = roundMoney(group.debit_amount + amountDelta);
@@ -174,15 +219,37 @@ const getCustomerStatementSummary = (entries = []) => {
       });
 
       let paymentStatus = "Completed";
-      if (["Estimate", "Sale"].includes(row.transaction_type)) {
+      const billSnapshot = row.order_bill_balance_snapshot || null;
+      if (row.reference_type === "ORDER_BILL" && billSnapshot) {
+        const hasAmountDue = roundMoney(billSnapshot.amount_due || row.order_bill_amount_due || 0) > 0;
+        const hasMetalDue = METAL_PAYMENT_TYPES.some(
+          (metalType) => roundWeight(billSnapshot.metal_due_unsettled?.[metalType] || 0) > 0
+        );
+        const hasPaymentActivity =
+          roundMoney(billSnapshot.money_paid || 0) > 0 ||
+          METAL_PAYMENT_TYPES.some((metalType) => roundWeight(billSnapshot.metal_received?.[metalType] || 0) > 0);
+
+        if (hasAmountDue || hasMetalDue) {
+          paymentStatus = hasPaymentActivity ? "Partial" : "Pending";
+        }
+      } else if (["Estimate", "Sale"].includes(row.transaction_type)) {
         const hasCashDue = row.debit_amount > row.credit_amount;
         if (hasCashDue || hasMetalDue) {
           paymentStatus = row.credit_amount > 0 || rowHasPartialMetal ? "Partial" : "Pending";
         }
       }
 
+      const {
+        payment_modes,
+        order_bill_balance_snapshot,
+        order_bill_amount_due,
+        order_bill_refund_due,
+        ...serializableRow
+      } = row;
+
       return {
-        ...row,
+        ...serializableRow,
+        payment_mode: formatGroupedPaymentMode(row.payment_modes),
         running_balance: runningCashBalance,
         running_cash_balance: runningCashBalance,
         running_metal_balances: { ...nextMetalBalances },
@@ -292,8 +359,18 @@ const getCustomerLedger = (id) => {
   return new Promise((resolve, reject) => {
     db.all(
       `SELECT *
-       FROM customer_ledger_entries
-       WHERE customer_id = ?
+       FROM (
+         SELECT
+           cle.*,
+           ob.balance_snapshot AS order_bill_balance_snapshot_raw,
+           ob.amt_baki AS order_bill_amount_due,
+           ob.refund_due AS order_bill_refund_due
+         FROM customer_ledger_entries cle
+         LEFT JOIN order_bills ob
+           ON cle.reference_type = 'ORDER_BILL'
+          AND cle.reference_id = ob.id
+         WHERE cle.customer_id = ?
+       )
        ORDER BY entry_date ASC, id ASC`,
       [id],
       (err, rows) => {
@@ -318,6 +395,9 @@ const getCustomerLedger = (id) => {
             amount_delta: amountDelta,
             weight_delta: weightDelta,
             reference_rate: roundMoney(row.reference_rate),
+            order_bill_balance_snapshot: parseJsonSafe(row.order_bill_balance_snapshot_raw, null),
+            order_bill_amount_due: roundMoney(row.order_bill_amount_due),
+            order_bill_refund_due: roundMoney(row.order_bill_refund_due),
             running_amount_balance: runningAmountBalance,
             running_metal_balances: { ...runningMetalBalances },
           };
@@ -449,13 +529,7 @@ const createLedgerEntry = (customerId, payload) =>
       );
     }
 
-    await run(
-      `UPDATE customers
-          SET outstanding_balance = MAX(0, outstanding_balance + ?),
-              updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`,
-      [amountDelta, customerId]
-    );
+    await syncOutstandingBalance(run, customerId);
 
     return lastID;
   });

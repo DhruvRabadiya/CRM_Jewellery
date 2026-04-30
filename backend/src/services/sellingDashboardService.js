@@ -24,9 +24,19 @@ const all = (sql, params = []) =>
 //   - order_bills (estimates)   → bill count and total billed (subtotal)
 const getDashboard = async () => {
   const metalRows = await all(
-    `SELECT metal_type, ROUND(COALESCE(SUM(weight_delta), 0), 4) AS available_weight
-     FROM customer_ledger_entries
-     WHERE metal_type IN ('Gold 24K', 'Gold 22K', 'Silver')
+    `WITH customer_metal_balances AS (
+       SELECT
+         customer_id,
+         metal_type,
+         ROUND(COALESCE(SUM(weight_delta), 0), 4) AS balance
+       FROM customer_ledger_entries
+       WHERE metal_type IN ('Gold 24K', 'Gold 22K', 'Silver')
+       GROUP BY customer_id, metal_type
+     )
+     SELECT
+       metal_type,
+       ROUND(COALESCE(SUM(CASE WHEN balance < 0 THEN ABS(balance) ELSE 0 END), 0), 4) AS available_weight
+     FROM customer_metal_balances
      GROUP BY metal_type`
   );
 
@@ -55,7 +65,7 @@ const getDashboard = async () => {
   const billRow = await get(
     `SELECT
         COUNT(*) AS bill_count,
-        ROUND(COALESCE(SUM(subtotal), 0), 2) AS billed_total
+        ROUND(COALESCE(SUM(total_amount), 0), 2) AS billed_total
      FROM order_bills`
   );
 
@@ -67,8 +77,8 @@ const getDashboard = async () => {
         date,
         customer_name,
         customer_type,
-        subtotal        AS total_amount,
-        amt_jama        AS amount_paid,
+        total_amount,
+        ROUND(MAX(COALESCE(amt_jama, 0) - COALESCE(refund_due, 0), 0), 2) AS amount_paid,
         amt_baki        AS outstanding_amount
      FROM order_bills
      ORDER BY id DESC

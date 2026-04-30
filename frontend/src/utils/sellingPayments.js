@@ -76,6 +76,7 @@ export const summarizePaymentEntries = (entries = []) => {
     if (entry.payment_type === "Metal") {
       const metalType = entry.metal_type;
       const weight = roundWeight(entry.weight);
+      if (!METAL_PAYMENT_TYPES.includes(metalType) || weight <= 0) return;
       metalTotals[metalType] = roundWeight((metalTotals[metalType] || 0) + weight);
       const rate = roundMoney(entry.reference_rate);
       if (!metalReference[metalType]) metalReference[metalType] = { rate: 0, value: 0 };
@@ -87,6 +88,7 @@ export const summarizePaymentEntries = (entries = []) => {
     }
 
     const amount = roundMoney(entry.amount);
+    if (amount <= 0) return;
     moneyTotals[entry.payment_type] = roundMoney((moneyTotals[entry.payment_type] || 0) + amount);
     moneyTotals.total = roundMoney(moneyTotals.total + amount);
   });
@@ -162,7 +164,7 @@ export const computeEstimateBalance = (items = [], paymentEntries = [], discount
   const amountDue = roundMoney(Math.max(settlementBeforeMoney - moneyPaid, 0));
   const refundDue = roundMoney(Math.max(moneyPaid - settlementBeforeMoney, 0));
   const hasExcessMetal = METAL_PAYMENT_TYPES.some((metalType) => (metalCredit[metalType] || 0) > 0);
-  const amountGiven = hasExcessMetal ? refundDue : 0;
+  const amountGiven = refundDue > 0 ? refundDue : 0;
 
   return {
     totalPcs,

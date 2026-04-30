@@ -43,6 +43,19 @@ const fmtDate = (dateStr) => {
   return `${d} ${months[parseInt(m, 10) - 1]} ${y}`;
 };
 
+const getPaymentModeClass = (paymentMode) => {
+  if (paymentMode === "Metal") return "bg-amber-100 text-amber-700";
+  if (paymentMode === "Bank / UPI") return "bg-blue-100 text-blue-600";
+  if (paymentMode === "Mixed") return "bg-violet-100 text-violet-700";
+  return "bg-emerald-100 text-emerald-700";
+};
+
+const describeMetalBalance = (balance) => {
+  if (balance > 0) return "customer owes metal";
+  if (balance < 0) return "customer metal credit";
+  return "balanced";
+};
+
 const getInitials = (name) => {
   if (!name) return "?";
   return name
@@ -845,7 +858,7 @@ const SellingLedger = () => {
                         {fmtWeight(balance)}
                       </p>
                       <p className="text-[10px] text-slate-400 mt-0.5">
-                        {balance > 0 ? "metal due" : balance < 0 ? "customer metal credit" : "balanced"}
+                        {describeMetalBalance(balance)}
                       </p>
                     </div>
                   );
@@ -995,13 +1008,7 @@ const SellingLedger = () => {
                         <td className="px-4 py-3">
                           {row.payment_mode ? (
                             <span
-                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-block ${
-                                row.payment_mode === "Metal"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : row.payment_mode === "Bank / UPI"
-                                  ? "bg-blue-100 text-blue-600"
-                                  : "bg-emerald-100 text-emerald-700"
-                              }`}
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-block ${getPaymentModeClass(row.payment_mode)}`}
                             >
                               {row.payment_mode}
                             </span>

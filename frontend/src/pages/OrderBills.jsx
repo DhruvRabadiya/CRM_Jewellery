@@ -945,6 +945,36 @@ export default function OrderBills() {
   const handleSave = useCallback(async (andPrint = false) => {
     if (!formDate) { showToast("Date is required", "error"); return; }
     if (!obNo)     { showToast("Estimate number is required", "error"); return; }
+    if (items.some((item) => {
+      const rawPcs = item?.pcs;
+      if (rawPcs == null || rawPcs === "") return false;
+      const pcs = Number(rawPcs);
+      return !Number.isInteger(pcs) || pcs < 0;
+    })) {
+      showToast("PCS must be a whole number 0 or greater", "error");
+      return;
+    }
+    if (paymentEntries.some((entry) => {
+      if (entry.payment_type === "Metal") {
+        if (!entry.weight) return false;
+        const weight = Number(entry.weight);
+        return !Number.isFinite(weight) || weight < 0;
+      }
+      if (!entry.amount) return false;
+      const amount = Number(entry.amount);
+      return !Number.isFinite(amount) || amount < 0;
+    })) {
+      showToast("Payments cannot be negative", "error");
+      return;
+    }
+    if (Object.values(settlementRates || {}).some((rate) => {
+      if (rate == null || rate === "") return false;
+      const parsedRate = Number(rate);
+      return !Number.isFinite(parsedRate) || parsedRate < 0;
+    })) {
+      showToast("Settlement rates must be 0 or greater", "error");
+      return;
+    }
 
     const nonZeroItems = items
       .filter((item) => (parseInt(item.pcs, 10) || 0) > 0)
