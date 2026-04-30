@@ -139,9 +139,7 @@ const buildItemsFromCharges = (groupedCharges, selectedMetals, customerType, exi
                 ? parseFloat(existing.size_value)
                 : 0,
           pcs:    existing?.pcs != null ? String(existing.pcs) : "",
-          lc_pp:  existing?.pcs != null
-            ? parseFloat(existing.lc_pp) || 0
-            : getRateForCustomerType(row, customerType),
+          lc_pp:  getRateForCustomerType(row, customerType),
           sort_order: sortOrder,
         });
         sortOrder += 1;
@@ -967,8 +965,8 @@ export default function OrderBills() {
     }
 
     const hasCustomerDraft = customerName || customerPhone || customerAddress;
-    if (!selectedCustomer && hasCustomerDraft && (!customerName || !customerPhone || !customerAddress)) {
-      showToast("New customer entries need name, phone number, and address", "error"); return;
+    if (!selectedCustomer && hasCustomerDraft && !customerName) {
+      showToast("Customer name is required when adding a new customer", "error"); return;
     }
 
     const cleanedPaymentEntries = paymentEntries

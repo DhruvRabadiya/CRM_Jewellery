@@ -9,7 +9,8 @@ import {
   Users,
   Menu,
   ChevronLeft,
-  Home
+  Home,
+  ArrowLeft
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 

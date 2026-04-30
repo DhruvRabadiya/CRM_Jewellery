@@ -11,6 +11,6 @@ router.post('/change-password', authenticateToken, authController.changePassword
 
 // Administrative Routes (Require Token + ADMIN Role)
 router.post('/users', authenticateToken, requireAdmin, authController.createUser);
-router.get('/users', authenticateToken, authController.fetchUsers);
+router.get('/users', authenticateToken, requireAdmin, authController.fetchUsers);
 
 module.exports = router;

@@ -28,7 +28,7 @@ const createMelting = async (req, res) => {
 
     await stockService.updateOpeningStock(metal_type, weight, false);
     await stockService.updateInprocessWeight(metal_type, weight, true);
-    await stockService.logTransaction(metal_type, "JOB_ISSUE", weight, `Queued Melting Job ${job_number}`);
+    await stockService.logTransaction(metal_type, "JOB_ISSUE", weight, `Queued Melting Job ${job_number}`, "MELTING", processId);
 
     return formatResponse(res, 201, true, "Melting process queued", { processId });
   } catch (error) {
@@ -59,9 +59,14 @@ const startMelting = async (req, res) => {
       }
       await stockService.updateOpeningStock(process.metal_type, delta, false);
       await stockService.updateInprocessWeight(process.metal_type, delta, true);
+      // C3b fix: log the delta adjustment (was missing for melting, present in rolling/press/tpp)
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", delta,
+        `Start delta adjustment (added) for Melting Job ${process.job_number || process_id}`, "MELTING", process_id);
     } else if (delta < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), true);
       await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), false);
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", Math.abs(delta),
+        `Start delta adjustment (refunded) for Melting Job ${process.job_number || process_id}`, "MELTING", process_id);
     }
 
     await meltingService.startMeltingProcess(process_id, weight, pieces, employee, description);
@@ -121,7 +126,7 @@ const completeMelting = async (req, res) => {
     const scrWeightDiff = scrW - (process.scrap_weight || 0);
     if (scrWeightDiff > 0) {
       await stockService.updateOpeningStock(process.metal_type, scrWeightDiff, true);
-      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from Melting Job ${process.job_number || process_id}`);
+      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from Melting Job ${process.job_number || process_id}`, "MELTING", process_id);
     } else if (scrWeightDiff < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(scrWeightDiff), false);
     }
@@ -273,14 +278,14 @@ const deleteMeltingProcess = async (req, res) => {
       if (issueW > 0) {
         await stockService.updateOpeningStock(process.metal_type, issueW, true);
         await stockService.updateInprocessWeight(process.metal_type, issueW, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Queued Melting Job ${process.job_number || id}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Queued Melting Job ${process.job_number || id}`, "MELTING", parseInt(id));
       }
     } else if (process.status === "RUNNING") {
       const issueW = process.issued_weight || process.issue_weight || process.issue_size || 0;
       if (issueW > 0) {
         await stockService.updateOpeningStock(process.metal_type, issueW, true);
         await stockService.updateInprocessWeight(process.metal_type, issueW, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Running Melting Job ${process.job_number || id}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Running Melting Job ${process.job_number || id}`, "MELTING", parseInt(id));
       }
     } else if (process.status === "COMPLETED") {
       // Reverse return/scrap from opening_stock
@@ -297,7 +302,7 @@ const deleteMeltingProcess = async (req, res) => {
       const issueW = process.issued_weight || process.issue_weight || 0;
       if (issueW > 0) {
         await stockService.updateOpeningStock(process.metal_type, issueW, true);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Completed Melting Job ${process.job_number || id} (Full Reversal)`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Completed Melting Job ${process.job_number || id} (Full Reversal)`, "MELTING", parseInt(id));
       }
     }
 
@@ -327,7 +332,7 @@ const revertMeltingProcess = async (req, res) => {
       }
       const issueW = process.issued_weight || process.issue_weight || 0;
       await stockService.updateInprocessWeight(process.metal_type, issueW, true);
-      await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Reverted Melting Job ${process.job_number || id} to RUNNING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Reverted Melting Job ${process.job_number || id} to RUNNING`, "MELTING", parseInt(id));
 
       await meltingService.editMeltingProcess(id, {
         return_weight: 0, return_pieces: 0, scrap_weight: 0, loss_weight: 0, status: "RUNNING", end_time: null, completed_at: null,
@@ -349,7 +354,7 @@ const revertMeltingProcess = async (req, res) => {
         await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), false);
         await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), true);
       }
-      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Melting Job ${process.job_number || id} to PENDING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Melting Job ${process.job_number || id} to PENDING`, "MELTING", parseInt(id));
       await meltingService.editMeltingProcess(id, { status: "PENDING", issued_weight: 0, start_time: null });
       return formatResponse(res, 200, true, "Melting process reverted to PENDING.");
 
@@ -358,7 +363,7 @@ const revertMeltingProcess = async (req, res) => {
       if (issueW > 0) {
         await stockService.updateOpeningStock(process.metal_type, issueW, true);
         await stockService.updateInprocessWeight(process.metal_type, issueW, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Queued Melting Job ${process.job_number || id}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", issueW, `Deleted Queued Melting Job ${process.job_number || id}`, "MELTING", parseInt(id));
       }
       await meltingService.deleteMeltingProcess(id);
       return formatResponse(res, 200, true, "Pending melting process queue removed and stock refunded.");

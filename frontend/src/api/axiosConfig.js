@@ -33,7 +33,9 @@ api.interceptors.response.use(
       // Only force logout if it's explicitly a dead token and not just a failed login attempt
       if (error.config.url !== "/auth/login") {
         localStorage.removeItem("token");
-        window.location.href = "/login";
+        // Use hash navigation — required because the production build runs on
+        // file:// URLs where BrowserRouter-style /login paths don't exist.
+        window.location.hash = "#/login";
       }
     }
 

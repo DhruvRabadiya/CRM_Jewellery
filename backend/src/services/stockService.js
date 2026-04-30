@@ -43,11 +43,13 @@ const updateProcessStock = (processName, metalType, weight, isAddition) => {
   });
 };
 
-const logTransaction = (metalType, type, weight, description) => {
+const logTransaction = (metalType, type, weight, description, referenceType = '', referenceId = null) => {
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO stock_transactions (metal_type, transaction_type, weight, description) VALUES (?, ?, ?, ?)`;
-    db.run(query, [metalType, type, weight, description], function (err) {
-      if (err) reject(err);
+    const query = `INSERT INTO stock_transactions
+      (metal_type, transaction_type, weight, description, reference_type, reference_id)
+      VALUES (?, ?, ?, ?, ?, ?)`;
+    db.run(query, [metalType, type, weight, description, referenceType || '', referenceId || null], function (err) {
+      if (err) return reject(err);
       resolve(this.lastID);
     });
   });

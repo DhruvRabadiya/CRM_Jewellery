@@ -127,8 +127,28 @@ db.serialize(() => {
         metal_type TEXT,
         transaction_type TEXT,
         weight REAL,
-        description TEXT
+        description TEXT,
+        reference_type TEXT DEFAULT '',
+        reference_id INTEGER
     )`);
+
+  // Migration: add reference_type / reference_id to stock_transactions
+  db.all(`PRAGMA table_info(stock_transactions)`, (err, columns) => {
+    if (!err && columns) {
+      if (!columns.some((c) => c.name === 'reference_type')) {
+        db.run(`ALTER TABLE stock_transactions ADD COLUMN reference_type TEXT DEFAULT ''`, (e) => {
+          if (e) console.error('Migration stock_transactions.reference_type:', e.message);
+          else console.log('Added reference_type column to stock_transactions');
+        });
+      }
+      if (!columns.some((c) => c.name === 'reference_id')) {
+        db.run(`ALTER TABLE stock_transactions ADD COLUMN reference_id INTEGER`, (e) => {
+          if (e) console.error('Migration stock_transactions.reference_id:', e.message);
+          else console.log('Added reference_id column to stock_transactions');
+        });
+      }
+    }
+  });
 
   // 3. MELTING PROCESS (Standalone)
   db.run(`CREATE TABLE IF NOT EXISTS melting_process (
@@ -782,6 +802,10 @@ db.serialize(() => {
       customer_type TEXT DEFAULT 'Retail',
       fine_jama REAL DEFAULT 0,
       rate_10g REAL DEFAULT 0,
+      jama_gold_22k REAL DEFAULT 0,
+      rate_gold_22k REAL DEFAULT 0,
+      jama_silver REAL DEFAULT 0,
+      rate_silver REAL DEFAULT 0,
       amt_jama REAL DEFAULT 0,
       cash_amount REAL DEFAULT 0,
       online_amount REAL DEFAULT 0,
@@ -965,6 +989,25 @@ db.serialize(() => {
           else console.log('Added refund_due column to order_bills');
         });
       }
+    }
+  });
+
+  // Migration: add multi-metal legacy columns to order_bills (jama_gold_22k, rate_gold_22k,
+  // jama_silver, rate_silver) — required by orderBillService INSERT/UPDATE statements.
+  db.all(`PRAGMA table_info(order_bills)`, (err, columns) => {
+    if (!err && columns) {
+      const addCol = (col, def) => {
+        if (!columns.some((c) => c.name === col)) {
+          db.run(`ALTER TABLE order_bills ADD COLUMN ${col} ${def}`, (e) => {
+            if (e) console.error(`Migration order_bills.${col}:`, e.message);
+            else console.log(`Added ${col} column to order_bills`);
+          });
+        }
+      };
+      addCol('jama_gold_22k', 'REAL DEFAULT 0');
+      addCol('rate_gold_22k', 'REAL DEFAULT 0');
+      addCol('jama_silver',   'REAL DEFAULT 0');
+      addCol('rate_silver',   'REAL DEFAULT 0');
     }
   });
 

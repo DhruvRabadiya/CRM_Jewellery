@@ -113,10 +113,7 @@ const create = async (req, res) => {
     if (!city || !city.trim()) {
       return formatResponse(res, 400, false, "City is required");
     }
-    if (!phone_no || !phone_no.trim()) {
-      return formatResponse(res, 400, false, "Phone number is required");
-    }
-    if (!isValidPhone(phone_no)) {
+    if (phone_no && phone_no.trim() && !isValidPhone(phone_no)) {
       return formatResponse(res, 400, false, "Phone number must be 10-15 digits");
     }
     if (telephone_no && telephone_no.trim() && !isValidPhone(telephone_no)) {
@@ -165,10 +162,7 @@ const update = async (req, res) => {
     if (!city || !city.trim()) {
       return formatResponse(res, 400, false, "City is required");
     }
-    if (!phone_no || !phone_no.trim()) {
-      return formatResponse(res, 400, false, "Phone number is required");
-    }
-    if (!isValidPhone(phone_no)) {
+    if (phone_no && phone_no.trim() && !isValidPhone(phone_no)) {
       return formatResponse(res, 400, false, "Phone number must be 10-15 digits");
     }
     if (telephone_no && telephone_no.trim() && !isValidPhone(telephone_no)) {

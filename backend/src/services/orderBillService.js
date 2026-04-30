@@ -201,9 +201,6 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     if (!(data.customer_name || "").trim()) {
       throw createAppError("Customer name is required for a new customer", 400, "CUSTOMER_NAME_REQUIRED");
     }
-    if (!(data.customer_phone || "").trim()) {
-      throw createAppError("Phone number is required for a new customer", 400, "CUSTOMER_PHONE_REQUIRED");
-    }
     if (!(data.customer_address || "").trim()) {
       throw createAppError("Address is required for a new customer", 400, "CUSTOMER_ADDRESS_REQUIRED");
     }

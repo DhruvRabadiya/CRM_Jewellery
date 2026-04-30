@@ -238,7 +238,10 @@ const computeEstimateBalance = ({ items = [], paymentEntries = [], discount = 0,
   const balanceDue = roundMoney(Math.max(settlementBeforeMoney - moneyPaid, 0));
   const refundDue = roundMoney(Math.max(moneyPaid - settlementBeforeMoney, 0));
   const hasExcessMetal = METAL_PAYMENT_TYPES.some((metalType) => (metalCredit[metalType] || 0) > 0);
-  const amountGiven = hasExcessMetal ? refundDue : 0;
+  // amountGiven = cash physically handed back to the customer.
+  // Previously gated on hasExcessMetal, which meant a pure cash overpayment (no metal)
+  // would never produce a refund ledger entry. Correct: trigger on any positive refundDue.
+  const amountGiven = refundDue > 0 ? refundDue : 0;
 
   return {
     total_pcs: totalPcs,

@@ -27,7 +27,7 @@ const createPress = async (req, res) => {
 
     await stockService.updateOpeningStock(metal_type, weight, false);
     await stockService.updateInprocessWeight(metal_type, weight, true);
-    await stockService.logTransaction(metal_type, TRANSACTION_TYPES.JOB_ISSUE, weight, `Queued Press Job ${job_number}`);
+    await stockService.logTransaction(metal_type, TRANSACTION_TYPES.JOB_ISSUE, weight, `Queued Press Job ${job_number}`, "PRESS", processId);
 
     return formatResponse(res, 201, true, "Press process queued", { processId });
   } catch (error) {
@@ -56,11 +56,11 @@ const startPress = async (req, res) => {
       }
       await stockService.updateOpeningStock(process.metal_type, delta, false);
       await stockService.updateInprocessWeight(process.metal_type, delta, true);
-      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", delta, `Start delta adjustment (added) for Press Job ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", delta, `Start delta adjustment (added) for Press Job ${process.job_number}`, "PRESS", process_id);
     } else if (delta < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), true);
       await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), false);
-      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", Math.abs(delta), `Start delta adjustment (refunded) for Press Job ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", Math.abs(delta), `Start delta adjustment (refunded) for Press Job ${process.job_number}`, "PRESS", process_id);
     }
 
     await pressService.startPressProcess(process_id, weight, pieces, employee, description);
