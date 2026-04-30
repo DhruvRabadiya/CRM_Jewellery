@@ -69,6 +69,180 @@ function _seedObRates(db) {
   stmt.finalize(() => console.log('Seeded OB labour rates (Gold 24K + Gold 22K + Silver)'));
 }
 
+let _packingFinishedGoodsBackfillRunning = false;
+let _packingFinishedGoodsBackfillCompleted = false;
+
+function _backfillPackingFinishedGoods(db) {
+  if (_packingFinishedGoodsBackfillRunning || _packingFinishedGoodsBackfillCompleted) {
+    return;
+  }
+
+  db.all(`PRAGMA table_info(finished_goods)`, (pragmaErr, columns) => {
+    if (pragmaErr || !columns) return;
+
+    const hasReferenceType = columns.some((c) => c.name === "reference_type");
+    const hasReferenceId = columns.some((c) => c.name === "reference_id");
+    if (!hasReferenceType || !hasReferenceId) return;
+
+    _packingFinishedGoodsBackfillRunning = true;
+
+    const outputQuery = `
+      SELECT pp.id AS process_id,
+             pp.metal_type,
+             pri.category AS target_product,
+             COALESCE(pri.return_pieces, 0) AS pieces,
+             COALESCE(pri.return_weight, 0) AS weight,
+             COALESCE(pp.end_time, pri.created_at, pp.date, CURRENT_TIMESTAMP) AS created_at
+      FROM packing_processes pp
+      INNER JOIN process_return_items pri
+        ON pri.process_id = pp.id
+       AND pri.process_type = 'packing'
+      WHERE pp.status = 'COMPLETED'
+
+      UNION ALL
+
+      SELECT pp.id AS process_id,
+             pp.metal_type,
+             pp.category AS target_product,
+             COALESCE(pp.return_pieces, 0) AS pieces,
+             COALESCE(pp.return_weight, 0) AS weight,
+             COALESCE(pp.end_time, pp.date, CURRENT_TIMESTAMP) AS created_at
+      FROM packing_processes pp
+      WHERE pp.status = 'COMPLETED'
+        AND (COALESCE(pp.return_weight, 0) > 0 OR COALESCE(pp.return_pieces, 0) > 0)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM process_return_items pri
+          WHERE pri.process_id = pp.id
+            AND pri.process_type = 'packing'
+        )
+    `;
+
+    db.run(
+      `DELETE FROM finished_goods
+        WHERE reference_type = 'PACKING_OUTPUT'
+          AND id NOT IN (
+            SELECT MIN(id)
+            FROM finished_goods
+            WHERE reference_type = 'PACKING_OUTPUT'
+            GROUP BY reference_id, target_product
+          )`,
+      (dedupeErr) => {
+        if (dedupeErr) {
+          _packingFinishedGoodsBackfillRunning = false;
+          return;
+        }
+
+        db.all(outputQuery, [], (rowsErr, rows) => {
+          if (rowsErr || !rows) {
+            _packingFinishedGoodsBackfillRunning = false;
+            return;
+          }
+
+          let inserted = 0;
+
+          const finalizeBackfill = () => {
+            db.run(
+              `INSERT INTO finished_goods (metal_type, target_product, pieces, weight, reference_type)
+               SELECT metal_type,
+                      target_product,
+                      ABS(SUM(COALESCE(pieces, 0))) AS pieces,
+                      ABS(SUM(COALESCE(weight, 0))) AS weight,
+                      'LEGACY_OPENING_BALANCE'
+                 FROM finished_goods
+                WHERE COALESCE(reference_type, '') = ''
+                GROUP BY metal_type, target_product
+               HAVING (SUM(COALESCE(pieces, 0)) < 0 OR SUM(COALESCE(weight, 0)) < 0)
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM finished_goods fg2
+                    WHERE fg2.metal_type = finished_goods.metal_type
+                      AND fg2.target_product = finished_goods.target_product
+                      AND fg2.reference_type = 'LEGACY_OPENING_BALANCE'
+                  )`,
+              (openingErr) => {
+                if (openingErr) {
+                  console.error("Error backfilling finished goods opening balances:", openingErr.message);
+                }
+                if (inserted > 0) {
+                  console.log(`Backfilled ${inserted} missing finished goods packing rows`);
+                }
+                _packingFinishedGoodsBackfillRunning = false;
+                _packingFinishedGoodsBackfillCompleted = true;
+              }
+            );
+          };
+
+          const processRow = (index) => {
+            if (index >= rows.length) {
+              finalizeBackfill();
+              return;
+            }
+
+            const row = rows[index];
+            const pieces = parseInt(row.pieces, 10) || 0;
+            const weight = parseFloat(row.weight) || 0;
+            const createdAt = row.created_at || new Date().toISOString();
+
+            if (pieces <= 0 && weight <= 0) {
+              processRow(index + 1);
+              return;
+            }
+
+            db.get(
+              `SELECT id
+                 FROM finished_goods
+                WHERE reference_type = 'PACKING_OUTPUT'
+                  AND reference_id = ?
+                  AND target_product = ?
+                LIMIT 1`,
+              [row.process_id, row.target_product],
+              (refErr, refMatch) => {
+                if (refErr || refMatch) {
+                  processRow(index + 1);
+                  return;
+                }
+
+                db.get(
+                  `SELECT id
+                     FROM finished_goods
+                    WHERE COALESCE(reference_type, '') = ''
+                      AND metal_type = ?
+                      AND target_product = ?
+                      AND COALESCE(pieces, 0) = ?
+                      AND ABS(COALESCE(weight, 0) - ?) < 0.000001
+                      AND ABS((julianday(COALESCE(created_at, ?)) - julianday(?)) * 1440.0) <= 5
+                    LIMIT 1`,
+                  [row.metal_type, row.target_product, pieces, weight, createdAt, createdAt],
+                  (legacyErr, legacyMatch) => {
+                    if (legacyErr || legacyMatch) {
+                      processRow(index + 1);
+                      return;
+                    }
+
+                    db.run(
+                      `INSERT INTO finished_goods
+                        (metal_type, target_product, pieces, weight, created_at, reference_type, reference_id)
+                       VALUES (?, ?, ?, ?, ?, 'PACKING_OUTPUT', ?)`,
+                      [row.metal_type, row.target_product, pieces, weight, createdAt, row.process_id],
+                      (insertErr) => {
+                        if (!insertErr) inserted += 1;
+                        processRow(index + 1);
+                      }
+                    );
+                  }
+                );
+              }
+            );
+          };
+
+          processRow(0);
+        });
+      }
+    );
+  });
+}
+
 db.serialize(() => {
   // 1. STOCK MASTER (Raw Material and Pooled Stages)
   db.run(`CREATE TABLE IF NOT EXISTS stock_master (
@@ -149,6 +323,18 @@ db.serialize(() => {
       }
     }
   });
+
+  // Migration: selling-side metal receipts must not live in production stock transactions.
+  // These legacy rows caused estimate/customer metal to inflate production opening stock.
+  db.run(
+    `DELETE FROM stock_transactions
+      WHERE transaction_type IN ('ESTIMATE_METAL_IN', 'CUSTOMER_METAL_IN')`,
+    (err) => {
+      if (err && !err.message.includes('no such table')) {
+        console.error('Cleanup selling-side stock transactions:', err.message);
+      }
+    }
+  );
 
   // 3. MELTING PROCESS (Standalone)
   db.run(`CREATE TABLE IF NOT EXISTS melting_process (
@@ -293,6 +479,26 @@ db.serialize(() => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  db.all(`PRAGMA table_info(finished_goods)`, (err, columns) => {
+    if (!err && columns) {
+      if (!columns.some((c) => c.name === "reference_type")) {
+        db.run(`ALTER TABLE finished_goods ADD COLUMN reference_type TEXT DEFAULT ''`, (alterErr) => {
+          if (alterErr) console.error("Error adding reference_type to finished_goods:", alterErr.message);
+          else _backfillPackingFinishedGoods(db);
+        });
+      }
+      if (!columns.some((c) => c.name === "reference_id")) {
+        db.run(`ALTER TABLE finished_goods ADD COLUMN reference_id INTEGER`, (alterErr) => {
+          if (alterErr) console.error("Error adding reference_id to finished_goods:", alterErr.message);
+          else _backfillPackingFinishedGoods(db);
+        });
+      }
+      if (columns.some((c) => c.name === "reference_type") && columns.some((c) => c.name === "reference_id")) {
+        _backfillPackingFinishedGoods(db);
+      }
+    }
+  });
+
   // 6a. COUNTER INVENTORY (Selling Counter)
   db.run(`CREATE TABLE IF NOT EXISTS counter_inventory (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -390,7 +596,11 @@ db.serialize(() => {
       return_weight REAL DEFAULT 0,
       return_pieces INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  )`, (err) => {
+    if (!err) {
+      _backfillPackingFinishedGoods(db);
+    }
+  });
 
   // Migration: add extra columns to melting_process for PENDING/RUNNING/COMPLETED support
   db.all(`PRAGMA table_info(melting_process)`, (err, columns) => {

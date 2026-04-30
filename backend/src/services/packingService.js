@@ -85,24 +85,57 @@ const getAllPackingProcesses = () => {
   });
 };
 
-const addFinishedGoods = (metal_type, target_product, pieces, weight) => {
+const addFinishedGoods = (
+  metal_type,
+  target_product,
+  pieces,
+  weight,
+  metadata = {}
+) => {
+  const {
+    reference_type = "",
+    reference_id = null,
+    created_at = null,
+  } = metadata;
+
   return new Promise((resolve, reject) => {
-    const query = `INSERT INTO finished_goods (metal_type, target_product, pieces, weight) VALUES (?, ?, ?, ?)`;
-    db.run(query, [metal_type, target_product, pieces, weight], function (err) {
+    const query = `
+      INSERT INTO finished_goods
+      (metal_type, target_product, pieces, weight, created_at, reference_type, reference_id)
+      VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?)
+    `;
+    db.run(
+      query,
+      [metal_type, target_product, pieces, weight, created_at, reference_type, reference_id],
+      function (err) {
+        if (err) reject(err);
+        resolve(this.lastID);
+      }
+    );
+  });
+};
+
+const removeFinishedGoodsByReference = (referenceType, referenceId) => {
+  return new Promise((resolve, reject) => {
+    const query = `DELETE FROM finished_goods WHERE reference_type = ? AND reference_id = ?`;
+    db.run(query, [referenceType, referenceId], function (err) {
       if (err) reject(err);
-      resolve(this.lastID);
+      resolve(this.changes);
     });
   });
 };
 
 const removeFinishedGoods = (metal_type, target_product, weight) => {
   return new Promise((resolve, reject) => {
-    // Attempt to delete exactly ONE matching finished good
+    // Legacy fallback: remove one untyped source row without touching typed ledger adjustments.
     const query = `
       DELETE FROM finished_goods 
       WHERE id = (
         SELECT id FROM finished_goods 
-        WHERE metal_type = ? AND target_product = ? AND weight = ? 
+        WHERE metal_type = ?
+          AND target_product = ?
+          AND weight = ?
+          AND COALESCE(reference_type, '') = ''
         ORDER BY id DESC LIMIT 1
       )
     `;
@@ -171,6 +204,7 @@ module.exports = {
   getPackingProcessById,
   getAllPackingProcesses,
   addFinishedGoods,
+  removeFinishedGoodsByReference,
   removeFinishedGoods,
   updatePackingIssuedWeight,
   deletePackingProcessById,

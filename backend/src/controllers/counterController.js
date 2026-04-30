@@ -59,7 +59,9 @@ const sendToCounter = async (req, res) => {
       : (available.total_pieces > 0 ? (piecesToSend / available.total_pieces) * available.total_weight : 0);
 
     // Deduct from finished goods (insert negative adjustment)
-    await packingService.addFinishedGoods(metal_type, target_product, -piecesToSend, -weightToDeduct);
+    await packingService.addFinishedGoods(metal_type, target_product, -piecesToSend, -weightToDeduct, {
+      reference_type: "COUNTER_SEND",
+    });
 
     // Add to counter inventory
     await counterService.addCounterInventory(metal_type, target_product, piecesToSend, {
@@ -129,7 +131,9 @@ const returnFromCounter = async (req, res) => {
     });
 
     // Add back to finished goods
-    await packingService.addFinishedGoods(metal_type, target_product, piecesToReturn, weightToReturn);
+    await packingService.addFinishedGoods(metal_type, target_product, piecesToReturn, weightToReturn, {
+      reference_type: "COUNTER_RETURN",
+    });
 
     return formatResponse(res, 200, true, "Successfully returned from counter to finished goods");
   } catch (error) {

@@ -4,10 +4,50 @@ const stockService = require("../services/stockService");
 const { calculateLoss, formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
 const { MESSAGES, TRANSACTION_TYPES, STATUS } = require("../utils/constants");
 
+const PACKING_OUTPUT_REFERENCE = "PACKING_OUTPUT";
+
+const persistFinishedGoodsForProcess = async (process, items = [], createdAt = null) => {
+  const normalizedItems = Array.isArray(items) && items.length > 0
+    ? items
+    : [{
+        category: process.category || "",
+        return_weight: process.return_weight || 0,
+        return_pieces: process.return_pieces || 0,
+      }];
+
+  for (const item of normalizedItems) {
+    const itemRetW = parseFloat(item.return_weight) || 0;
+    const itemRetPieces = parseInt(item.return_pieces, 10) || 0;
+    const itemCategory = item.category || process.category || "";
+
+    if (itemRetW <= 0 && itemRetPieces <= 0) continue;
+
+    await packingService.addFinishedGoods(
+      process.metal_type,
+      itemCategory,
+      itemRetPieces,
+      itemRetW,
+      {
+        reference_type: PACKING_OUTPUT_REFERENCE,
+        reference_id: process.id,
+        created_at: createdAt,
+      }
+    );
+  }
+};
+
 // Helper: remove finished goods entries that were added when this packing process was completed.
-// Uses process_return_items for accurate per-category removal; falls back to process.category
-// if no return_items exist (legacy single-category records).
+// Prefer process-linked ledger rows; fall back to legacy category/weight matching if needed.
 const removeFinishedGoodsForProcess = async (process) => {
+  const removedLinkedRows = await packingService.removeFinishedGoodsByReference(
+    PACKING_OUTPUT_REFERENCE,
+    process.id
+  );
+
+  if (removedLinkedRows > 0) {
+    return;
+  }
+
   const returnItems = await new Promise((resolve, reject) => {
     db.all(
       `SELECT category, return_weight, return_pieces FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`,
@@ -140,12 +180,14 @@ const completePacking = async (req, res) => {
             (err) => err ? reject(err) : resolve()
           );
         });
-        // REMOVED: addFinishedGoods call - process_return_items are counted in inventory query
       }
-    } else if (totalRetW > 0) {
-      // Fallback: single return weight
-      // REMOVED: addFinishedGoods call - process_return_items are counted in inventory query
     }
+
+    await persistFinishedGoodsForProcess(
+      { ...process, id: process_id, return_weight: totalRetW, return_pieces: totalRetPieces },
+      items,
+      process.end_time || new Date().toISOString()
+    );
 
     const scrWeightDiff = scrW - (process.scrap_weight || 0);
     if (scrWeightDiff > 0) {
@@ -205,12 +247,18 @@ const editPacking = async (req, res) => {
     let newScrWeight = process.scrap_weight;
     let newPieces = process.return_pieces;
     let newLossWeight = process.loss_weight;
+    let shouldRebuildFinishedGoods = false;
 
     if (process.status === "COMPLETED") {
       newRetWeight = effectiveReturnWeight !== undefined ? parseFloat(effectiveReturnWeight) || 0 : process.return_weight;
       newScrWeight = scrap_weight !== undefined ? parseFloat(scrap_weight) || 0 : process.scrap_weight;
       newPieces = effectiveReturnPieces !== undefined ? parseInt(effectiveReturnPieces) || 0 : process.return_pieces;
       newLossWeight = calculateLoss(newWeight, newRetWeight, newScrWeight);
+      shouldRebuildFinishedGoods =
+        hasReturnItems ||
+        newRetWeight !== process.return_weight ||
+        newPieces !== process.return_pieces ||
+        req.body.category !== undefined;
     }
 
     if (delta > 0) {
@@ -240,11 +288,10 @@ const editPacking = async (req, res) => {
 
     if (process.status === "COMPLETED") {
       // Re-create the Finished Goods Record if Return Weight or Return Pieces or Category changed
-      if (newRetWeight !== process.return_weight || newPieces !== process.return_pieces || req.body.category !== undefined) {
+      if (shouldRebuildFinishedGoods) {
         if ((process.return_weight || 0) > 0) {
           await removeFinishedGoodsForProcess(process);
         }
-        // REMOVED: addFinishedGoods call - process_return_items are counted in inventory query
       }
 
       const scrWeightDiff = newScrWeight - process.scrap_weight;
@@ -283,6 +330,21 @@ const editPacking = async (req, res) => {
           );
         });
       }
+
+    }
+
+    if (process.status === "COMPLETED" && shouldRebuildFinishedGoods && (newRetWeight > 0 || newPieces > 0)) {
+      await persistFinishedGoodsForProcess(
+        {
+          ...process,
+          id: process_id,
+          category: updates.category !== undefined ? updates.category : process.category,
+          return_weight: newRetWeight,
+          return_pieces: newPieces,
+        },
+        hasReturnItems ? return_items : [],
+        process.end_time
+      );
     }
 
     return formatResponse(res, 200, true, "Packing process updated successfully.");

@@ -516,19 +516,6 @@ const createLedgerEntry = (customerId, payload) =>
       );
     }
 
-    if (transactionType === "Payment" && effectivePaymentMode === "Metal") {
-      await run(
-        `INSERT INTO stock_transactions
-          (date, metal_type, transaction_type, weight, description, reference_type, reference_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          entryDate, metalType, "CUSTOMER_METAL_IN", roundWeight(weight),
-          "Customer metal payment",
-          referenceType, lastID,
-        ]
-      );
-    }
-
     await syncOutstandingBalance(run, customerId);
 
     return lastID;

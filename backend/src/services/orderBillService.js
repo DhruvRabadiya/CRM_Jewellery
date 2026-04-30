@@ -587,17 +587,6 @@ const _insertAccountingEntries = async (
             `${entry.metal_type} payment on estimate #${obNo}`,
           ]
         );
-
-        await run(
-          `INSERT INTO stock_transactions
-            (date, metal_type, transaction_type, weight, description, reference_type, reference_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            date, entry.metal_type, "ESTIMATE_METAL_IN", roundWeight(entry.weight),
-            `Customer metal received on Estimate #${obNo}`,
-            REFERENCE_TYPE, billId,
-          ]
-        );
         continue;
       }
 
@@ -637,16 +626,8 @@ const _insertAccountingEntries = async (
 
     for (const entry of paymentEntries) {
       if (entry.payment_type === "Metal") {
-        await run(
-          `INSERT INTO stock_transactions
-            (date, metal_type, transaction_type, weight, description, reference_type, reference_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            date, entry.metal_type, "ESTIMATE_METAL_IN", roundWeight(entry.weight),
-            `Customer metal received on Estimate #${obNo}`,
-            REFERENCE_TYPE, billId,
-          ]
-        );
+        // Selling-side metal received for an estimate belongs only to the customer/counter ledger.
+        // It must not leak into production stock transactions.
       } else {
         await run(
           `INSERT INTO counter_cash_ledger
