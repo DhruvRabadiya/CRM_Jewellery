@@ -113,10 +113,14 @@ const create = async (req, res) => {
     if (!city || !city.trim()) {
       return formatResponse(res, 400, false, "City is required");
     }
-    if (phone_no && phone_no.trim() && !isValidPhone(phone_no)) {
+    // Phone is required for CRM customers — ensures every permanent record is reachable.
+    if (!phone_no || !phone_no.toString().trim()) {
+      return formatResponse(res, 400, false, "Phone number is required");
+    }
+    if (!isValidPhone(phone_no)) {
       return formatResponse(res, 400, false, "Phone number must be 10-15 digits");
     }
-    if (telephone_no && telephone_no.trim() && !isValidPhone(telephone_no)) {
+    if (telephone_no && telephone_no.toString().trim() && !isValidPhone(telephone_no)) {
       return formatResponse(res, 400, false, "Telephone number format is invalid");
     }
 
@@ -126,8 +130,8 @@ const create = async (req, res) => {
       firm_name.trim(),
       address.trim(),
       city.trim(),
-      phone_no.trim(),
-      telephone_no ? telephone_no.trim() : "",
+      phone_no.toString().trim(),
+      telephone_no ? telephone_no.toString().trim() : "",
       resolvedType
     );
 
@@ -162,10 +166,13 @@ const update = async (req, res) => {
     if (!city || !city.trim()) {
       return formatResponse(res, 400, false, "City is required");
     }
-    if (phone_no && phone_no.trim() && !isValidPhone(phone_no)) {
+    if (!phone_no || !phone_no.toString().trim()) {
+      return formatResponse(res, 400, false, "Phone number is required");
+    }
+    if (!isValidPhone(phone_no)) {
       return formatResponse(res, 400, false, "Phone number must be 10-15 digits");
     }
-    if (telephone_no && telephone_no.trim() && !isValidPhone(telephone_no)) {
+    if (telephone_no && telephone_no.toString().trim() && !isValidPhone(telephone_no)) {
       return formatResponse(res, 400, false, "Telephone number format is invalid");
     }
 
@@ -176,8 +183,8 @@ const update = async (req, res) => {
       firm_name.trim(),
       address.trim(),
       city.trim(),
-      phone_no.trim(),
-      telephone_no ? telephone_no.trim() : "",
+      phone_no.toString().trim(),
+      telephone_no ? telephone_no.toString().trim() : "",
       resolvedType
     );
 

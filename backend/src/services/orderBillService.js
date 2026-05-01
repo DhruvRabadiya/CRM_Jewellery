@@ -196,6 +196,23 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     }
   }
 
+  // Walk-in rule: all customer fields on an estimate are optional.
+  // The only constraint is: if a phone number is supplied without a name,
+  // we cannot look up / create a CRM record — so require the name in that case.
+  // Address is NEVER required from the estimate form; it is stored on the bill
+  // as free text and does not gate CRM creation.
+  if (!data.customer_id) {
+    const phone = (data.customer_phone || "").toString().trim();
+    const name  = (data.customer_name  || "").toString().trim();
+    if (phone && !name) {
+      throw createAppError(
+        "Customer name is required when a phone number is provided",
+        400,
+        "CUSTOMER_NAME_REQUIRED"
+      );
+    }
+  }
+
   if (data.settlement_rates && typeof data.settlement_rates === "object") {
     METAL_PAYMENT_TYPES.forEach((metalType) => {
       const rawRate = data.settlement_rates?.[metalType];

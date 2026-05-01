@@ -61,15 +61,35 @@ app.get("/", (req, res) => {
   res.send("Jewelry CRM Backend is Running");
 });
 
-// Initialise the database (open → migrate → seed if fresh) then start
+// Initialise the database (open -> migrate -> seed if fresh) then start
 // listening.  All route handlers are registered above so no request can
 // arrive before the database is ready.
 (async () => {
   try {
     await db.initializeDatabase();
-    app.listen(PORT, () => {
+
+    const server = app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
+
+    // Fallback: free-port.js (prestart hook) should have already released the
+    // port, but if something still holds it we surface a clear, actionable
+    // message instead of a raw Node.js stack trace.
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(
+          `[Startup] Port ${PORT} is already in use.\n` +
+          `  Stop the process that is holding it, then restart.\n` +
+          `  On Windows:  netstat -ano | findstr :${PORT}\n` +
+          `               taskkill /F /PID <PID from above>\n` +
+          `  On macOS/Linux: lsof -ti:${PORT} | xargs kill -9`
+        );
+      } else {
+        console.error('[Startup] Server error:', err.message);
+      }
+      process.exit(1);
+    });
+
   } catch (err) {
     console.error("[Startup] Database initialization failed:", err.message);
     process.exit(1);

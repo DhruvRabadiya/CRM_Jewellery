@@ -343,13 +343,19 @@ const findOrCreateByPhone = async ({ party_name, phone_no, address, city, firm_n
   const existing = await getCustomerByPhone(trimmedPhone);
   if (existing) return existing;
 
+  // Only auto-create a CRM record when enough detail is provided (address or city).
+  // Estimate quick-entry supplies name + phone only — in that case we look up only,
+  // never auto-create an incomplete record.  The estimate stores the details inline.
+  const hasEnoughDetail = (address || "").toString().trim() || (city || "").toString().trim();
+  if (!hasEnoughDetail) return null;
+
   const newId = await createCustomer(
     trimmedName,
-    firm_name || trimmedName,
-    address || "",
-    city || "",
+    (firm_name || trimmedName).toString().trim(),
+    (address || "").toString().trim(),
+    (city || "").toString().trim(),
     trimmedPhone,
-    telephone_no || "",
+    (telephone_no || "").toString().trim(),
     customer_type || "Retail"
   );
   return await getCustomerById(newId);

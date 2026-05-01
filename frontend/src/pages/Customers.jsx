@@ -26,7 +26,7 @@ const FIELD_CONFIG = [
   { key: "firm_name", label: "Firm Name", placeholder: "e.g. Shah Jewellers", icon: Building2, required: true, type: "text" },
   { key: "address", label: "Address", placeholder: "e.g. 123 Gold Market, MG Road", icon: MapPin, required: true, type: "textarea" },
   { key: "city", label: "City", placeholder: "e.g. Mumbai", icon: MapPin, required: true, type: "text" },
-  { key: "phone_no", label: "Phone No.", placeholder: "e.g. 9876543210", icon: Phone, required: false, type: "tel" },
+  { key: "phone_no", label: "Phone No.", placeholder: "e.g. 9876543210", icon: Phone, required: true, type: "tel" },
   { key: "telephone_no", label: "Telephone No.", placeholder: "e.g. 02212345678", icon: Phone, required: false, type: "tel" },
 ];
 
@@ -86,7 +86,9 @@ const Customers = () => {
     if (!formData.firm_name.trim()) errors.firm_name = "Firm name is required";
     if (!formData.address.trim()) errors.address = "Address is required";
     if (!formData.city.trim()) errors.city = "City is required";
-    if (formData.phone_no.trim()) {
+    if (!formData.phone_no.trim()) {
+      errors.phone_no = "Phone number is required";
+    } else {
       const cleaned = formData.phone_no.replace(/[\s\-().+]/g, "");
       if (!/^\d{10,15}$/.test(cleaned)) {
         errors.phone_no = "Phone must be 10-15 digits";
