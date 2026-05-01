@@ -1244,8 +1244,8 @@ export default function OrderBills() {
                       <th className="text-left px-4 py-3 font-black">No. / Date</th>
                       <th className="text-left px-4 py-3 font-black">Customer</th>
                       <th className="text-right px-4 py-3 font-black">Total</th>
-                      <th className="text-right px-4 py-3 font-black">Paid</th>
-                      <th className="text-right px-4 py-3 font-black">Remaining</th>
+                      <th className="text-right px-4 py-3 font-black">Cash Paid / Metal</th>
+                      <th className="text-right px-4 py-3 font-black">Balance</th>
                       <th className="text-center px-3 py-3 font-black">Actions</th>
                     </tr>
                   </thead>
@@ -1282,13 +1282,38 @@ export default function OrderBills() {
                         const hasRefund  = parseFloat(bill.refund_due) > 0;
                         const hasPending = parseFloat(bill.amt_baki) > 0;
                         const metals     = parseProducts(bill.products);
+
+                        // Metal received as payment on this estimate (from legacy columns)
+                        const metalReceivedBadges = [
+                          (parseFloat(bill.fine_jama)     || 0) > 0 ? `24K ${fmt(bill.fine_jama, 4)}g`     : null,
+                          (parseFloat(bill.jama_gold_22k) || 0) > 0 ? `22K ${fmt(bill.jama_gold_22k, 4)}g` : null,
+                          (parseFloat(bill.jama_silver)   || 0) > 0 ? `Ag ${fmt(bill.jama_silver, 4)}g`    : null,
+                        ].filter(Boolean);
+
+                        // Unsettled metal still owed by customer
+                        const metalDueUnsettled = bill.balance_snapshot?.metal_due_unsettled || {};
+                        const metalDueBadges = [
+                          (parseFloat(metalDueUnsettled["Gold 24K"]) || 0) > 0 ? `24K ${fmt(metalDueUnsettled["Gold 24K"], 4)}g` : null,
+                          (parseFloat(metalDueUnsettled["Gold 22K"]) || 0) > 0 ? `22K ${fmt(metalDueUnsettled["Gold 22K"], 4)}g` : null,
+                          (parseFloat(metalDueUnsettled["Silver"])   || 0) > 0 ? `Ag ${fmt(metalDueUnsettled["Silver"], 4)}g`    : null,
+                        ].filter(Boolean);
+
+                        // Payment mode badge colour
+                        const pmClass = {
+                          "Cash":       "bg-emerald-100 text-emerald-700",
+                          "Bank / UPI": "bg-blue-100 text-blue-600",
+                          "Metal":      "bg-amber-100 text-amber-700",
+                          "Mixed":      "bg-violet-100 text-violet-700",
+                          "Unpaid":     "bg-slate-100 text-slate-400",
+                        }[bill.payment_mode] || "bg-slate-100 text-slate-400";
+
                         return (
                           <tr
                             key={bill.id}
                             className="border-b border-slate-100 last:border-b-0 hover:bg-indigo-50/30 transition-colors align-middle"
                           >
-                            {/* No. + date */}
-                            <td className="px-4 py-3 w-28">
+                            {/* No. + date + metal types + payment mode */}
+                            <td className="px-4 py-3 w-32">
                               <button
                                 type="button"
                                 onClick={() => openView(bill)}
@@ -1302,6 +1327,11 @@ export default function OrderBills() {
                                   <span key={mt} className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">{mt}</span>
                                 ))}
                               </div>
+                              {bill.payment_mode && (
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full mt-1 inline-block ${pmClass}`}>
+                                  {bill.payment_mode}
+                                </span>
+                              )}
                             </td>
 
                             {/* Customer */}
@@ -1325,12 +1355,21 @@ export default function OrderBills() {
                               )}
                             </td>
 
-                            {/* Paid */}
+                            {/* Paid — cash amount + metal received badges */}
                             <td className="px-4 py-3 text-right">
                               <span className="font-semibold text-emerald-700 text-sm">{fmtMoney(bill.amt_jama)}</span>
+                              {metalReceivedBadges.length > 0 && (
+                                <div className="flex flex-wrap justify-end gap-0.5 mt-1">
+                                  {metalReceivedBadges.map((badge) => (
+                                    <span key={badge} className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
+                                      {badge}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </td>
 
-                            {/* Remaining */}
+                            {/* Remaining — cash balance + unsettled metal due */}
                             <td className="px-4 py-3 text-right">
                               {hasRefund ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700">
@@ -1342,6 +1381,15 @@ export default function OrderBills() {
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black bg-slate-100 text-slate-500">
                                   <CheckCircle size={9} /> Settled
                                 </span>
+                              )}
+                              {metalDueBadges.length > 0 && (
+                                <div className="flex flex-wrap justify-end gap-0.5 mt-1">
+                                  {metalDueBadges.map((badge) => (
+                                    <span key={badge} className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600 whitespace-nowrap">
+                                      {badge} owed
+                                    </span>
+                                  ))}
+                                </div>
                               )}
                             </td>
 

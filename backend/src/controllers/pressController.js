@@ -126,7 +126,7 @@ const completePress = async (req, res) => {
     const scrWeightDiff = scrW - (process.scrap_weight || 0);
     if (scrWeightDiff > 0) {
       await stockService.updateOpeningStock(process.metal_type, scrWeightDiff, true);
-      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from Press ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from Press ${process.job_number}`, "PRESS", process_id);
     } else if (scrWeightDiff < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(scrWeightDiff), false);
     }
@@ -278,7 +278,7 @@ const deletePress = async (req, res) => {
       if (process.issue_size > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issue_size, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issue_size, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Press Job ${process.job_number}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Press Job ${process.job_number}`, "PRESS", parseInt(process_id));
       }
       await pressService.deletePressProcessById(process_id);
       return formatResponse(res, 200, true, "Pending press process deleted and stock refunded.");
@@ -294,7 +294,7 @@ const deletePress = async (req, res) => {
       if (process.issued_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issued_weight, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issued_weight, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Running Press Job ${process.job_number} (Full Reversal)`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Running Press Job ${process.job_number} (Full Reversal)`, "PRESS", parseInt(process_id));
       }
       await pressService.deletePressProcessById(process_id);
       return formatResponse(res, 200, true, "Running press process deleted and stock refunded.");
@@ -312,7 +312,7 @@ const deletePress = async (req, res) => {
       }
       if (process.issued_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issued_weight, true);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Completed Press Job ${process.job_number} (Full Reversal)`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Completed Press Job ${process.job_number} (Full Reversal)`, "PRESS", parseInt(process_id));
       }
       await pressService.deletePressProcessById(process_id);
       return formatResponse(res, 200, true, "Completed press process deleted and stock refunded.");
@@ -339,7 +339,7 @@ const revertPress = async (req, res) => {
         await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
       }
       await stockService.updateInprocessWeight(process.metal_type, process.issued_weight, true);
-      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted Press Job ${process.job_number} to RUNNING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted Press Job ${process.job_number} to RUNNING`, "PRESS", parseInt(process_id));
 
       await pressService.editPressProcessUniversal(process_id, {
         status: "RUNNING", return_weight: 0, return_pieces: 0, scrap_weight: 0, loss_weight: 0, end_time: null,
@@ -359,7 +359,7 @@ const revertPress = async (req, res) => {
         await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), false);
         await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), true);
       }
-      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Press Job ${process.job_number} to PENDING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Press Job ${process.job_number} to PENDING`, "PRESS", parseInt(process_id));
       await pressService.editPressProcessUniversal(process_id, { status: "PENDING", issued_weight: 0, start_time: null });
       return formatResponse(res, 200, true, "Press process reverted to PENDING.");
 
@@ -367,7 +367,7 @@ const revertPress = async (req, res) => {
       if (process.issue_size > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issue_size, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issue_size, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Press Job ${process.job_number}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Press Job ${process.job_number}`, "PRESS", parseInt(process_id));
       }
       await pressService.deletePressProcessById(process_id);
       return formatResponse(res, 200, true, "Pending press process queue removed and stock refunded.");

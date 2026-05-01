@@ -29,6 +29,7 @@ import Toast from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
 import { useAuth } from "../context/AuthContext";
+import api from "../api/axiosConfig";
 
 const sizeOptions = {
   "Gold 22K": [
@@ -116,25 +117,6 @@ const JobHistory = () => {
     } finally {
       setLoading(false);
     }
-
-    const fetchUsers = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(
-          `${import.meta.env.VITE_API_URL || "http://localhost:3000/api"}/auth/users`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setUsers(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch users");
-      }
-    };
-    fetchUsers();
   }, [jobNumber]);
 
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
@@ -476,6 +458,18 @@ const JobHistory = () => {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const { data } = await api.get("/auth/users");
+        if (data.success && Array.isArray(data.data)) setUsers(data.data);
+      } catch (err) {
+        console.error("Failed to fetch users", err.message);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const issVal = selectedProcess
     ? parseFloat(selectedProcess.issued_weight) || 0

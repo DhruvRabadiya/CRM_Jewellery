@@ -27,7 +27,7 @@ const createTpp = async (req, res) => {
 
     await stockService.updateOpeningStock(metal_type, weight, false);
     await stockService.updateInprocessWeight(metal_type, weight, true);
-    await stockService.logTransaction(metal_type, TRANSACTION_TYPES.JOB_ISSUE, weight, `Queued TPP Job ${job_number}`);
+    await stockService.logTransaction(metal_type, TRANSACTION_TYPES.JOB_ISSUE, weight, `Queued TPP Job ${job_number}`, "TPP", processId);
 
     return formatResponse(res, 201, true, "TPP process queued", { processId });
   } catch (error) {
@@ -55,11 +55,11 @@ const startTpp = async (req, res) => {
       }
       await stockService.updateOpeningStock(process.metal_type, delta, false);
       await stockService.updateInprocessWeight(process.metal_type, delta, true);
-      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", delta, `Start delta adjustment (added) for TPP Job ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", delta, `Start delta adjustment (added) for TPP Job ${process.job_number}`, "TPP", process_id);
     } else if (delta < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), true);
       await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), false);
-      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", Math.abs(delta), `Start delta adjustment (refunded) for TPP Job ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", Math.abs(delta), `Start delta adjustment (refunded) for TPP Job ${process.job_number}`, "TPP", process_id);
     }
 
     await tppService.startTppProcess(process_id, weight, pieces, employee, description);
@@ -122,7 +122,7 @@ const completeTpp = async (req, res) => {
     const scrWeightDiff = scrW - (process.scrap_weight || 0);
     if (scrWeightDiff > 0) {
       await stockService.updateOpeningStock(process.metal_type, scrWeightDiff, true);
-      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from TPP ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from TPP ${process.job_number}`, "TPP", process_id);
     } else if (scrWeightDiff < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(scrWeightDiff), false);
     }
@@ -274,7 +274,7 @@ const deleteTpp = async (req, res) => {
       if (process.issue_size > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issue_size, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issue_size, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued TPP Job ${process.job_number}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued TPP Job ${process.job_number}`, "TPP", parseInt(process_id));
       }
       await tppService.deleteTppProcessById(process_id);
       return formatResponse(res, 200, true, "Pending TPP process deleted and stock refunded.");
@@ -290,7 +290,7 @@ const deleteTpp = async (req, res) => {
       if (process.issued_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issued_weight, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issued_weight, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Running TPP Job ${process.job_number} (Full Reversal)`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Running TPP Job ${process.job_number} (Full Reversal)`, "TPP", parseInt(process_id));
       }
       await tppService.deleteTppProcessById(process_id);
       return formatResponse(res, 200, true, "Running TPP process deleted and stock refunded.");
@@ -308,7 +308,7 @@ const deleteTpp = async (req, res) => {
       }
       if (process.issued_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issued_weight, true);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Completed TPP Job ${process.job_number} (Full Reversal)`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Completed TPP Job ${process.job_number} (Full Reversal)`, "TPP", parseInt(process_id));
       }
       await tppService.deleteTppProcessById(process_id);
       return formatResponse(res, 200, true, "Completed TPP process deleted and stock refunded.");
@@ -335,7 +335,7 @@ const revertTpp = async (req, res) => {
         await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
       }
       await stockService.updateInprocessWeight(process.metal_type, process.issued_weight, true);
-      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted TPP Job ${process.job_number} to RUNNING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted TPP Job ${process.job_number} to RUNNING`, "TPP", parseInt(process_id));
 
       await tppService.editTppProcessUniversal(process_id, {
         status: "RUNNING", return_weight: 0, return_pieces: 0, scrap_weight: 0, loss_weight: 0, end_time: null,
@@ -355,7 +355,7 @@ const revertTpp = async (req, res) => {
         await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), false);
         await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), true);
       }
-      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted TPP Job ${process.job_number} to PENDING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted TPP Job ${process.job_number} to PENDING`, "TPP", parseInt(process_id));
       await tppService.editTppProcessUniversal(process_id, { status: "PENDING", issued_weight: 0, start_time: null });
       return formatResponse(res, 200, true, "TPP process reverted to PENDING.");
 
@@ -363,7 +363,7 @@ const revertTpp = async (req, res) => {
       if (process.issue_size > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issue_size, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issue_size, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued TPP Job ${process.job_number}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued TPP Job ${process.job_number}`, "TPP", parseInt(process_id));
       }
       await tppService.deleteTppProcessById(process_id);
       return formatResponse(res, 200, true, "Pending TPP process queue removed and stock refunded.");

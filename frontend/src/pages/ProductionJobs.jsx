@@ -31,6 +31,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import { formatWeight } from "../utils/formatHelpers";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import api from "../api/axiosConfig";
 
 const sizeOptions = {
   "Gold 22K": [
@@ -187,25 +188,19 @@ const ProductionJobs = () => {
 
   useEffect(() => {
     fetchProcesses();
+  }, [fetchProcesses]);
+
+  useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(
-          `${import.meta.env.VITE_API_URL || "http://localhost:3000/api"}/auth/users`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setUsers(data);
-        }
+        const { data } = await api.get("/auth/users");
+        if (data.success && Array.isArray(data.data)) setUsers(data.data);
       } catch (err) {
-        console.error("Failed to fetch users");
+        console.error("Failed to fetch users", err.message);
       }
     };
     fetchUsers();
-  }, [fetchProcesses]);
+  }, []);
 
   const openCreateModal = async () => {
     try {

@@ -92,7 +92,7 @@ const createPacking = async (req, res) => {
 
     await stockService.updateOpeningStock(metal_type, weight, false);
     await stockService.updateInprocessWeight(metal_type, weight, true);
-    await stockService.logTransaction(metal_type, TRANSACTION_TYPES.JOB_ISSUE, weight, `Queued Packing Job ${job_number}`);
+    await stockService.logTransaction(metal_type, TRANSACTION_TYPES.JOB_ISSUE, weight, `Queued Packing Job ${job_number}`, "PACKING", processId);
 
     return formatResponse(res, 201, true, "Packing process queued", { processId });
   } catch (error) {
@@ -120,11 +120,11 @@ const startPacking = async (req, res) => {
       }
       await stockService.updateOpeningStock(process.metal_type, delta, false);
       await stockService.updateInprocessWeight(process.metal_type, delta, true);
-      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", delta, `Start delta adjustment (added) for Packing Job ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", delta, `Start delta adjustment (added) for Packing Job ${process.job_number}`, "PACKING", process_id);
     } else if (delta < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), true);
       await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), false);
-      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", Math.abs(delta), `Start delta adjustment (refunded) for Packing Job ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "ADJUSTMENT", Math.abs(delta), `Start delta adjustment (refunded) for Packing Job ${process.job_number}`, "PACKING", process_id);
     }
 
     await packingService.startPackingProcess(process_id, weight, pieces, employee, description);
@@ -192,7 +192,7 @@ const completePacking = async (req, res) => {
     const scrWeightDiff = scrW - (process.scrap_weight || 0);
     if (scrWeightDiff > 0) {
       await stockService.updateOpeningStock(process.metal_type, scrWeightDiff, true);
-      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from Packing ${process.job_number}`);
+      await stockService.logTransaction(process.metal_type, "SCRAP_RETURN", scrWeightDiff, `Scrap from Packing ${process.job_number}`, "PACKING", process_id);
     } else if (scrWeightDiff < 0) {
       await stockService.updateOpeningStock(process.metal_type, Math.abs(scrWeightDiff), false);
     }
@@ -363,7 +363,7 @@ const deletePacking = async (req, res) => {
       if (process.issue_size > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issue_size, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issue_size, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Packing Job ${process.job_number}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Packing Job ${process.job_number}`, "PACKING", parseInt(process_id));
       }
       await packingService.deletePackingProcessById(process_id);
       return formatResponse(res, 200, true, "Pending packing process deleted and stock refunded.");
@@ -379,7 +379,7 @@ const deletePacking = async (req, res) => {
       if (process.issued_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issued_weight, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issued_weight, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Running Packing Job ${process.job_number} (Full Reversal)`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Running Packing Job ${process.job_number} (Full Reversal)`, "PACKING", parseInt(process_id));
       }
       await packingService.deletePackingProcessById(process_id);
       return formatResponse(res, 200, true, "Running packing process deleted and stock refunded.");
@@ -398,7 +398,7 @@ const deletePacking = async (req, res) => {
       }
       if (process.issued_weight > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issued_weight, true);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Completed Packing Job ${process.job_number} (Full Reversal)`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Deleted Completed Packing Job ${process.job_number} (Full Reversal)`, "PACKING", parseInt(process_id));
       }
       await packingService.deletePackingProcessById(process_id);
       return formatResponse(res, 200, true, "Completed packing process deleted and stock refunded.");
@@ -425,7 +425,7 @@ const revertPacking = async (req, res) => {
         await stockService.addTotalLoss(process.metal_type, -process.loss_weight);
       }
       await stockService.updateInprocessWeight(process.metal_type, process.issued_weight, true);
-      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted Packing Job ${process.job_number} to RUNNING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", process.issued_weight, `Reverted Packing Job ${process.job_number} to RUNNING`, "PACKING", parseInt(process_id));
 
       await packingService.editPackingProcessUniversal(process_id, {
         status: "RUNNING", return_weight: 0, return_pieces: 0, scrap_weight: 0, loss_weight: 0, end_time: null,
@@ -445,7 +445,7 @@ const revertPacking = async (req, res) => {
         await stockService.updateOpeningStock(process.metal_type, Math.abs(delta), false);
         await stockService.updateInprocessWeight(process.metal_type, Math.abs(delta), true);
       }
-      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Packing Job ${process.job_number} to PENDING`);
+      await stockService.logTransaction(process.metal_type, "REVERSAL", Math.abs(delta), `Reverted Packing Job ${process.job_number} to PENDING`, "PACKING", parseInt(process_id));
       await packingService.editPackingProcessUniversal(process_id, { status: "PENDING", issued_weight: 0, start_time: null });
       return formatResponse(res, 200, true, "Packing process reverted to PENDING.");
 
@@ -453,7 +453,7 @@ const revertPacking = async (req, res) => {
       if (process.issue_size > 0) {
         await stockService.updateOpeningStock(process.metal_type, process.issue_size, true);
         await stockService.updateInprocessWeight(process.metal_type, process.issue_size, false);
-        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Packing Job ${process.job_number}`);
+        await stockService.logTransaction(process.metal_type, "REVERSAL", process.issue_size, `Deleted Queued Packing Job ${process.job_number}`, "PACKING", parseInt(process_id));
       }
       await packingService.deletePackingProcessById(process_id);
       return formatResponse(res, 200, true, "Pending packing process queue removed and stock refunded.");

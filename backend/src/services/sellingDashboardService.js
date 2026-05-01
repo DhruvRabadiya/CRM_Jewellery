@@ -18,82 +18,89 @@ const all = (sql, params = []) =>
 
 // Dashboard summary for the Selling area.
 // Reads from:
-//   - customer_ledger_entries  → metal inventory running balances
-//   - counter_cash_ledger       → cash/online totals
-//   - customers                 → outstanding receivables
-//   - order_bills (estimates)   → bill count and total billed (subtotal)
+//   - customer_ledger_entries : metal payments received (PAYMENT_METAL entries)
+//   - counter_cash_ledger     : cash/online totals
+//   - customers               : outstanding receivables
+//   - order_bills (estimates) : bill count and total billed
 const getDashboard = async () => {
-  const metalRows = await all(
-    `WITH customer_metal_balances AS (
-       SELECT
-         customer_id,
-         metal_type,
-         ROUND(COALESCE(SUM(weight_delta), 0), 4) AS balance
-       FROM customer_ledger_entries
-       WHERE metal_type IN ('Gold 24K', 'Gold 22K', 'Silver')
-       GROUP BY customer_id, metal_type
-     )
-     SELECT
+  // 1. Total metal received as payment per metal type.
+  // weight_delta is stored as negative for payments (metal flowing IN to counter).
+  const metalReceivedRows = await all(
+    `SELECT
        metal_type,
-       ROUND(COALESCE(SUM(CASE WHEN balance < 0 THEN ABS(balance) ELSE 0 END), 0), 4) AS available_weight
-     FROM customer_metal_balances
+       ROUND(ABS(SUM(weight_delta)), 4) AS total_weight,
+       ROUND(SUM(
+         CASE WHEN reference_rate > 0
+              THEN ABS(weight_delta) * reference_rate / 10.0
+              ELSE 0 END
+       ), 2) AS estimated_value
+     FROM customer_ledger_entries
+     WHERE line_type = 'PAYMENT_METAL' AND weight_delta < 0
      GROUP BY metal_type`
   );
 
-  const metalInventory = {
-    "Gold 24K": 0,
-    "Gold 22K": 0,
-    Silver: 0,
+  const metalPaymentsReceived = {
+    "Gold 24K": { weight: 0, value: 0 },
+    "Gold 22K": { weight: 0, value: 0 },
+    Silver: { weight: 0, value: 0 },
   };
-
-  metalRows.forEach((row) => {
-    metalInventory[row.metal_type] = parseFloat(row.available_weight) || 0;
+  let totalMetalPaymentValue = 0;
+  metalReceivedRows.forEach((row) => {
+    if (metalPaymentsReceived[row.metal_type]) {
+      metalPaymentsReceived[row.metal_type].weight = parseFloat(row.total_weight) || 0;
+      metalPaymentsReceived[row.metal_type].value = parseFloat(row.estimated_value) || 0;
+      totalMetalPaymentValue += parseFloat(row.estimated_value) || 0;
+    }
   });
 
+  // 2. Cash / online totals from counter_cash_ledger
   const cashRow = await get(
-    `SELECT
-        ROUND(COALESCE(SUM(CASE WHEN mode = 'Cash'   THEN amount ELSE 0 END), 0), 2) AS cash_total,
-        ROUND(COALESCE(SUM(CASE WHEN mode = 'Bank / UPI' THEN amount ELSE 0 END), 0), 2) AS online_total
-     FROM counter_cash_ledger`
+    "SELECT" +
+    " ROUND(COALESCE(SUM(CASE WHEN mode = 'Cash'       THEN amount ELSE 0 END), 0), 2) AS cash_total," +
+    " ROUND(COALESCE(SUM(CASE WHEN mode = 'Bank / UPI' THEN amount ELSE 0 END), 0), 2) AS online_total" +
+    " FROM counter_cash_ledger"
   );
 
+  // 3. Customer outstanding receivable balance
   const receivableRow = await get(
-    `SELECT ROUND(COALESCE(SUM(outstanding_balance), 0), 2) AS receivable_total FROM customers`
+    "SELECT ROUND(COALESCE(SUM(outstanding_balance), 0), 2) AS receivable_total FROM customers"
   );
 
-  // Estimates (order_bills) — count and grossed up subtotal
+  // 4. Estimates count and total billed
   const billRow = await get(
-    `SELECT
-        COUNT(*) AS bill_count,
-        ROUND(COALESCE(SUM(total_amount), 0), 2) AS billed_total
-     FROM order_bills`
+    "SELECT COUNT(*) AS bill_count," +
+    " ROUND(COALESCE(SUM(total_amount), 0), 2) AS billed_total" +
+    " FROM order_bills"
   );
 
-  // Recent estimates — shape mirrors the old selling_bills recent list so the
-  // dashboard frontend can render without changes.
+  // 5. Recent estimates with cash paid, metal received per type, payment mode, and balance.
+  //    fine_jama     = Gold 24K weight received (g)
+  //    jama_gold_22k = Gold 22K weight received (g)
+  //    jama_silver   = Silver weight received (g)
   const recentBills = await all(
-    `SELECT
-        ob_no           AS bill_no,
-        date,
-        customer_name,
-        customer_type,
-        total_amount,
-        ROUND(MAX(COALESCE(amt_jama, 0) - COALESCE(refund_due, 0), 0), 2) AS amount_paid,
-        amt_baki        AS outstanding_amount
-     FROM order_bills
-     ORDER BY id DESC
-     LIMIT 8`
+    "SELECT" +
+    "  ob_no AS bill_no," +
+    "  date, customer_name, customer_type, total_amount, payment_mode," +
+    "  ROUND(MAX(COALESCE(amt_jama, 0) - COALESCE(refund_due, 0), 0), 2) AS amount_paid," +
+    "  ROUND(COALESCE(fine_jama, 0), 4) AS metal_gold24k," +
+    "  ROUND(COALESCE(jama_gold_22k, 0), 4) AS metal_gold22k," +
+    "  ROUND(COALESCE(jama_silver, 0), 4) AS metal_silver," +
+    "  amt_baki AS outstanding_amount," +
+    "  refund_due" +
+    " FROM order_bills" +
+    " ORDER BY id DESC LIMIT 8"
   );
 
   return {
-    metal_inventory: metalInventory,
+    metal_payments_received: metalPaymentsReceived,
+    total_metal_payment_value: parseFloat(totalMetalPaymentValue.toFixed(2)),
     cash_status: {
-      cash_total: parseFloat(cashRow?.cash_total) || 0,
-      online_total: parseFloat(cashRow?.online_total) || 0,
+      cash_total: parseFloat(cashRow ? cashRow.cash_total : 0) || 0,
+      online_total: parseFloat(cashRow ? cashRow.online_total : 0) || 0,
     },
-    receivable_total: parseFloat(receivableRow?.receivable_total) || 0,
-    bill_count: parseInt(billRow?.bill_count, 10) || 0,
-    billed_total: parseFloat(billRow?.billed_total) || 0,
+    receivable_total: parseFloat(receivableRow ? receivableRow.receivable_total : 0) || 0,
+    bill_count: parseInt(billRow ? billRow.bill_count : 0, 10) || 0,
+    billed_total: parseFloat(billRow ? billRow.billed_total : 0) || 0,
     recent_bills: recentBills,
   };
 };
