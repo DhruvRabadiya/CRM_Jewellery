@@ -26,6 +26,9 @@
         "files": [
             "main.js",
             "backend/**/*",
+            "!backend/**/*.db",
+            "!backend/**/*.db-shm",
+            "!backend/**/*.db-wal",
             "frontend/dist/**/*"
         ]
     },

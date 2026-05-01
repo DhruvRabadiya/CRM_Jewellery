@@ -1,6 +1,7 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", "..", ".env") });
 const express = require("express");
+const db = require("../config/dbConfig");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 
@@ -59,6 +60,18 @@ app.use("/api/order-bills", authenticateToken, estimateRoutes);
 app.get("/", (req, res) => {
   res.send("Jewelry CRM Backend is Running");
 });
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+
+// Initialise the database (open → migrate → seed if fresh) then start
+// listening.  All route handlers are registered above so no request can
+// arrive before the database is ready.
+(async () => {
+  try {
+    await db.initializeDatabase();
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error("[Startup] Database initialization failed:", err.message);
+    process.exit(1);
+  }
+})();
