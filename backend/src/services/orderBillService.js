@@ -274,13 +274,36 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     }
   }
 
-  const hasCustomerDraft = (data.customer_name || "").trim() || (data.customer_phone || "").trim() || (data.customer_address || "").trim();
-  if (!data.customer_id && hasCustomerDraft) {
-    if (!(data.customer_name || "").trim()) {
-      throw createAppError("Customer name is required for a new customer", 400, "CUSTOMER_NAME_REQUIRED");
+  // Customer fields on estimates are all optional (walk-in allowed).
+  // Only constraint: name required if phone is provided (so CRM lookup works).
+  if (!data.customer_id) {
+    const hasPhone = (data.customer_phone || "").toString().trim();
+    const hasName  = (data.customer_name  || "").toString().trim();
+    if (hasPhone && !hasName) {
+      throw createAppError("Customer name is required when a phone number is provided", 400, "CUSTOMER_NAME_REQUIRED");
     }
-    if (!(data.customer_address || "").trim()) {
-      throw createAppError("Address is required for a new customer", 400, "CUSTOMER_ADDRESS_REQUIRED");
+  }
+
+  // If any balance is due, a customer name is required so the debt is tracked in the ledger.
+  if (!data.customer_id && !(data.customer_name || "").toString().trim()) {
+    const nonZeroForBal = (data.items || []).filter((i) => (parseInt(i.pcs, 10) || 0) > 0);
+    if (nonZeroForBal.length > 0) {
+      const balCheck = computeEstimateBalance({
+        items: nonZeroForBal,
+        paymentEntries,
+        discount: Math.max(0, parseFloat(data.discount) || 0),
+        settlementRates: normalizeSettlementRates(data.settlement_rates, data.settlement_rates),
+      });
+      const isBalanceDue =
+        (balCheck.amount_due || 0) > 0 ||
+        METAL_PAYMENT_TYPES.some((mt) => (balCheck.metal_due_unsettled?.[mt] || 0) > 0);
+      if (isBalanceDue) {
+        throw createAppError(
+          "Customer name is required when there is a balance due, so it can be tracked in the ledger.",
+          400,
+          "CUSTOMER_REQUIRED_FOR_BALANCE_DUE"
+        );
+      }
     }
   }
 
@@ -309,7 +332,7 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
   return paymentEntries;
 };
 
-const _resolveCustomerId = async (data) => {
+const _resolveCustomerId = async (data, { createIfBalanceDue = false } = {}) => {
   if (data.customer_id != null && data.customer_id !== "") {
     const customerId = parseInt(data.customer_id, 10);
     if (!Number.isInteger(customerId) || customerId <= 0) {
@@ -323,17 +346,29 @@ const _resolveCustomerId = async (data) => {
   }
   const phone = (data.customer_phone || "").toString().trim();
   const name = (data.customer_name || "").toString().trim();
-  if (!phone || !name) return null;
-  const customer = await customerService.findOrCreateByPhone({
-    party_name: name,
-    phone_no: phone,
-    address: data.customer_address || "",
-    city: data.customer_city || "",
-    firm_name: data.customer_firm || "",
-    telephone_no: data.customer_telephone || "",
-    customer_type: data.customer_type || "Retail",
-  });
-  return customer ? customer.id : null;
+  if (!name) return null;
+
+  // Name + phone: use phone-based find-or-create (richer record)
+  if (phone) {
+    const customer = await customerService.findOrCreateByPhone({
+      party_name: name,
+      phone_no: phone,
+      address: data.customer_address || "",
+      city: data.customer_city || "",
+      firm_name: data.customer_firm || "",
+      telephone_no: data.customer_telephone || "",
+      customer_type: data.customer_type || "Retail",
+    });
+    return customer ? customer.id : null;
+  }
+
+  // Name only + balance is due: create a minimal CRM record so the debt is ledger-tracked
+  if (createIfBalanceDue) {
+    const customer = await customerService.findOrCreateByName(name, data.customer_type || "Retail");
+    return customer ? customer.id : null;
+  }
+
+  return null;
 };
 
 const getNextObNo = () =>
@@ -454,6 +489,24 @@ const _insertItems = async (run, billId, items) => {
 };
 
 const _deleteAccountingEntries = async (run, billId) => {
+  // Reverse metal stock additions before deleting the transaction rows
+  const metalReceipts = await new Promise((resolve, reject) => {
+    db.all(
+      `SELECT metal_type, ROUND(SUM(weight), 4) AS total_weight
+         FROM stock_transactions
+        WHERE reference_type = ? AND reference_id = ? AND transaction_type = 'ESTIMATE_METAL_RECEIPT'
+        GROUP BY metal_type`,
+      [REFERENCE_TYPE, billId],
+      (err, rows) => (err ? reject(err) : resolve(rows || []))
+    );
+  });
+  for (const row of metalReceipts) {
+    await run(
+      `UPDATE stock_master SET opening_stock = MAX(ROUND(opening_stock - ?, 4), 0) WHERE metal_type = ?`,
+      [row.total_weight, row.metal_type]
+    );
+  }
+
   await run(
     `DELETE FROM customer_ledger_entries WHERE reference_type = ? AND reference_id = ?`,
     [REFERENCE_TYPE, billId]
@@ -495,6 +548,30 @@ const _applyOutstandingDelta = async (run, customerId, delta) => {
 const _insertAccountingEntries = async (
   run, billId, obNo, date, customerId, summary, paymentEntries
 ) => {
+  // ── Metal received as payment → always add to production stock ──────────────
+  for (const entry of paymentEntries) {
+    if (entry.payment_type !== "Metal") continue;
+    const metalWeight = roundWeight(entry.weight);
+    if (metalWeight <= 0) continue;
+    await run(
+      `UPDATE stock_master SET opening_stock = MAX(ROUND(opening_stock + ?, 4), 0) WHERE metal_type = ?`,
+      [metalWeight, entry.metal_type]
+    );
+    await run(
+      `INSERT INTO stock_transactions
+        (metal_type, transaction_type, weight, description, reference_type, reference_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        entry.metal_type,
+        "ESTIMATE_METAL_RECEIPT",
+        metalWeight,
+        `${entry.metal_type} received as payment on estimate #${obNo}`,
+        REFERENCE_TYPE,
+        billId,
+      ]
+    );
+  }
+
   if (customerId) {
     const labourDue = roundMoney(Math.max(summary.labour_total - summary.discount, 0));
     if (labourDue > 0) {
@@ -643,8 +720,7 @@ const _insertAccountingEntries = async (
 
     for (const entry of paymentEntries) {
       if (entry.payment_type === "Metal") {
-        // Selling-side metal received for an estimate belongs only to the customer/counter ledger.
-        // It must not leak into production stock transactions.
+        // Stock already credited above (unconditional block).
       } else {
         await run(
           `INSERT INTO counter_cash_ledger
@@ -671,10 +747,6 @@ const createBill = async (data) => {
   }
 
   const hasMetalPayment = paymentEntries.some((entry) => entry.payment_type === "Metal");
-  const hasCustomerHint = !!(data.customer_id || ((data.customer_phone || "").trim() && (data.customer_name || "").trim()));
-  if (hasMetalPayment && !hasCustomerHint) {
-    throw createAppError("Metal payment requires a customer. Please select or add one.", 400, "CUSTOMER_REQUIRED_FOR_METAL_PAYMENT");
-  }
 
   const discount = Math.max(0, parseFloat(data.discount) || 0);
   const settlementRates = normalizeSettlementRates(data.settlement_rates, data.settlement_rates);
@@ -683,11 +755,10 @@ const createBill = async (data) => {
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
   const legacyFields = _extractLegacyMetalFields(paymentEntries, settlementRates);
-  const resolvedCustomerId = await _resolveCustomerId(data);
-
-  if (hasMetalPayment && !resolvedCustomerId) {
-    throw createAppError("Metal payment requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
-  }
+  const isBalanceDue =
+    (summary.amt_baki || 0) > 0 ||
+    METAL_PAYMENT_TYPES.some((mt) => (summary.balance_snapshot?.metal_due_unsettled?.[mt] || 0) > 0);
+  const resolvedCustomerId = await _resolveCustomerId(data, { createIfBalanceDue: isBalanceDue });
 
   return db.runTransaction(async (run) => {
     await counterService.assertStockAvailable(data.items || []);
@@ -746,12 +817,10 @@ const updateBill = async (id, data) => {
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
   const legacyFields = _extractLegacyMetalFields(paymentEntries, settlementRates);
-  const resolvedCustomerId = await _resolveCustomerId(data);
-  const hasMetalPayment = paymentEntries.some((entry) => entry.payment_type === "Metal");
-  if (hasMetalPayment && !resolvedCustomerId) {
-    throw createAppError("Metal payment requires a resolvable customer. Please select or add one.", 400, "CUSTOMER_RESOLUTION_REQUIRED");
-  }
-
+  const isBalanceDue =
+    (summary.amt_baki || 0) > 0 ||
+    METAL_PAYMENT_TYPES.some((mt) => (summary.balance_snapshot?.metal_due_unsettled?.[mt] || 0) > 0);
+  const resolvedCustomerId = await _resolveCustomerId(data, { createIfBalanceDue: isBalanceDue });
   return db.runTransaction(async (run, get) => {
     const oldBill = await get(`SELECT customer_id FROM order_bills WHERE id = ?`, [id]);
     if (!oldBill) throw createAppError("Estimate not found", 404, "ESTIMATE_NOT_FOUND");

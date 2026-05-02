@@ -545,7 +545,6 @@ const EstimateViewModal = ({ bill, onClose, onEdit }) => {
                         <th className="text-left px-4 py-3 font-black">Category</th>
                         <th className="text-left px-4 py-3 font-black">Size</th>
                         <th className="text-right px-4 py-3 font-black">PCS</th>
-                        <th className="text-right px-4 py-3 font-black">g/pc</th>
                         <th className="text-right px-4 py-3 font-black">Weight</th>
                         <th className="text-right px-4 py-3 font-black">LC/pc</th>
                         <th className="text-right px-4 py-3 font-black">T. LC</th>
@@ -562,7 +561,6 @@ const EstimateViewModal = ({ bill, onClose, onEdit }) => {
                             <td className="px-4 py-3 text-slate-700 font-semibold">{item.category || "Standard"}</td>
                             <td className="px-4 py-3 text-slate-700">{item.size_label}</td>
                             <td className="px-4 py-3 text-right font-bold text-slate-800">{pcs}</td>
-                            <td className="px-4 py-3 text-right font-mono text-slate-600">{fmt(sizeValue, 3)}</td>
                             <td className="px-4 py-3 text-right font-mono text-slate-600">{fmt(weight, 4)}</td>
                             <td className="px-4 py-3 text-right font-mono text-slate-600">{fmt(item.lc_pp, 0)}</td>
                             <td className="px-4 py-3 text-right font-bold text-slate-800">{fmt(totalLabour, 0)}</td>
@@ -640,6 +638,7 @@ export default function OrderBills() {
   const [discount, setDiscount] = useState("");
   const [stockValidation, setStockValidation] = useState({ valid: true, items: [] });
   const [validatingStock, setValidatingStock] = useState(false);
+  const [showCustomerDetails, setShowCustomerDetails] = useState(false);
 
   // Keyboard-nav refs for PCS inputs
   const pcsInputRefs = useRef({});
@@ -901,6 +900,7 @@ export default function OrderBills() {
   const openNew = useCallback(async () => {
     const charges = Object.keys(groupedCharges).length ? groupedCharges : await loadCharges();
     await resetForm(charges, selectedDate);
+    setShowCustomerDetails(false);
     setView("form");
   }, [groupedCharges, loadCharges, resetForm, selectedDate]);
 
@@ -923,6 +923,8 @@ export default function OrderBills() {
       setCustomerPhone(full.customer_phone || "");
       setCustomerAddress(full.customer_address || "");
       setCustomerType(full.customer_type || "Retail");
+      // Expand customer details if any extra info is present
+      setShowCustomerDetails(!!(full.customer_phone || full.customer_address));
       setPaymentEntries(normalizePaymentEntries(full.payment_entries || [], full));
       setSettlementRates(extractSettlementRates(full));
       setDiscount(full.discount != null && parseFloat(full.discount) > 0 ? String(full.discount) : "");
@@ -999,6 +1001,15 @@ export default function OrderBills() {
       showToast("Customer name is required when adding a new customer", "error"); return;
     }
 
+    // If any balance is due, a customer name is required for ledger tracking
+    const isBalanceDue =
+      summary.amountDue > 0 ||
+      METAL_PAYMENT_TYPES.some((mt) => (summary.metalDueUnsettled?.[mt] || 0) > 0);
+    if (isBalanceDue && !selectedCustomer && !customerName.trim()) {
+      showToast("Please add the customer's name — there's a balance due and it needs to be tracked in the ledger.", "error");
+      return;
+    }
+
     const cleanedPaymentEntries = paymentEntries
       .map((entry) => {
         if (entry.payment_type === "Metal") {
@@ -1058,7 +1069,7 @@ export default function OrderBills() {
     } finally {
       setSaving(false);
     }
-  }, [customerAddress, customerName, customerPhone, customerType, discount, editBill, formDate, items, loadBills, obNo, paymentEntries, product, selectedCustomer, selectedProducts, settlementRates, showToast, stockValidation.items.length, stockValidation.valid, markDirty]);
+  }, [customerAddress, customerName, customerPhone, customerType, discount, editBill, formDate, items, loadBills, obNo, paymentEntries, product, selectedCustomer, selectedProducts, settlementRates, showToast, stockValidation.items.length, stockValidation.valid, markDirty, summary.amountDue, summary.metalDueUnsettled]);
 
   const handleDelete = useCallback(async (id) => {
     try {
@@ -1493,44 +1504,48 @@ export default function OrderBills() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5">
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Left column Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <div className="space-y-4">
 
-          {/* Section 1: Estimate Details */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <SectionHeader step="1" title="Estimate Details" />
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Estimate No.</label>
-                <input
-                  type="number" min="1" value={obNo} onChange={(e) => setObNo(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
-                />
-              </div>
-              <div>
+          {/* Section 1: Estimate Details — compact single-row header */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4">
+            <div className="flex flex-wrap items-end gap-4">
+              {/* Date — primary, always visible */}
+              <div className="flex-shrink-0">
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">Date</label>
                 <input
                   type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)}
+                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 font-semibold text-slate-700"
+                />
+              </div>
+
+              {/* Product description — grows to fill space */}
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">Product / Description <span className="font-normal text-slate-400">(optional)</span></label>
+                <input
+                  type="text" value={product} onChange={(e) => setProduct(e.target.value)}
+                  placeholder="e.g. Necklace set, Bangles, Ring..."
                   className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
                 />
               </div>
-            </div>
-            <div className="mt-3">
-              <label className="block text-xs font-bold text-slate-500 mb-1.5">Product / Description <span className="font-normal text-slate-400">(optional)</span></label>
-              <input
-                type="text" value={product} onChange={(e) => setProduct(e.target.value)}
-                placeholder="e.g. Necklace set, Bangles, Ring..."
-                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
-              />
+
+              {/* Estimate No — secondary, tucked at end */}
+              <div className="flex-shrink-0">
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">Bill No.</label>
+                <input
+                  type="number" min="1" value={obNo} onChange={(e) => setObNo(e.target.value)}
+                  className="w-20 px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 text-slate-500"
+                />
+              </div>
             </div>
           </div>
 
           {/* Section 2: Customer */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <SectionHeader step="2" title="Customer" subtitle="Search by name or phone, or type in new customer details." />
+            <SectionHeader step="2" title="Customer" subtitle="Search by name or phone — or just type in the customer's name below." />
 
-            {/* Selected customer card */}
+            {/* Selected customer chip */}
             {selectedCustomer && (
               <div className="mb-3 flex items-center justify-between gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
                 <div>
@@ -1538,7 +1553,7 @@ export default function OrderBills() {
                   <p className="text-xs text-indigo-500 mt-0.5">{selectedCustomer.phone_no || "No phone"}  ·  {selectedCustomer.customer_type}</p>
                 </div>
                 <button
-                  onClick={() => { setSelectedCustomer(null); setCustomerName(""); setCustomerPhone(""); setCustomerAddress(""); }}
+                  onClick={() => { setSelectedCustomer(null); setCustomerName(""); setCustomerPhone(""); setCustomerAddress(""); setShowCustomerDetails(false); }}
                   className="text-indigo-400 hover:text-rose-600 transition-colors p-1"
                 >
                   <X size={16} />
@@ -1546,6 +1561,7 @@ export default function OrderBills() {
               </div>
             )}
 
+            {/* Search */}
             <CustomerLookup
               key={selectedCustomer?.id || "new-customer"}
               selectedCustomer={selectedCustomer}
@@ -1555,15 +1571,18 @@ export default function OrderBills() {
                 setCustomerPhone(c.phone_no || "");
                 setCustomerAddress(c.address || "");
                 setCustomerType(c.customer_type || "Retail");
+                setShowCustomerDetails(!!(c.phone_no || c.address));
               }}
               onClear={() => {
                 setSelectedCustomer(null);
                 setCustomerName(""); setCustomerPhone(""); setCustomerAddress("");
+                setShowCustomerDetails(false);
               }}
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <div>
+            {/* Name + Type row — always visible */}
+            <div className="flex flex-col sm:flex-row gap-3 mt-3">
+              <div className="flex-1">
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">Name</label>
                 <input
                   type="text" value={customerName}
@@ -1572,45 +1591,82 @@ export default function OrderBills() {
                   className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Phone</label>
-                <input
-                  type="text" value={customerPhone}
-                  onChange={(e) => { setSelectedCustomer(null); setCustomerPhone(e.target.value); }}
-                  placeholder="Phone number"
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
-                />
+              <div className="flex-shrink-0">
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">Type</label>
+                <div className="flex gap-1.5">
+                  {CUSTOMER_TYPES.map((type) => (
+                    <button
+                      key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
+                      className={`px-3 py-2.5 rounded-xl text-xs font-black border-2 transition-all ${
+                        customerType === type
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+                      }`}
+                    >{type}</button>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="mt-3">
-              <label className="block text-xs font-bold text-slate-500 mb-1.5">Address</label>
-              <textarea
-                value={customerAddress}
-                onChange={(e) => { setSelectedCustomer(null); setCustomerAddress(e.target.value); }}
-                rows={2} placeholder="Customer address"
-                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 resize-none"
-              />
-            </div>
-            <div className="mt-3">
-              <label className="block text-xs font-bold text-slate-500 mb-2">Customer Type</label>
-              <div className="flex gap-2">
-                {CUSTOMER_TYPES.map((type) => (
-                  <button
-                    key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
-                    className={`flex-1 py-2 rounded-xl text-sm font-black border-2 transition-all ${
-                      customerType === type
-                        ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                        : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
-                    }`}
-                  >{type}</button>
-                ))}
+
+            {/* Balance-due nudge: show when items entered, balance owed, no customer yet */}
+            {summary.totalPcs > 0 && (() => {
+              const hasDue =
+                summary.amountDue > 0 ||
+                METAL_PAYMENT_TYPES.some((mt) => (summary.metalDueUnsettled?.[mt] || 0) > 0);
+              if (!hasDue || selectedCustomer || customerName.trim()) return null;
+              return (
+                <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700 font-semibold leading-snug">
+                    Balance is due — add the customer's name above so this can be tracked in their ledger.
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* Expandable: Phone + Address */}
+            {!showCustomerDetails ? (
+              <button
+                type="button"
+                onClick={() => setShowCustomerDetails(true)}
+                className="mt-2 text-xs text-indigo-500 font-bold hover:text-indigo-700 flex items-center gap-1 transition-colors"
+              >
+                <Plus size={11} /> Add phone / address
+              </button>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Phone</label>
+                  <input
+                    type="text" value={customerPhone}
+                    onChange={(e) => { setSelectedCustomer(null); setCustomerPhone(e.target.value); }}
+                    placeholder="Phone number"
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Address</label>
+                  <textarea
+                    value={customerAddress}
+                    onChange={(e) => { setSelectedCustomer(null); setCustomerAddress(e.target.value); }}
+                    rows={2} placeholder="Customer address"
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 resize-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowCustomerDetails(false); setCustomerPhone(""); setCustomerAddress(""); }}
+                  className="text-xs text-slate-400 font-semibold hover:text-rose-500 transition-colors"
+                >
+                  Remove phone / address
+                </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Section 3: Metal Types */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <SectionHeader step="3" title="Metal Types" subtitle="Select the metals the customer is bringing. You can select more than one." />
+            <SectionHeader step="3" title="Metal Types" subtitle="Which metal is the customer ordering in?" />
             <div className="flex gap-2 flex-wrap">
               {METAL_TYPES.map((metalType) => {
                 const selected = selectedProducts.includes(metalType);
@@ -1631,13 +1687,13 @@ export default function OrderBills() {
           </div>
 
           {/* Section 4: Items per metal */}
-          {selectedProducts.map((metalType, mIdx) => {
+          {selectedProducts.map((metalType) => {
             const categories = groupedCharges?.[metalType] || {};
             return (
               <div key={metalType} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 bg-gradient-to-r from-amber-50 to-white border-b border-amber-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-amber-400 text-white text-xs font-black flex items-center justify-center">{mIdx + 4}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0"></div>
                     <h3 className="font-black text-slate-800">{metalType}</h3>
                   </div>
                   <p className="text-xs font-semibold text-slate-500">
@@ -1650,7 +1706,8 @@ export default function OrderBills() {
                     No categories configured for {metalType}. Add them in Admin / Labour Charges.
                   </div>
                 ) : (
-                  <div className="space-y-4 p-5">
+                  <div className="p-3">
+                  <div className="space-y-3 max-w-2xl">
                     {Object.entries(categories).map(([category, sizeRows]) => {
                       const categoryItems = items.filter((i) => i.metal_type === metalType && i.category === category);
                       const catTotals = categoryItems.reduce(
@@ -1667,7 +1724,7 @@ export default function OrderBills() {
 
                       return (
                         <div key={`${metalType}-${category}`} className="border border-slate-200 rounded-2xl overflow-hidden">
-                          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                          <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                             <p className="font-black text-slate-700 text-sm">{category}</p>
                             {catTotals.pcs > 0 && (
                               <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
@@ -1677,16 +1734,21 @@ export default function OrderBills() {
                               </div>
                             )}
                           </div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                          <table className="w-full text-sm table-fixed">
+                            <colgroup>
+                              <col style={{width:"32%"}} />
+                              <col style={{width:"16%"}} />
+                              <col style={{width:"12%"}} />
+                              <col style={{width:"18%"}} />
+                              <col style={{width:"22%"}} />
+                            </colgroup>
                               <thead>
-                                <tr className="text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-100 bg-white">
-                                  <th className="text-left px-4 py-2.5 font-black">Size</th>
-                                  <th className="text-right px-4 py-2.5 font-black">g/pc</th>
-                                  <th className="text-right px-4 py-2.5 font-black">LC/pc</th>
-                                  <th className="text-center px-3 py-2.5 font-black w-24">PCS</th>
-                                  <th className="text-right px-4 py-2.5 font-black">Weight</th>
-                                  <th className="text-right px-4 py-2.5 font-black">T. LC</th>
+                                <tr className="uppercase tracking-wider text-slate-400 border-b border-slate-100 bg-white">
+                                  <th className="text-left px-3 py-2 font-black text-[10px]">Size</th>
+                                  <th className="text-right px-3 py-2 font-black text-[10px]">LC/pc</th>
+                                  <th className="text-center px-2 py-2 font-black text-[10px] w-16">Qty</th>
+                                  <th className="text-right px-3 py-2 font-black text-[10px]">Wt (g)</th>
+                                  <th className="text-right px-3 py-2 font-black text-[10px]">Labour</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1710,7 +1772,7 @@ export default function OrderBills() {
                                       }`}
                                     >
                                       {/* Size + stock info */}
-                                      <td className="px-4 py-2.5">
+                                      <td className="px-3 py-2">
                                         <p className={`font-semibold text-sm ${isActive ? "text-indigo-700" : "text-slate-700"}`}>
                                           {row.size_label}
                                         </p>
@@ -1731,25 +1793,24 @@ export default function OrderBills() {
                                         )}
                                       </td>
 
-                                      {/* g/pc */}
                                       <td className="px-4 py-2.5 text-right font-mono text-slate-500 text-xs">
                                         {row.size_value != null ? fmt(row.size_value, 3) : "-"}
                                       </td>
 
                                       {/* LC/pc */}
-                                      <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-700">
+                                      <td className="px-3 py-2 text-right font-mono text-xs text-slate-500">
                                         {fmt(currentItem?.lc_pp || getRateForCustomerType(row, customerType), 0)}
                                       </td>
 
                                       {/* PCS input */}
-                                      <td className="px-3 py-2.5 text-center">
+                                      <td className="px-2 py-2 text-center">
                                         <input
                                           ref={(el) => { if (el) pcsInputRefs.current[key] = el; }}
                                           type="number" min="0" step="1"
                                           value={currentItem?.pcs || ""}
                                           onChange={(e) => updatePieces(key, e.target.value)}
                                           onKeyDown={(e) => handlePcsKeyDown(e, allPcsKeys, globalIndex)}
-                                          className={`w-20 text-center text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 transition-colors ${
+                                          className={`w-14 text-center text-sm border rounded-lg px-1.5 py-1.5 focus:outline-none focus:ring-2 transition-colors ${
                                             validation && !validation.valid
                                               ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
                                               : isActive
@@ -1775,134 +1836,17 @@ export default function OrderBills() {
                                   );
                                 })}
                               </tbody>
-                            </table>
-                          </div>
+                          </table>
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 )}
               </div>
             );
           })}
 
-          {/* Section 5: Payment Breakdown */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <SectionHeader step="5" title="Payment Received" subtitle="Enter what the customer paid — cash, bank transfer, or metal. Add multiple entries if they paid in different ways." />
-            <div className="space-y-3">
-              {/* Warning: cash payment requires settlement rates */}
-              {paymentEntries.some((e) => e.payment_type !== "Metal" && parseFloat(e.amount) > 0) &&
-               items.some((item) => (parseInt(item.pcs, 10) || 0) > 0) && (
-                <div className="flex gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3 text-xs text-amber-800">
-                  <span className="mt-0.5 shrink-0">⚠️</span>
-                  <div>
-                    <p className="font-black">Add metal rate to calculate total correctly</p>
-                    <p className="mt-0.5 leading-relaxed">
-                      Enter the <span className="font-bold">Rate / 10g</span> for each metal in the <span className="font-bold">Estimate Summary</span> on the right. Without it, the metal value won't be counted in the total.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {paymentEntries.map((entry, index) => {
-                const isMetal = entry.payment_type === "Metal";
-                return (
-                  <div key={`payment-entry-${index}`} className="border border-slate-200 rounded-xl p-4 bg-slate-50/70">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">Payment Type</label>
-                        <select
-                          value={entry.payment_type}
-                          onChange={(e) => updatePaymentEntry(index, "payment_type", e.target.value)}
-                          className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                        >
-                          <option value="Cash">Cash</option>
-                          <option value="Bank / UPI">Bank / UPI</option>
-                          <option value="Metal">Metal</option>
-                        </select>
-                      </div>
-                      {!isMetal ? (
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">Amount (Rs.)</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={entry.amount || ""}
-                            onChange={(e) => updatePaymentEntry(index, "amount", e.target.value)}
-                            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                            placeholder="0.00"
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">Metal Type</label>
-                          <select
-                            value={entry.metal_type}
-                            onChange={(e) => updatePaymentEntry(index, "metal_type", e.target.value)}
-                            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                          >
-                            {METAL_TYPES.map((metalType) => (
-                              <option key={metalType} value={metalType}>{metalType}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      <div className="flex items-end">
-                        <button
-                          type="button"
-                          onClick={() => removePaymentEntry(index)}
-                          disabled={paymentEntries.length <= 1}
-                          className="w-full px-3 py-2.5 text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-xl hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-
-                    {isMetal && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">Weight (g)</label>
-                          <input
-                            type="number" min="0" step="0.001"
-                            value={entry.weight || ""}
-                            onChange={(e) => updatePaymentEntry(index, "weight", e.target.value)}
-                            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                            placeholder="0.000"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">Purity</label>
-                          <input
-                            type="text"
-                            value={entry.purity || ""}
-                            onChange={(e) => updatePaymentEntry(index, "purity", e.target.value)}
-                            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                            placeholder="99.99"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">Rate / 10g <span className="font-normal text-slate-400">(optional)</span></label>
-                          <input
-                            type="number" min="0" step="1"
-                            value={entry.reference_rate || ""}
-                            onChange={(e) => updatePaymentEntry(index, "reference_rate", e.target.value)}
-                            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                            placeholder="e.g. 75000"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <button
-                type="button"
-                onClick={addPaymentEntry}
-                className="w-full py-2.5 border border-dashed border-indigo-300 text-indigo-700 bg-indigo-50/60 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-colors"
-              >
-                + Add Another Payment
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right column: sticky summary Ã¢â€â‚¬Ã¢â€â‚¬ */}
@@ -1917,6 +1861,61 @@ export default function OrderBills() {
             </div>
 
             <div className="px-5 py-4 space-y-2.5">
+
+              {/* ── Payment Status Badge (checkout-style) ── */}
+              {summary.totalPcs > 0 && (() => {
+                const isFullyPaid = summary.amountDue === 0 && summary.amountGiven === 0 && summary.refundDue === 0 &&
+                  !Object.values(summary.metalDueUnsettled || {}).some((v) => v > 0);
+                const hasRefund   = summary.refundDue > 0 || summary.amountGiven > 0;
+                const isPartial   = !isFullyPaid && !hasRefund && summary.moneyPaid > 0;
+
+                const cfg = isFullyPaid
+                  ? { bg: "bg-emerald-50", border: "border-emerald-200", label: "✓ Fully Paid",   labelCls: "text-emerald-700",  sub: "All settled" }
+                  : hasRefund
+                  ? { bg: "bg-amber-50",   border: "border-amber-200",   label: "↩ Return to Customer", labelCls: "text-amber-700",    sub: `Give back ${fmtMoney(summary.amountGiven || summary.refundDue)}` }
+                  : isPartial
+                  ? { bg: "bg-blue-50",    border: "border-blue-200",    label: "⏳ Partial",       labelCls: "text-blue-700",     sub: `${fmtMoney(summary.moneyPaid)} paid` }
+                  : { bg: "bg-rose-50",    border: "border-rose-200",    label: "⬤ Payment Due",   labelCls: "text-rose-700",     sub: "Nothing received yet" };
+
+                return (
+                  <div className={`rounded-xl border ${cfg.bg} ${cfg.border} px-4 py-3`}>
+                    {/* 3-column checkout readout */}
+                    <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Total</p>
+                        <p className="text-sm font-black text-slate-800 mt-0.5">{fmtMoney(summary.totalAmount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Paid</p>
+                        <p className="text-sm font-black text-emerald-600 mt-0.5">{fmtMoney(summary.moneyPaid)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                          {hasRefund ? "Return" : "Remaining"}
+                        </p>
+                        <p className={`text-sm font-black mt-0.5 ${isFullyPaid ? "text-emerald-600" : hasRefund ? "text-amber-600" : "text-rose-600"}`}>
+                          {isFullyPaid
+                            ? fmtMoney(0)
+                            : hasRefund
+                              ? fmtMoney(summary.amountGiven || summary.refundDue)
+                              : fmtMoney(summary.amountDue)}
+                        </p>
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    {summary.totalAmount > 0 && (
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2 overflow-hidden">
+                        <div
+                          className={`h-1.5 rounded-full transition-all ${isFullyPaid ? "bg-emerald-500" : isPartial ? "bg-blue-500" : "bg-slate-300"}`}
+                          style={{ width: `${Math.min(100, (summary.moneyPaid / summary.totalAmount) * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                    <p className={`text-xs font-black text-center ${cfg.labelCls}`}>{cfg.label}</p>
+                  </div>
+                );
+              })()}
+
               {/* Stock validation status */}
               {validatingStock ? (
                 <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 border bg-slate-50 border-slate-200 text-xs font-bold text-slate-500">
@@ -1930,17 +1929,17 @@ export default function OrderBills() {
                 </div>
               ) : stockValidation.items.length > 0 ? (
                 <div className="rounded-xl px-3 py-2.5 border bg-emerald-50 border-emerald-200 text-xs font-bold text-emerald-700">
-                  All items available in stock
+                  ✓ All sizes available in stock
                 </div>
               ) : null}
 
               {/* Labour total */}
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500">Labour Total</span>
+                <span className="text-slate-500">Labour Charges</span>
                 <span className="font-bold text-slate-800">{fmtMoney(summary.labourTotal)}</span>
               </div>
 
-              {/* Per-metal breakdown — only show cards for metals with PCS entered or metal received */}
+              {/* Per-metal breakdown — Rate/10g inputs removed (now in Payment section) */}
               {Object.entries(summary.requiredMetal || {}).some(([mt, w]) =>
                 (w || 0) > 0 || (summary.metalReceived?.[mt] || 0) > 0
               ) && (
@@ -1952,7 +1951,6 @@ export default function OrderBills() {
                     const metalExcess   = summary.metalCredit?.[mt] || 0;
                     const shortfallVal  = summary.metalValueDue?.[mt] || 0;
                     const excessCredit  = summary.metalValueCredit?.[mt] || 0;
-                    // Only render card if this metal type is actually in use
                     if ((w || 0) === 0 && metalGiven === 0) return null;
                     return (
                       <div key={mt} className="bg-slate-50 rounded-xl p-3 space-y-1.5">
@@ -1985,23 +1983,13 @@ export default function OrderBills() {
                             <span className="font-bold text-emerald-600">{fmt(metalExcess, 4)}g</span>
                           </div>
                         )}
-                        <div className="space-y-1">
+                        {/* Rate display-only (input has moved to Payment section) */}
+                        {summary.settlementRate?.[mt] > 0 && (
                           <div className="flex justify-between text-xs">
                             <span className="text-slate-500">Rate / 10g</span>
-                            <span className="font-bold text-slate-700">
-                              {summary.settlementRate?.[mt] ? fmtMoney(summary.settlementRate[mt]) : "-"}
-                            </span>
+                            <span className="font-bold text-slate-600">{fmtMoney(summary.settlementRate[mt])}</span>
                           </div>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={settlementRates?.[mt] || ""}
-                            onChange={(e) => updateSettlementRate(mt, e.target.value)}
-                            className="w-full px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                            placeholder="Enter rate per 10g"
-                          />
-                        </div>
+                        )}
                         {shortfallVal > 0 && (
                           <div className="flex justify-between text-xs">
                             <span className="text-slate-500">Cash Value Due</span>
@@ -2039,13 +2027,17 @@ export default function OrderBills() {
                 <span className="font-bold text-slate-800">{fmtMoney(summary.subtotal)}</span>
               </div>
 
+              {/* Discount */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">Discount</label>
-                <input
-                  type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-slate-50"
-                  placeholder="0.00"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rs.</span>
+                  <input
+                    type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-slate-50"
+                    placeholder="0.00"
+                  />
+                </div>
                 {summary.discount > 0 && (
                   <p className="flex justify-between text-xs text-emerald-700 font-semibold mt-1">
                     <span>Discount</span><span>- {fmtMoney(summary.discount)}</span>
@@ -2053,27 +2045,152 @@ export default function OrderBills() {
                 )}
               </div>
 
-              {/* Total amount */}
+              {/* Final Payable */}
               <div className="flex justify-between items-center bg-indigo-50 rounded-xl px-3 py-2.5">
                 <span className="font-black text-indigo-800">Final Payable</span>
                 <span className="font-black text-indigo-800 text-base">{fmtMoney(summary.totalAmount)}</span>
               </div>
 
+              {/* ── Payment Received — integrated into summary ── */}
+              <div className="border-t-2 border-dashed border-slate-200 pt-3 mt-1 space-y-2">
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  💰 How did the customer pay?
+                </p>
+
+                {/* Metal rate strip — only when items have qty */}
+                {items.some((item) => (parseInt(item.pcs, 10) || 0) > 0) &&
+                 selectedProducts.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 space-y-1.5">
+                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider">Gold / Silver Rate per 10g</p>
+                    {selectedProducts.map((mt) => (
+                      <div key={mt} className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold text-amber-600 w-16 shrink-0">{mt}</span>
+                        <input
+                          type="number" min="0" step="1"
+                          value={settlementRates?.[mt] || ""}
+                          onChange={(e) => updateSettlementRate(mt, e.target.value)}
+                          className="flex-1 px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                          placeholder="Rate / 10g"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Payment entries */}
+                <div className="space-y-2">
+                  {paymentEntries.map((entry, index) => {
+                    const isMetal = entry.payment_type === "Metal";
+                    return (
+                      <div key={`payment-entry-${index}`}
+                        className={`rounded-xl border p-3 transition-colors ${isMetal ? "bg-amber-50/60 border-amber-200" : "bg-slate-50 border-slate-200"}`}
+                      >
+                        {/* Type pills + amount */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="flex gap-1 shrink-0">
+                            {["Cash", "Bank / UPI", "Metal"].map((type) => (
+                              <button
+                                key={type} type="button"
+                                onClick={() => updatePaymentEntry(index, "payment_type", type)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black border-2 transition-all ${
+                                  entry.payment_type === type
+                                    ? type === "Metal"
+                                      ? "bg-amber-500 border-amber-500 text-white"
+                                      : "bg-indigo-600 border-indigo-600 text-white"
+                                    : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300"
+                                }`}
+                              >{type}</button>
+                            ))}
+                          </div>
+                          {!isMetal ? (
+                            <div className="relative flex-1 min-w-[80px]">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
+                              <input
+                                type="number" min="0" step="0.01"
+                                value={entry.amount || ""}
+                                onChange={(e) => updatePaymentEntry(index, "amount", e.target.value)}
+                                className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white font-semibold"
+                                placeholder="0.00"
+                                autoComplete="off"
+                              />
+                            </div>
+                          ) : (
+                            <select
+                              value={entry.metal_type}
+                              onChange={(e) => updatePaymentEntry(index, "metal_type", e.target.value)}
+                              className="flex-1 min-w-[80px] px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold text-amber-800"
+                            >
+                              {METAL_TYPES.map((mt) => (
+                                <option key={mt} value={mt}>{mt}</option>
+                              ))}
+                            </select>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removePaymentEntry(index)}
+                            disabled={paymentEntries.length <= 1}
+                            className="p-1 text-slate-300 hover:text-rose-500 rounded-lg transition-colors disabled:opacity-20 shrink-0"
+                          ><X size={13} /></button>
+                        </div>
+
+                        {/* Metal details row */}
+                        {isMetal && (
+                          <div className="grid grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-amber-200">
+                            <div>
+                              <p className="text-[9px] font-black text-amber-600 mb-1">Weight (g)</p>
+                              <input type="number" min="0" step="0.001"
+                                value={entry.weight || ""}
+                                onChange={(e) => updatePaymentEntry(index, "weight", e.target.value)}
+                                className="w-full px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold"
+                                placeholder="0.000"
+                              />
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black text-amber-600 mb-1">Purity</p>
+                              <input type="text"
+                                value={entry.purity || ""}
+                                onChange={(e) => updatePaymentEntry(index, "purity", e.target.value)}
+                                className="w-full px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                                placeholder="99.99"
+                              />
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black text-amber-600 mb-1">Rate / 10g</p>
+                              <input type="number" min="0" step="1"
+                                value={entry.reference_rate || ""}
+                                onChange={(e) => updatePaymentEntry(index, "reference_rate", e.target.value)}
+                                className="w-full px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                                placeholder="opt."
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={addPaymentEntry}
+                    className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-500 hover:text-indigo-700 py-1.5 px-1 transition-colors"
+                  >
+                    <Plus size={11} /> Add payment method
+                  </button>
+                </div>
+              </div>
+
               {/* Money received */}
               <div className="rounded-xl px-3 py-2.5 border bg-slate-50 border-slate-200 flex justify-between items-center">
-                <span className="text-sm font-bold text-slate-600">Money Received</span>
+                <span className="text-sm font-bold text-slate-600">Total Paid So Far</span>
                 <span className="text-sm font-black text-slate-800">{fmtMoney(summary.moneyPaid)}</span>
               </div>
 
-              {/* Settlement outcome — mutually exclusive display */}
+              {/* Settlement outcome — mutually exclusive */}
               {summary.amountGiven > 0 ? (
-                // Excess metal scenario: cash to return to customer
                 <div className="rounded-xl px-3 py-2.5 border bg-amber-50 border-amber-200 flex justify-between items-center">
                   <span className="text-sm font-bold text-amber-700">Amount Given to Customer</span>
                   <span className="text-sm font-black text-amber-800">{fmtMoney(summary.amountGiven)}</span>
                 </div>
               ) : summary.refundDue > 0 ? (
-                // Cash overpayment (no excess metal)
                 <>
                   <div className="rounded-xl px-3 py-2.5 border bg-emerald-50 border-emerald-200 text-emerald-800 font-black flex justify-between items-center">
                     <span>Refund Due</span>
@@ -2084,20 +2201,19 @@ export default function OrderBills() {
                   </p>
                 </>
               ) : (
-                // Normal: cash balance still owed (or zero = fully settled)
                 <div className={`rounded-xl px-3 py-2.5 border font-black flex justify-between items-center ${
                   summary.amountDue === 0
                     ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                     : "bg-rose-50 border-rose-200 text-rose-700"
                 }`}>
-                  <span>Balance Due</span>
+                  <span>Amount Still Owed</span>
                   <span className="text-base">{fmtMoney(summary.amountDue)}</span>
                 </div>
               )}
 
               {/* OFG status */}
               <div className="rounded-xl px-3 py-2.5 border bg-slate-50 border-slate-200">
-                <p className="font-black text-slate-700 text-sm">{summary.ofgStatus}</p>
+                <p className="font-black text-slate-700 text-sm">{summary.ofgStatus === "OF.G AFSL" ? "Fine Carry Forward (OF.G AFSL)" : "Order Fulfilled (OF.G HDF)"}</p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {summary.carryFine > 0
                     ? `Fine to carry: ${fmt(summary.carryFine, 4)}g`
@@ -2138,10 +2254,10 @@ export default function OrderBills() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2">Quick Tips</p>
             <ul className="space-y-1.5 text-[11px] text-slate-500">
-              <li>↵ Enter or ↓ moves to next quantity box</li>
-              <li>↑ moves to the previous quantity box</li>
-              <li>Rows with quantity turn blue</li>
-              <li>Stock availability updates automatically</li>
+              <li>Press Enter after typing a number to jump to the next size</li>
+              <li>Rows with a quantity entered will turn blue</li>
+              <li>Stock is checked automatically as you type</li>
+              <li>Payment status updates live in the summary panel →</li>
             </ul>
           </div>
         </div>
@@ -2149,4 +2265,3 @@ export default function OrderBills() {
     </div>
   );
 }
-

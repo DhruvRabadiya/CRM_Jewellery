@@ -335,6 +335,30 @@ const getCustomerByPhone = (phone_no) => {
   });
 };
 
+const findOrCreateByName = async (party_name, customer_type = "Retail") => {
+  const trimmedName = (party_name || "").toString().trim();
+  if (!trimmedName) return null;
+
+  // Match existing customer by name (case-insensitive, first match)
+  const existing = await new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM customers WHERE LOWER(party_name) = LOWER(?) LIMIT 1`,
+      [trimmedName],
+      (err, row) => (err ? reject(err) : resolve(row || null))
+    );
+  });
+  if (existing) return existing;
+
+  // Create a minimal CRM record (name only — phone/address can be filled later)
+  const newId = await createCustomer(
+    trimmedName,
+    trimmedName,
+    "", "", "", "",
+    customer_type || "Retail"
+  );
+  return await getCustomerById(newId);
+};
+
 const findOrCreateByPhone = async ({ party_name, phone_no, address, city, firm_name, telephone_no, customer_type }) => {
   const trimmedPhone = (phone_no || "").toString().trim();
   const trimmedName = (party_name || "").toString().trim();
@@ -532,6 +556,7 @@ module.exports = {
   getAllCustomersPaginated,
   getCustomerById,
   getCustomerByPhone,
+  findOrCreateByName,
   findOrCreateByPhone,
   createCustomer,
   updateCustomer,
