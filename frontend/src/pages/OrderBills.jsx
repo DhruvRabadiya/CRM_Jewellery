@@ -1792,11 +1792,6 @@ export default function OrderBills() {
                                           </p>
                                         )}
                                       </td>
-
-                                      <td className="px-4 py-2.5 text-right font-mono text-slate-500 text-xs">
-                                        {row.size_value != null ? fmt(row.size_value, 3) : "-"}
-                                      </td>
-
                                       {/* LC/pc */}
                                       <td className="px-3 py-2 text-right font-mono text-xs text-slate-500">
                                         {fmt(currentItem?.lc_pp || getRateForCustomerType(row, customerType), 0)}
