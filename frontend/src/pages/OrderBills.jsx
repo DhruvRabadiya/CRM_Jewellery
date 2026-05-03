@@ -598,7 +598,6 @@ export default function OrderBills() {
   const { versions, markDirty } = useSellingSync();
   const initialSelectedDateRef = useRef(getTodayLocalISO());
   const latestBillsRequestRef = useRef(0);
-  const dateDebounceRef = useRef(null);
 
 // --- State ---
   const [view, setView] = useState("list");
@@ -610,8 +609,6 @@ export default function OrderBills() {
   const [listPage, setListPage]   = useState(1);
   const [listSort, setListSort]   = useState("newest");
   const [selectedDate, setSelectedDate] = useState(initialSelectedDateRef.current);
-  // Separate display value for the date input so typing doesn't trigger fetches mid-edit
-  const [dateInputValue, setDateInputValue] = useState(initialSelectedDateRef.current);
 
 // --- State ---
   const [groupedCharges, setGroupedCharges] = useState({});
@@ -770,10 +767,6 @@ export default function OrderBills() {
 
   // Reset search when date changes so the new day opens clean
   useEffect(() => { setListSearch(""); }, [selectedDate]);
-
-  // Keep the date input display value in sync when selectedDate changes programmatically
-  // (e.g. from prev/next buttons or after save)
-  useEffect(() => { setDateInputValue(selectedDate); }, [selectedDate]);
 
   // Stats scoped to the selected day
   const listStats = useMemo(() => ({
@@ -1160,47 +1153,53 @@ export default function OrderBills() {
         {/* Date + Search + Sort */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-3">
           <div className="flex flex-col lg:flex-row lg:items-center gap-2.5">
-            <div className="flex items-center gap-2">
+            {/* Date navigator — single source of truth: selectedDate */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-1">
+              {/* Prev arrow */}
               <button
-                onClick={() => setSelectedDate((current) => shiftDate(current, -1))}
-                className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
-                aria-label="Previous date"
+                type="button"
+                onClick={() => setSelectedDate((cur) => shiftDate(cur, -1))}
+                className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 transition-colors"
+                aria-label="Previous day"
               >
-                <ChevronLeft size={16} />
+                <ChevronLeft size={18} />
               </button>
+
+              {/* Date input — directly bound to selectedDate, no intermediate state */}
               <input
                 type="date"
-                value={dateInputValue}
+                value={selectedDate}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setDateInputValue(val);
-                  // Debounce: only commit to selectedDate once the user stops typing
-                  // (also fires immediately when using the browser date-picker)
-                  clearTimeout(dateDebounceRef.current);
-                  if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
-                    dateDebounceRef.current = setTimeout(() => setSelectedDate(val), 300);
-                  }
+                  if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) setSelectedDate(val);
                 }}
-                onBlur={(e) => {
-                  // Commit on blur in case debounce hasn't fired yet
-                  const val = e.target.value;
-                  if (val && /^\d{4}-\d{2}-\d{2}$/.test(val) && val !== selectedDate) {
-                    clearTimeout(dateDebounceRef.current);
-                    setSelectedDate(val);
-                  }
-                }}
-                className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 font-semibold text-slate-700"
+                className="px-2 py-1.5 text-sm border-0 bg-transparent focus:outline-none font-bold text-slate-700 cursor-pointer text-center"
+                style={{ colorScheme: "light" }}
               />
+
+              {/* Next arrow */}
               <button
-                onClick={() => setSelectedDate((current) => shiftDate(current, 1))}
-                className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
-                aria-label="Next date"
+                type="button"
+                onClick={() => setSelectedDate((cur) => shiftDate(cur, 1))}
+                className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 transition-colors"
+                aria-label="Next day"
               >
-                <ChevronRight size={16} />
+                <ChevronRight size={18} />
               </button>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-semibold">
-              <span>{fmtDate(selectedDate)}</span>
+
+            {/* Formatted date label + Today shortcut + spinner */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-slate-600">{fmtDate(selectedDate)}</span>
+              {selectedDate !== getTodayLocalISO() && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(getTodayLocalISO())}
+                  className="px-2 py-0.5 text-[11px] font-black rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                >
+                  Today
+                </button>
+              )}
               {listLoading && (
                 <div className="w-3.5 h-3.5 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin flex-shrink-0" />
               )}
