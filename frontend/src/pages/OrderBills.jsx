@@ -171,13 +171,16 @@ const Toast = ({ toast, onClose }) => {
 };
 
 // --- View state ---
-const CustomerLookup = ({ selectedCustomer, onSelect, onClear }) => {
-  const [query, setQuery]     = useState(selectedCustomer?.party_name || "");
+// Unified customer name input with live search dropdown.
+// Replaces the old two-control pattern (separate search + name inputs).
+const CustomerNameCombo = ({ value, onChange, onSelect, onUnlink, linkedCustomer }) => {
   const [results, setResults] = useState([]);
   const [open, setOpen]       = useState(false);
   const debounceRef           = useRef(null);
   const containerRef          = useRef(null);
+  const inputRef              = useRef(null);
 
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -186,54 +189,81 @@ const CustomerLookup = ({ selectedCustomer, onSelect, onClear }) => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleSearch = useCallback((value) => {
-    setQuery(value);
+  const handleChange = (e) => {
+    const v = e.target.value;
+    onChange(v);
+    // Typing after a linked customer → unlink (keep name, don't wipe phone/address)
+    if (linkedCustomer) onUnlink();
     clearTimeout(debounceRef.current);
-    if (!value.trim()) { setResults([]); setOpen(false); return; }
+    if (!v.trim()) { setResults([]); setOpen(false); return; }
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await getCustomers(value.trim());
+        const res  = await getCustomers(v.trim());
         const list = res?.data || [];
         setResults(list);
         setOpen(list.length > 0);
       } catch { setResults([]); setOpen(false); }
     }, 250);
-  }, []);
+  };
+
+  const handleSelect = (c) => {
+    onSelect(c);
+    setResults([]);
+    setOpen(false);
+  };
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-            onFocus={() => { if (results.length) setOpen(true); }}
-            placeholder="Search by name or phone..."
-            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
-          />
-        </div>
-        {selectedCustomer && (
-          <button
-            onClick={() => { onClear(); setQuery(""); setResults([]); setOpen(false); }}
-            className="px-3 py-2.5 text-xs font-bold text-slate-500 bg-slate-100 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors"
-          >
-            Clear
-          </button>
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={handleChange}
+          onFocus={() => { if (results.length > 0) setOpen(true); }}
+          placeholder="Type to search existing customers or enter a new name…"
+          className={`w-full pl-9 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 transition-colors ${
+            linkedCustomer
+              ? "border-indigo-300 pr-24"
+              : "border-slate-200 pr-4"
+          }`}
+        />
+        {/* Linked badge + unlink button */}
+        {linkedCustomer && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5 leading-tight">
+              linked
+            </span>
+            <button
+              type="button"
+              title="Unlink customer"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onUnlink(); inputRef.current?.focus(); }}
+              className="text-slate-300 hover:text-rose-500 transition-colors p-0.5"
+            >
+              <X size={13} />
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Dropdown results */}
       {open && results.length > 0 && (
         <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
           {results.map((c) => (
             <button
               key={c.id}
-              onClick={() => { onSelect(c); setOpen(false); }}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSelect(c)}
               className="w-full text-left px-4 py-3 hover:bg-indigo-50 border-b border-slate-50 last:border-b-0 transition-colors"
             >
               <p className="text-sm font-bold text-slate-800">{c.party_name}</p>
               <p className="text-xs text-slate-500">
-                {c.phone_no || "No phone"}{c.city ? `  ·  ${c.city}` : ""}{" "}
+                {c.phone_no || "No phone"}
+                {c.city ? `  ·  ${c.city}` : ""}
+                {"  "}
                 <span className="text-indigo-400 font-semibold">{c.customer_type}</span>
               </p>
             </button>
@@ -275,186 +305,379 @@ const Pagination = ({ page, totalPages, onChange, label }) => {
 
 // --- List view state ---
 const PrintView = ({ bill, onClose }) => {
-  const items   = bill.items || [];
-  const products = parseProducts(bill.products);
+  const items          = bill.items || [];
+  const products       = parseProducts(bill.products);
   const paymentEntries = normalizePaymentEntries(bill.payment_entries || [], bill);
-  const summary = computeEstimateBalance(items, paymentEntries, bill.discount, extractSettlementRates(bill));
-  // Retail customers see the total but NOT the labour breakdown line-by-line
-  const isRetail = (bill.customer_type || "Retail").toLowerCase() === "retail";
+  const summary        = computeEstimateBalance(items, paymentEntries, bill.discount, extractSettlementRates(bill));
+  const isRetail       = (bill.customer_type || "Retail").toLowerCase() === "retail";
 
-  useEffect(() => {
-    const t = setTimeout(() => window.print(), 150);
-    return () => clearTimeout(t);
+  const [printing, setPrinting]           = React.useState(false);
+  const [printers, setPrinters]           = React.useState([]);
+  const [selectedPrinter, setSelectedPrinter] = React.useState("");
+  const [printersLoading, setPrintersLoading] = React.useState(true);
+
+  // Load printer list + saved preference once on mount.
+  React.useEffect(() => {
+    const isElectron = typeof window !== "undefined" && typeof window.require === "function";
+    if (!isElectron) { setPrintersLoading(false); return; }
+    const { ipcRenderer } = window.require("electron");
+    Promise.all([
+      ipcRenderer.invoke("get-printers"),
+      ipcRenderer.invoke("get-printer-pref"),
+    ])
+      .then(([list, pref]) => {
+        const printerList = list || [];
+        setPrinters(printerList);
+        if (pref?.printerName) {
+          setSelectedPrinter(pref.printerName);
+        } else {
+          // Pre-select the OS default if no pref saved.
+          const def = printerList.find((p) => p.isDefault);
+          if (def) setSelectedPrinter(def.name);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPrintersLoading(false));
   }, []);
 
+  // Save printer preference whenever the user picks a different printer.
+  const handlePrinterChange = (e) => {
+    const name = e.target.value;
+    setSelectedPrinter(name);
+    const isElectron = typeof window !== "undefined" && typeof window.require === "function";
+    if (isElectron) {
+      const { ipcRenderer } = window.require("electron");
+      ipcRenderer.invoke("save-printer-pref", { printerName: name }).catch(() => {});
+    }
+  };
+
+  const handlePrint = async () => {
+    // Electron: send structured data via IPC → main creates hidden 80mm window
+    // → webContents.print({ silent: true, deviceName }) → direct to thermal printer.
+    // Browser/dev: fall back to window.print().
+    const isElectron = typeof window !== "undefined" && typeof window.require === "function";
+    if (!isElectron) {
+      window.print();
+      return;
+    }
+    setPrinting(true);
+    try {
+      const { ipcRenderer } = window.require("electron");
+
+      // Build the data payload — use pre-computed values from summary; no recalculation here.
+      const estimateData = {
+        billNo:        bill.ob_no,
+        date:          bill.date,
+        customerName:  bill.customer_name  || "",
+        customerPhone: bill.customer_phone || "",
+        customerType:  bill.customer_type  || "Retail",
+        isRetail,
+        products,
+        items: items.map((item) => {
+          const pcs    = parseInt(item.pcs, 10)    || 0;
+          const weight = parseFloat(item.weight)   || ((parseFloat(item.size_value) || 0) * pcs);
+          const tLc    = parseFloat(item.t_lc)     || ((parseFloat(item.lc_pp)     || 0) * pcs);
+          return {
+            metal_type: item.metal_type  || "Gold 24K",
+            category:   item.category    || "Standard",
+            size_label: item.size_label  || "",
+            pcs,
+            weight,
+            lc_pp:      parseFloat(item.lc_pp) || 0,
+            t_lc:       tLc,
+          };
+        }),
+        summary: {
+          totalPcs:              summary.totalPcs              || 0,
+          totalWeight:           summary.totalWeight           || 0,
+          labourTotal:           summary.labourTotal           || 0,
+          labourAfterDiscount:   summary.labourAfterDiscount   || 0,
+          discount:              summary.discount              || 0,
+          moneyPaid:             summary.moneyPaid             || 0,
+          totalAmount:           summary.totalAmount           || 0,
+          cashDue:               summary.cashDue               || 0,
+          amountDue:             summary.amountDue             || 0,
+          amountGiven:           summary.amountGiven           || 0,
+          refundDue:             summary.refundDue             || 0,
+          requiredMetal:         summary.requiredMetal         || {},
+          metalReceived:         summary.metalReceived         || {},
+          metalDue:              summary.metalDue              || {},
+          metalDueUnsettled:     summary.metalDueUnsettled     || {},
+          metalShortfallSettled: summary.metalShortfallSettled || {},
+          metalCredit:           summary.metalCredit           || {},
+          settlementRate:        summary.settlementRate        || {},
+        },
+      };
+
+      const result = await ipcRenderer.invoke("print-estimate", { ...estimateData, printerName: selectedPrinter });
+      if (!result?.ok) {
+        alert("Print failed: " + (result?.error || "Unknown error"));
+      }
+    } catch (err) {
+      alert("Print error: " + err.message);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-white p-8 print:p-4">
-      <div className="max-w-3xl mx-auto">
-        {/* Controls (hidden on print) */}
-        <div className="flex justify-between items-center mb-6 print:hidden">
-          <button onClick={onClose} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors">
-            <ArrowLeft size={16} /> Back to list
+    // Inline z-index 9999 + fixed inset-0 guarantees we sit above SellingLayout's
+    // stacking contexts (overflow-hidden root, overflow-auto main, z-20 header).
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#e2e8f0", overflowY: "auto" }}>
+      {/* Print CSS — only #estimate-print-area is visible when printing */}
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 12mm 15mm 15mm 15mm; }
+          body > * { visibility: hidden !important; }
+          #estimate-print-area { visibility: visible !important; position: fixed !important; top: 0; left: 0; width: 100%; }
+          #estimate-print-area * { visibility: visible !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+
+      {/* ── Toolbar (hidden when printing) ── */}
+      <div
+        className="print:hidden"
+        style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
+      >
+        {/* Row 1 — back / title / print */}
+        <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <button
+            onClick={onClose}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#475569", cursor: "pointer", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 8, padding: "6px 12px", whiteSpace: "nowrap" }}
+          >
+            <ArrowLeft size={15} /> Back
           </button>
-          <button onClick={() => window.print()} className="flex items-center gap-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors">
-            <Printer size={16} /> Print
+
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>
+            Print Preview — Estimate #{bill.ob_no}
+          </span>
+
+          <button
+            onClick={handlePrint}
+            disabled={printing || !selectedPrinter}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#fff", cursor: (printing || !selectedPrinter) ? "not-allowed" : "pointer", background: printing ? "#6366f1" : "#4f46e5", border: "none", borderRadius: 8, padding: "7px 14px", opacity: (printing || !selectedPrinter) ? 0.7 : 1, whiteSpace: "nowrap" }}
+          >
+            <Printer size={15} /> {printing ? "Printing…" : "Print"}
           </button>
         </div>
 
-        {/* Header */}
-        <div className="text-center border-b-2 border-slate-800 pb-4 mb-5">
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">ESTIMATE</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Jewellery order estimate</p>
+        {/* Row 2 — printer selector */}
+        <div style={{ padding: "0 16px 10px", display: "flex", alignItems: "center", gap: 10 }}>
+          <Printer size={14} style={{ color: "#64748b", flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>Printer:</span>
+          {printersLoading ? (
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>Loading printers…</span>
+          ) : printers.length === 0 ? (
+            <span style={{ fontSize: 12, color: "#ef4444" }}>No printers found — install a printer driver first.</span>
+          ) : (
+            <select
+              value={selectedPrinter}
+              onChange={handlePrinterChange}
+              style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#1e293b", cursor: "pointer" }}
+            >
+              {printers.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}{p.isDefault ? "  ★ default" : ""}
+                </option>
+              ))}
+            </select>
+          )}
+          {selectedPrinter && !printersLoading && (
+            <span style={{ fontSize: 11, color: "#16a34a", whiteSpace: "nowrap" }}>✓ saved</span>
+          )}
         </div>
+      </div>
 
-        {/* Bill info */}
-        <div className="grid grid-cols-2 gap-4 text-sm mb-5">
-          <div className="space-y-1">
-            <p><span className="font-bold text-slate-600">Estimate No.:</span> #{bill.ob_no}</p>
-            <p><span className="font-bold text-slate-600">Date:</span> {fmtDate(bill.date)}</p>
-            <p><span className="font-bold text-slate-600">Metal:</span> {products.join(", ")}</p>
-            {bill.product ? <p><span className="font-bold text-slate-600">Product:</span> {bill.product}</p> : null}
+      {/* ── Paper preview ── */}
+      <div style={{ display: "flex", justifyContent: "center", padding: "32px 16px 48px" }}>
+        <div
+          id="estimate-print-area"
+          style={{ background: "#fff", width: "100%", maxWidth: 680, boxShadow: "0 4px 24px rgba(0,0,0,0.12)", padding: "36px 40px", fontFamily: "inherit" }}
+        >
+
+          {/* Header */}
+          <div style={{ textAlign: "center", borderBottom: "2px solid #1e293b", paddingBottom: 14, marginBottom: 18 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: 3, color: "#0f172a", margin: 0 }}>ESTIMATE</h1>
+            <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Jewellery Order Estimate</p>
           </div>
-          <div className="text-right space-y-1">
-            <p className="font-black text-slate-800 text-base">{bill.customer_name || "Walk-in Customer"}</p>
-            {bill.customer_phone   ? <p className="text-slate-600 text-xs">{bill.customer_phone}</p>   : null}
-            {bill.customer_address ? <p className="text-slate-600 text-xs">{bill.customer_address}</p> : null}
-            <p className="text-xs text-slate-500 font-semibold">{bill.customer_type || "Retail"}</p>
+
+          {/* Bill meta */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, fontSize: 12, marginBottom: 20 }}>
+            <div style={{ lineHeight: 1.8 }}>
+              <div><b>Estimate No.:</b> #{bill.ob_no}</div>
+              <div><b>Date:</b> {fmtDate(bill.date)}</div>
+              <div><b>Metal:</b> {products.join(", ")}</div>
+              {bill.product ? <div><b>Product:</b> {bill.product}</div> : null}
+            </div>
+            <div style={{ textAlign: "right", lineHeight: 1.8 }}>
+              <div style={{ fontWeight: 900, fontSize: 14, color: "#0f172a" }}>{bill.customer_name || "Walk-in Customer"}</div>
+              {bill.customer_phone   ? <div style={{ color: "#475569" }}>{bill.customer_phone}</div>   : null}
+              {bill.customer_address ? <div style={{ color: "#475569" }}>{bill.customer_address}</div> : null}
+              <div style={{ display: "inline-block", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 8px", fontSize: 11, fontWeight: 600, color: "#475569", marginTop: 2 }}>
+                {bill.customer_type || "Retail"}
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Items per metal */}
-        {products.map((metalType) => {
-          const metalItems = items.filter((item) => (item.metal_type || "Gold 24K") === metalType);
-          if (!metalItems.length) return null;
-          const categories = [...new Set(metalItems.map((item) => item.category || "Standard"))];
-          return (
-            <div key={metalType} className="mb-5">
-              <h3 className="font-black text-slate-700 text-sm mb-2 uppercase tracking-wider bg-slate-50 px-3 py-1 rounded">{metalType}</h3>
-              {categories.map((category) => {
-                const catItems = metalItems.filter((item) => (item.category || "Standard") === category);
-                return (
-                  <div key={`${metalType}-${category}`} className="mb-3">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{category}</p>
-                    <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
-                      <thead>
-                        <tr className="bg-slate-100">
-                          <th className="border border-slate-200 px-2 py-1.5 text-left font-black">Size</th>
-                          <th className="border border-slate-200 px-2 py-1.5 text-center font-black">Pcs</th>
-                          <th className="border border-slate-200 px-2 py-1.5 text-right font-black">Weight (g)</th>
-                          {!isRetail && (
-                            <>
-                              <th className="border border-slate-200 px-2 py-1.5 text-right font-black">LC/pc</th>
-                              <th className="border border-slate-200 px-2 py-1.5 text-right font-black">T. LC</th>
-                            </>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {catItems.map((item) => {
-                          const pcs    = parseInt(item.pcs, 10) || 0;
-                          const weight = (parseFloat(item.size_value) || 0) * pcs;
-                          const lc     = (parseFloat(item.lc_pp) || 0) * pcs;
-                          return (
-                            <tr key={itemKey(item.metal_type, item.category, item.size_label)} className="even:bg-slate-50/50">
-                              <td className="border border-slate-200 px-2 py-1.5">{item.size_label}</td>
-                              <td className="border border-slate-200 px-2 py-1.5 text-center font-bold">{pcs}</td>
-                              <td className="border border-slate-200 px-2 py-1.5 text-right">{fmt(weight, 4)}</td>
-                              {!isRetail && (
-                                <>
-                                  <td className="border border-slate-200 px-2 py-1.5 text-right">{fmt(item.lc_pp, 0)}</td>
-                                  <td className="border border-slate-200 px-2 py-1.5 text-right font-semibold">{fmt(lc, 0)}</td>
-                                </>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-
-        {/* Summary */}
-        <div className="ml-auto w-72 text-sm space-y-1 border border-slate-200 rounded-xl p-4 mt-4">
-          {[
-            ["Total Pcs",    String(summary.totalPcs)],
-            ["Total Weight", `${fmt(summary.totalWeight, 4)}g`],
-            // Labour Total is hidden for retail — it's included in Final Payable
-            ...(!isRetail ? [["Labour Total", fmtMoney(summary.labourTotal)]] : []),
-          ].map(([label, value]) => (
-            <div key={label} className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-600">{label}</span>
-              <span className="font-bold">{value}</span>
-            </div>
-          ))}
-          {Object.entries(summary.requiredMetal || {}).map(([mt, required]) => {
-            if ((required || 0) === 0 && (summary.metalReceived?.[mt] || 0) === 0) return null;
+          {/* Items per metal */}
+          {products.map((metalType) => {
+            const metalItems = items.filter((item) => (item.metal_type || "Gold 24K") === metalType);
+            if (!metalItems.length) return null;
+            const categories = [...new Set(metalItems.map((item) => item.category || "Standard"))];
             return (
-              <div key={mt} className="py-1 border-b border-slate-100">
-                <div className="flex justify-between"><span className="text-slate-600">{mt} Needed</span><span className="font-bold">{fmt(required || 0, 4)}g</span></div>
-                {(summary.metalReceived?.[mt] || 0) > 0 && (
-                  <div className="flex justify-between"><span className="text-slate-600">{mt} Received</span><span className="font-bold">{fmt(summary.metalReceived?.[mt] || 0, 4)}g</span></div>
-                )}
-                {(summary.metalDueUnsettled?.[mt] || 0) > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">{mt} Still Owed</span>
-                    <span className="font-bold text-rose-700">{fmt(summary.metalDueUnsettled?.[mt] || 0, 4)}g</span>
-                  </div>
-                )}
-                {(summary.metalShortfallSettled?.[mt] || 0) > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 italic text-xs">&#8627; Paid in Cash</span>
-                    <span className="font-bold text-amber-700">{fmt(summary.metalShortfallSettled?.[mt], 4)}g</span>
-                  </div>
-                )}
-                {(summary.metalCredit?.[mt] || 0) > 0 && (
-                  <div className="flex justify-between"><span className="text-slate-600">{mt} Extra Metal</span><span className="font-bold text-emerald-700">{fmt(summary.metalCredit?.[mt] || 0, 4)}g</span></div>
-                )}
+              <div key={metalType} style={{ marginBottom: 16 }}>
+                <div style={{ background: "#f1f5f9", padding: "4px 8px", fontWeight: 900, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#334155", marginBottom: 8 }}>
+                  {metalType}
+                </div>
+                {categories.map((category) => {
+                  const catItems = metalItems.filter((item) => (item.category || "Standard") === category);
+                  return (
+                    <div key={`${metalType}-${category}`} style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, color: "#64748b", marginBottom: 4 }}>{category}</div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                        <thead>
+                          <tr style={{ background: "#f8fafc" }}>
+                            <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "left",   fontWeight: 800, color: "#334155" }}>Size</th>
+                            <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "center", fontWeight: 800, color: "#334155" }}>Pcs</th>
+                            <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right",  fontWeight: 800, color: "#334155" }}>Weight (g)</th>
+                            {!isRetail && (
+                              <>
+                                <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>LC/pc</th>
+                                <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>Labour</th>
+                              </>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {catItems.map((item, idx) => {
+                            const pcs    = parseInt(item.pcs, 10) || 0;
+                            const weight = (parseFloat(item.size_value) || 0) * pcs;
+                            const lc     = (parseFloat(item.lc_pp) || 0) * pcs;
+                            return (
+                              <tr key={itemKey(item.metal_type, item.category, item.size_label)} style={{ background: idx % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", color: "#1e293b" }}>{item.size_label}</td>
+                                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "center", fontWeight: 600, color: "#1e293b" }}>{pcs}</td>
+                                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#1e293b" }}>{fmt(weight, 4)}</td>
+                                {!isRetail && (
+                                  <>
+                                    <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#475569" }}>{fmt(item.lc_pp, 0)}</td>
+                                    <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{fmt(lc, 0)}</td>
+                                  </>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
-          <div className="flex justify-between py-1 border-b border-slate-100">
-            <span className="text-slate-600">Money Received</span>
-            <span className="font-bold">{fmtMoney(summary.moneyPaid)}</span>
-          </div>
-          <div className="flex justify-between py-1 border-b border-slate-200">
-            <span className="text-slate-600">Final Payable</span>
-            <span className="font-bold">{fmtMoney(summary.totalAmount || 0)}</span>
-          </div>
-          {summary.discount > 0 && (
-            <div className="flex justify-between py-1 border-b border-slate-100 text-emerald-700">
-              <span>Discount</span>
-              <span className="font-bold">- {fmtMoney(summary.discount)}</span>
-            </div>
-          )}
-          {/* Settlement outcome — single authoritative row */}
-          {summary.amountGiven > 0 ? (
-            <div className="flex justify-between py-1.5 font-black text-base text-amber-700">
-              <span>Return to Customer</span>
-              <span>{fmtMoney(summary.amountGiven)}</span>
-            </div>
-          ) : summary.refundDue > 0 ? (
-            <div className="flex justify-between py-1.5 font-black text-base text-emerald-700">
-              <span>Cash Refund</span>
-              <span>{fmtMoney(summary.refundDue)}</span>
-            </div>
-          ) : (
-            <>
-              <div className="flex justify-between py-1 border-b border-slate-200 font-black text-base">
-                <span>Cash Remaining</span>
-                <span>{fmtMoney(summary.amountDue)}</span>
+
+          {/* Summary */}
+          <div style={{ marginLeft: "auto", width: 260, fontSize: 12, border: "1px solid #cbd5e1", padding: "12px 14px", marginTop: 20 }}>
+            {[
+              ["Total Pcs",    String(summary.totalPcs)],
+              ["Total Weight", `${fmt(summary.totalWeight, 4)}g`],
+              ...(!isRetail ? [["Labour Total", fmtMoney(summary.labourTotal)]] : []),
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #f1f5f9" }}>
+                <span style={{ color: "#64748b" }}>{label}</span>
+                <span style={{ fontWeight: 700, color: "#1e293b" }}>{value}</span>
               </div>
-              {Object.values(summary.metalDueUnsettled || {}).some((v) => v > 0) && (
-                <div className="flex justify-between py-1.5 font-semibold text-sm">
-                  <span className="text-slate-600">Metal Still Owed</span>
-                  <span className="text-rose-700">See above</span>
+            ))}
+
+            {Object.entries(summary.requiredMetal || {}).map(([mt, required]) => {
+              if ((required || 0) === 0 && (summary.metalReceived?.[mt] || 0) === 0) return null;
+              return (
+                <div key={mt} style={{ padding: "3px 0", borderBottom: "1px solid #f1f5f9" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "#64748b" }}>{mt} Needed</span>
+                    <span style={{ fontWeight: 700, color: "#1e293b" }}>{fmt(required || 0, 4)}g</span>
+                  </div>
+                  {(summary.metalReceived?.[mt] || 0) > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#64748b" }}>{mt} Received</span>
+                      <span style={{ fontWeight: 700, color: "#1e293b" }}>{fmt(summary.metalReceived[mt], 4)}g</span>
+                    </div>
+                  )}
+                  {(summary.metalDueUnsettled?.[mt] || 0) > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#64748b" }}>{mt} Still Owed</span>
+                      <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmt(summary.metalDueUnsettled[mt], 4)}g</span>
+                    </div>
+                  )}
+                  {(summary.metalShortfallSettled?.[mt] || 0) > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#94a3b8", fontStyle: "italic" }}>&#8627; Paid in Cash</span>
+                      <span style={{ fontWeight: 700, color: "#d97706" }}>{fmt(summary.metalShortfallSettled[mt], 4)}g</span>
+                    </div>
+                  )}
+                  {(summary.metalCredit?.[mt] || 0) > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#64748b" }}>{mt} Extra Metal</span>
+                      <span style={{ fontWeight: 700, color: "#16a34a" }}>{fmt(summary.metalCredit[mt], 4)}g</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </>
-          )}
+              );
+            })}
+
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #f1f5f9" }}>
+              <span style={{ color: "#64748b" }}>Money Received</span>
+              <span style={{ fontWeight: 700, color: "#1e293b" }}>{fmtMoney(summary.moneyPaid)}</span>
+            </div>
+            {summary.discount > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #f1f5f9", color: "#16a34a" }}>
+                <span style={{ fontWeight: 600 }}>Discount</span>
+                <span style={{ fontWeight: 700 }}>- {fmtMoney(summary.discount)}</span>
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "2px solid #cbd5e1" }}>
+              <span style={{ fontWeight: 700, color: "#1e293b" }}>Final Payable</span>
+              <span style={{ fontWeight: 900, color: "#1e293b" }}>{fmtMoney(summary.totalAmount || 0)}</span>
+            </div>
+
+            {summary.amountGiven > 0 ? (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontWeight: 900, fontSize: 13, color: "#d97706" }}>
+                <span>Return to Customer</span><span>{fmtMoney(summary.amountGiven)}</span>
+              </div>
+            ) : summary.refundDue > 0 ? (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontWeight: 900, fontSize: 13, color: "#16a34a" }}>
+                <span>Cash Refund</span><span>{fmtMoney(summary.refundDue)}</span>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontWeight: 900, fontSize: 13, color: summary.amountDue > 0 ? "#dc2626" : "#16a34a" }}>
+                  <span>Amount Due</span><span>{fmtMoney(summary.amountDue)}</span>
+                </div>
+                {Object.values(summary.metalDueUnsettled || {}).some((v) => v > 0) && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 11, color: "#dc2626", fontWeight: 600 }}>
+                    <span>Metal Still Owed</span><span>See above</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div style={{ marginTop: 28, borderTop: "1px solid #cbd5e1", paddingTop: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, fontSize: 11, marginBottom: 12 }}>
+              <div style={{ borderBottom: "1px solid #94a3b8", paddingBottom: 4, color: "#475569" }}>
+                Customer Signature: _______________
+              </div>
+              <div style={{ borderBottom: "1px solid #94a3b8", paddingBottom: 4, textAlign: "right", color: "#475569" }}>
+                Date: __________
+              </div>
+            </div>
+            <p style={{ textAlign: "center", fontSize: 10, color: "#94a3b8", fontStyle: "italic" }}>
+              This is a computer-generated estimate.
+            </p>
+          </div>
+
         </div>
       </div>
     </div>
@@ -636,6 +859,11 @@ export default function OrderBills() {
   const [stockValidation, setStockValidation] = useState({ valid: true, items: [] });
   const [validatingStock, setValidatingStock] = useState(false);
   const [showCustomerDetails, setShowCustomerDetails] = useState(false);
+  // Per-metal "add size" picker: { [metalType]: { show, category, size_label } }
+  const [addPicker, setAddPicker] = useState({});
+  // Tracks which item keys have been explicitly added via the picker.
+  // A row stays visible as long as its key is here — even when pcs is cleared.
+  const [addedKeys, setAddedKeys] = useState(() => new Set());
 
   // Keyboard-nav refs for PCS inputs
   const pcsInputRefs = useRef({});
@@ -686,6 +914,8 @@ export default function OrderBills() {
     setSettlementRates(normalizeSettlementRates());
     setDiscount("");
     setItems(buildItemsFromCharges(charges, ["Gold 24K"], "Retail"));
+    setAddedKeys(new Set());
+    setAddPicker({});
   }, []);
 
 // --- State ---
@@ -726,10 +956,15 @@ export default function OrderBills() {
   }, [stockValidation.items]);
 
 // --- Helper ---
+  // Pure local-date arithmetic — never touches UTC so timezone can't corrupt the result.
   const shiftDate = useCallback((dateStr, delta) => {
-    const d = new Date(dateStr + "T00:00:00");
-    d.setDate(d.getDate() + delta);
-    return d.toISOString().split("T")[0];
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const date = new Date(y, m - 1, d); // constructed in local time, no UTC conversion
+    date.setDate(date.getDate() + delta);
+    const yy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
   }, []);
 
   // List filtering + sorting + pagination - operates within the selected day data
@@ -809,10 +1044,19 @@ export default function OrderBills() {
 // --- State ---
   const handleProductToggle = useCallback((metalType) => {
     setSelectedProducts((cur) => {
+      const removing = cur.includes(metalType) && cur.length > 1;
       const next = cur.includes(metalType)
         ? cur.length === 1 ? cur : cur.filter((v) => v !== metalType)
         : [...cur, metalType];
       setItems((prev) => buildItemsFromCharges(groupedCharges, next, customerType, prev));
+      if (removing) {
+        // Remove all addedKeys for this metal type so rows don't reappear if re-added
+        setAddedKeys((prev) => {
+          const next2 = new Set(prev);
+          [...next2].forEach((k) => { if (k.startsWith(`${metalType}::`)) next2.delete(k); });
+          return next2;
+        });
+      }
       return next;
     });
   }, [customerType, groupedCharges]);
@@ -921,7 +1165,14 @@ export default function OrderBills() {
       setPaymentEntries(normalizePaymentEntries(full.payment_entries || [], full));
       setSettlementRates(extractSettlementRates(full));
       setDiscount(full.discount != null && parseFloat(full.discount) > 0 ? String(full.discount) : "");
-      setItems(buildItemsFromCharges(charges, products, full.customer_type || "Retail", full.items || []));
+      const builtItems = buildItemsFromCharges(charges, products, full.customer_type || "Retail", full.items || []);
+      setItems(builtItems);
+      setAddedKeys(new Set(
+        builtItems
+          .filter((i) => (parseInt(i.pcs, 10) || 0) > 0)
+          .map((i) => itemKey(i.metal_type, i.category, i.size_label))
+      ));
+      setAddPicker({});
       setView("form");
     } catch (error) {
       showToast(error?.message || "Failed to load estimate", "error");
@@ -1475,8 +1726,10 @@ export default function OrderBills() {
   // FORM VIEW
 // --- State ---
 
-  // Collect all PCS input keys (for keyboard navigation)
-  const allPcsKeys = items.map((item) => itemKey(item.metal_type, item.category, item.size_label));
+  // Keyboard-nav key list — all explicitly-added rows are rendered and reachable.
+  const allPcsKeys = items
+    .filter((item) => addedKeys.has(itemKey(item.metal_type, item.category, item.size_label)))
+    .map((item) => itemKey(item.metal_type, item.category, item.size_label));
 
   return (
     <div className="space-y-5">
@@ -1542,28 +1795,13 @@ export default function OrderBills() {
 
           {/* Section 2: Customer */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <SectionHeader step="2" title="Customer" subtitle="Search by name or phone — or just type in the customer's name below." />
+            <SectionHeader step="2" title="Customer" subtitle="Search existing customers or type a new name." />
 
-            {/* Selected customer chip */}
-            {selectedCustomer && (
-              <div className="mb-3 flex items-center justify-between gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
-                <div>
-                  <p className="font-black text-indigo-800 text-sm">{selectedCustomer.party_name}</p>
-                  <p className="text-xs text-indigo-500 mt-0.5">{selectedCustomer.phone_no || "No phone"}  ·  {selectedCustomer.customer_type}</p>
-                </div>
-                <button
-                  onClick={() => { setSelectedCustomer(null); setCustomerName(""); setCustomerPhone(""); setCustomerAddress(""); setShowCustomerDetails(false); }}
-                  className="text-indigo-400 hover:text-rose-600 transition-colors p-1"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-
-            {/* Search */}
-            <CustomerLookup
-              key={selectedCustomer?.id || "new-customer"}
-              selectedCustomer={selectedCustomer}
+            {/* Unified name + search combo */}
+            <CustomerNameCombo
+              value={customerName}
+              linkedCustomer={selectedCustomer}
+              onChange={(name) => setCustomerName(name)}
               onSelect={(c) => {
                 setSelectedCustomer(c);
                 setCustomerName(c.party_name || "");
@@ -1572,39 +1810,22 @@ export default function OrderBills() {
                 setCustomerType(c.customer_type || "Retail");
                 setShowCustomerDetails(!!(c.phone_no || c.address));
               }}
-              onClear={() => {
-                setSelectedCustomer(null);
-                setCustomerName(""); setCustomerPhone(""); setCustomerAddress("");
-                setShowCustomerDetails(false);
-              }}
+              onUnlink={() => setSelectedCustomer(null)}
             />
 
-            {/* Name + Type row — always visible */}
-            <div className="flex flex-col sm:flex-row gap-3 mt-3">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Name</label>
-                <input
-                  type="text" value={customerName}
-                  onChange={(e) => { setSelectedCustomer(null); setCustomerName(e.target.value); }}
-                  placeholder="Customer name"
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
-                />
-              </div>
-              <div className="flex-shrink-0">
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Type</label>
-                <div className="flex gap-1.5">
-                  {CUSTOMER_TYPES.map((type) => (
-                    <button
-                      key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-black border-2 transition-all ${
-                        customerType === type
-                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                          : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
-                      }`}
-                    >{type}</button>
-                  ))}
-                </div>
-              </div>
+            {/* Type pills */}
+            <div className="flex items-center gap-1.5 mt-3">
+              <span className="text-xs font-bold text-slate-500 mr-1">Type:</span>
+              {CUSTOMER_TYPES.map((type) => (
+                <button
+                  key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all ${
+                    customerType === type
+                      ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                      : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+                  }`}
+                >{type}</button>
+              ))}
             </div>
 
             {/* Balance-due nudge: show when items entered, balance owed, no customer yet */}
@@ -1685,161 +1906,284 @@ export default function OrderBills() {
             </div>
           </div>
 
-          {/* Section 4: Items per metal */}
+          {/* Section 4: Items per metal — add only what's needed */}
           {selectedProducts.map((metalType) => {
-            const categories = groupedCharges?.[metalType] || {};
+            const categories  = groupedCharges?.[metalType] || {};
+            const catKeys     = Object.keys(categories);
+            const activeItems = items.filter(
+              (i) => i.metal_type === metalType &&
+                     addedKeys.has(itemKey(i.metal_type, i.category, i.size_label))
+            );
+            const picker      = addPicker[metalType] || { show: false, category: catKeys[0] || "", size_label: "" };
+
+            // Sizes available in the picker's current category, excluding already-added ones
+            const pickerSizes = (categories[picker.category] || []).filter(
+              (row) => !addedKeys.has(itemKey(metalType, picker.category, row.size_label))
+            );
+
+            const totalPcs    = activeItems.reduce((s, i) => s + (parseInt(i.pcs, 10) || 0), 0);
+            const totalWeight = activeItems.reduce((s, i) => s + (parseFloat(i.size_value) || 0) * (parseInt(i.pcs, 10) || 0), 0);
+            const totalLabour = activeItems.reduce((s, i) => s + (parseFloat(i.lc_pp) || 0) * (parseInt(i.pcs, 10) || 0), 0);
+
+            const openPicker  = () =>
+              setAddPicker((p) => ({
+                ...p,
+                [metalType]: { show: true, category: catKeys[0] || "", size_label: "" },
+              }));
+
+            const closePicker = () =>
+              setAddPicker((p) => ({
+                ...p,
+                [metalType]: { show: false, category: catKeys[0] || "", size_label: "" },
+              }));
+
+            const confirmAdd = () => {
+              const { category, size_label } = picker;
+              if (!size_label) return;
+              const key = itemKey(metalType, category, size_label);
+              // Register the row — it stays visible even if pcs is cleared later
+              setAddedKeys((prev) => new Set([...prev, key]));
+              // Default pcs to 1 so the field isn't blank on first add
+              const existing = items.find(
+                (i) => i.metal_type === metalType && i.category === category && i.size_label === size_label
+              );
+              if (existing && (parseInt(existing.pcs, 10) || 0) === 0) {
+                updatePieces(key, "1");
+              }
+              closePicker();
+              setTimeout(() => { if (pcsInputRefs.current[key]) pcsInputRefs.current[key].focus(); }, 60);
+            };
+
             return (
               <div key={metalType} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+                {/* Card header */}
                 <div className="px-5 py-3.5 bg-gradient-to-r from-amber-50 to-white border-b border-amber-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0" />
                     <h3 className="font-black text-slate-800">{metalType}</h3>
                   </div>
-                  <p className="text-xs font-semibold text-slate-500">
-                    {items.filter((i) => i.metal_type === metalType).reduce((s, i) => s + (parseInt(i.pcs, 10) || 0), 0)} pcs total
-                  </p>
+                  {totalPcs > 0 && (
+                    <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
+                      <span className="text-indigo-600 font-black">{totalPcs} pcs</span>
+                      <span>{fmt(totalWeight, 3)}g</span>
+                      {totalLabour > 0 && <span>{fmtMoney(totalLabour)}</span>}
+                    </div>
+                  )}
                 </div>
 
-                {Object.keys(categories).length === 0 ? (
-                  <div className="px-5 py-10 text-center text-sm text-slate-400">
-                    No categories configured for {metalType}. Add them in Admin / Labour Charges.
-                  </div>
-                ) : (
-                  <div className="p-3">
-                  <div className="space-y-3 max-w-2xl">
-                    {Object.entries(categories).map(([category, sizeRows]) => {
-                      const categoryItems = items.filter((i) => i.metal_type === metalType && i.category === category);
-                      const catTotals = categoryItems.reduce(
-                        (acc, item) => {
-                          const pcs = parseInt(item.pcs, 10) || 0;
-                          return {
-                            pcs:    acc.pcs + pcs,
-                            weight: acc.weight + (parseFloat(item.size_value) || 0) * pcs,
-                            labour: acc.labour + (parseFloat(item.lc_pp) || 0) * pcs,
-                          };
-                        },
-                        { pcs: 0, weight: 0, labour: 0 }
-                      );
+                <div className="p-4 space-y-3">
 
-                      return (
-                        <div key={`${metalType}-${category}`} className="border border-slate-200 rounded-2xl overflow-hidden">
-                          <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                            <p className="font-black text-slate-700 text-sm">{category}</p>
-                            {catTotals.pcs > 0 && (
-                              <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
-                                <span className="text-indigo-600 font-black">{catTotals.pcs} pcs</span>
-                                <span>{fmt(catTotals.weight, 3)}g</span>
-                                <span>{fmtMoney(catTotals.labour)}</span>
-                              </div>
-                            )}
-                          </div>
-                          <table className="w-full text-sm table-fixed">
-                            <colgroup>
-                              <col style={{width:"32%"}} />
-                              <col style={{width:"16%"}} />
-                              <col style={{width:"12%"}} />
-                              <col style={{width:"18%"}} />
-                              <col style={{width:"22%"}} />
-                            </colgroup>
-                              <thead>
-                                <tr className="uppercase tracking-wider text-slate-400 border-b border-slate-100 bg-white">
-                                  <th className="text-left px-3 py-2 font-black text-[10px]">Size</th>
-                                  <th className="text-right px-3 py-2 font-black text-[10px]">LC/pc</th>
-                                  <th className="text-center px-2 py-2 font-black text-[10px] w-16">Qty</th>
-                                  <th className="text-right px-3 py-2 font-black text-[10px]">Wt (g)</th>
-                                  <th className="text-right px-3 py-2 font-black text-[10px]">Labour</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(sizeRows || []).map((row) => {
-                                  const currentItem = categoryItems.find((i) => i.size_label === row.size_label) || null;
-                                  const pcs         = parseInt(currentItem?.pcs, 10) || 0;
-                                  const sizeValue   = parseFloat(currentItem?.size_value ?? row.size_value) || 0;
-                                  const weight      = parseFloat((sizeValue * pcs).toFixed(4));
-                                  const totalLabour = parseFloat(((parseFloat(currentItem?.lc_pp) || 0) * pcs).toFixed(2));
-                                  const key         = itemKey(metalType, category, row.size_label);
-                                  const normalizedSL = normalizeEstimateSizeLabel(metalType, row.size_label);
-                                  const validation  = stockValidationMap.get(`${metalType}::${normalizedSL}`);
-                                  const isActive    = pcs > 0;
-                                  const globalIndex = allPcsKeys.indexOf(key);
+                  {/* Active rows table */}
+                  {activeItems.length > 0 && (
+                    <table className="w-full text-sm table-fixed">
+                      <colgroup>
+                        <col style={{ width: "22%" }} />
+                        <col style={{ width: "22%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "20%" }} />
+                        <col style={{ width: "8%"  }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                          <th className="text-left   px-2 py-2 font-black text-[10px]">Category</th>
+                          <th className="text-left   px-2 py-2 font-black text-[10px]">Size</th>
+                          <th className="text-center px-2 py-2 font-black text-[10px]">Qty</th>
+                          <th className="text-right  px-2 py-2 font-black text-[10px]">Wt (g)</th>
+                          <th className="text-right  px-2 py-2 font-black text-[10px]">Labour</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeItems.map((item) => {
+                          const key        = itemKey(item.metal_type, item.category, item.size_label);
+                          const pcs        = parseInt(item.pcs, 10) || 0;
+                          const sizeVal    = parseFloat(item.size_value) || 0;
+                          const weight     = parseFloat((sizeVal * pcs).toFixed(4));
+                          const labour     = parseFloat(((parseFloat(item.lc_pp) || 0) * pcs).toFixed(2));
+                          const normSL     = normalizeEstimateSizeLabel(item.metal_type, item.size_label);
+                          const validation = stockValidationMap.get(`${metalType}::${normSL}`);
+                          const gi         = allPcsKeys.indexOf(key);
 
-                                  return (
-                                    <tr
-                                      key={key}
-                                      className={`border-b border-slate-100 last:border-b-0 transition-colors ${
-                                        isActive ? "bg-indigo-50/50" : "hover:bg-slate-50/60"
-                                      }`}
-                                    >
-                                      {/* Size + stock info */}
-                                      <td className="px-3 py-2">
-                                        <p className={`font-semibold text-sm ${isActive ? "text-indigo-700" : "text-slate-700"}`}>
-                                          {row.size_label}
-                                        </p>
-                                        {validation !== undefined && (
-                                          <p className={`text-[10px] font-bold mt-0.5 ${
-                                            !validation.valid
-                                              ? "text-rose-600"
-                                              : (validation.available_pieces || 0) === 0
-                                                ? "text-slate-400"
-                                                : "text-emerald-600"
-                                          }`}>
-                                            {!validation.valid
-                                              ? `Only ${validation.available_pieces} avail.`
-                                              : (validation.available_pieces || 0) === 0
-                                                ? "Not in stock"
-                                                : `${validation.available_pieces} in stock`}
-                                          </p>
-                                        )}
-                                      </td>
-                                      {/* LC/pc */}
-                                      <td className="px-3 py-2 text-right font-mono text-xs text-slate-500">
-                                        {fmt(currentItem?.lc_pp || getRateForCustomerType(row, customerType), 0)}
-                                      </td>
+                          return (
+                            <tr key={key} className="border-b border-slate-100 last:border-b-0 bg-indigo-50/40">
+                              {/* Category */}
+                              <td className="px-2 py-2 text-xs text-slate-500 font-semibold">{item.category}</td>
 
-                                      {/* PCS input */}
-                                      <td className="px-2 py-2 text-center">
-                                        <input
-                                          ref={(el) => { if (el) pcsInputRefs.current[key] = el; }}
-                                          type="number" min="0" step="1"
-                                          value={currentItem?.pcs || ""}
-                                          onChange={(e) => updatePieces(key, e.target.value)}
-                                          onKeyDown={(e) => handlePcsKeyDown(e, allPcsKeys, globalIndex)}
-                                          className={`w-14 text-center text-sm border rounded-lg px-1.5 py-1.5 focus:outline-none focus:ring-2 transition-colors ${
-                                            validation && !validation.valid
-                                              ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
-                                              : isActive
-                                                ? "border-indigo-300 bg-white text-indigo-700 font-bold focus:ring-indigo-300"
-                                                : "border-slate-200 bg-slate-50 focus:ring-indigo-300"
-                                          }`}
-                                          placeholder="0"
-                                        />
-                                      </td>
+                              {/* Size + stock hint */}
+                              <td className="px-2 py-2">
+                                <p className="font-semibold text-sm text-indigo-700">{item.size_label}</p>
+                                {validation !== undefined && (
+                                  <p className={`text-[10px] font-bold leading-tight ${
+                                    !validation.valid
+                                      ? "text-rose-600"
+                                      : (validation.available_pieces || 0) === 0
+                                        ? "text-slate-400"
+                                        : "text-emerald-600"
+                                  }`}>
+                                    {!validation.valid
+                                      ? `Only ${validation.available_pieces} avail.`
+                                      : (validation.available_pieces || 0) === 0
+                                        ? "Not in stock"
+                                        : `${validation.available_pieces} in stock`}
+                                  </p>
+                                )}
+                              </td>
 
-                                      {/* Weight */}
-                                      <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-700">
-                                        {isActive ? fmt(weight, 4) : <span className="text-slate-300">-</span>}
-                                      </td>
+                              {/* Qty input */}
+                              <td className="px-2 py-2 text-center">
+                                <input
+                                  ref={(el) => { if (el) pcsInputRefs.current[key] = el; }}
+                                  type="number" min="0" step="1"
+                                  value={item.pcs || ""}
+                                  onChange={(e) => updatePieces(key, e.target.value)}
+                                  onKeyDown={(e) => handlePcsKeyDown(e, allPcsKeys, gi)}
+                                  className={`w-14 text-center text-sm border rounded-lg px-1.5 py-1.5 focus:outline-none focus:ring-2 transition-colors font-bold ${
+                                    validation && !validation.valid
+                                      ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
+                                      : "border-indigo-300 bg-white text-indigo-700 focus:ring-indigo-300"
+                                  }`}
+                                  placeholder="0"
+                                />
+                              </td>
 
-                                      {/* T. LC */}
-                                      <td className="px-4 py-2.5 text-right font-mono text-xs">
-                                        {isActive ? (
-                                          <span className="font-bold text-slate-800">{fmt(totalLabour, 0)}</span>
-                                        ) : <span className="text-slate-300">-</span>}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                          </table>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  </div>
-                )}
+                              {/* Weight */}
+                              <td className="px-2 py-2 text-right font-mono text-xs text-slate-700">
+                                {fmt(weight, 4)}
+                              </td>
+
+                              {/* Labour */}
+                              <td className="px-2 py-2 text-right font-mono text-xs font-bold text-slate-800">
+                                {fmt(labour, 0)}
+                              </td>
+
+                              {/* Remove */}
+                              <td className="px-1 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddedKeys((prev) => { const s = new Set(prev); s.delete(key); return s; });
+                                    updatePieces(key, "");
+                                  }}
+                                  className="text-slate-300 hover:text-rose-500 transition-colors rounded p-0.5"
+                                  title="Remove row"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {/* Empty state */}
+                  {activeItems.length === 0 && !picker.show && catKeys.length > 0 && (
+                    <p className="text-center text-sm text-slate-400 py-3">
+                      No items added — click <span className="font-bold text-indigo-500">+ Add Size</span> below.
+                    </p>
+                  )}
+
+                  {/* No categories configured */}
+                  {catKeys.length === 0 && (
+                    <p className="text-center text-sm text-slate-400 py-4">
+                      No categories configured for {metalType}. Add them in Admin → Labour Charges.
+                    </p>
+                  )}
+
+                  {/* Inline add-size picker */}
+                  {picker.show && catKeys.length > 0 && (
+                    <div className="flex items-end gap-2 p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex-wrap">
+                      {/* Category */}
+                      <div className="flex flex-col gap-1 flex-1 min-w-[110px]">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Category</label>
+                        <select
+                          value={picker.category}
+                          onChange={(e) =>
+                            setAddPicker((p) => ({
+                              ...p,
+                              [metalType]: { ...p[metalType], category: e.target.value, size_label: "" },
+                            }))
+                          }
+                          className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        >
+                          {catKeys.map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Size */}
+                      <div className="flex flex-col gap-1 flex-1 min-w-[130px]">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Size</label>
+                        <select
+                          value={picker.size_label}
+                          onChange={(e) =>
+                            setAddPicker((p) => ({
+                              ...p,
+                              [metalType]: { ...p[metalType], size_label: e.target.value },
+                            }))
+                          }
+                          className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        >
+                          <option value="">— pick a size —</option>
+                          {pickerSizes.map((row) => {
+                            const normSL   = normalizeEstimateSizeLabel(metalType, row.size_label);
+                            const stockInfo = stockValidationMap.get(`${metalType}::${normSL}`);
+                            const avail    = stockInfo?.available_pieces ?? null;
+                            const suffix   = avail === null
+                              ? ""
+                              : avail === 0
+                                ? "  —  not in stock"
+                                : `  —  ${avail} in stock`;
+                            return (
+                              <option key={row.size_label} value={row.size_label}>
+                                {row.size_label}{suffix}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={!picker.size_label}
+                          onClick={confirmAdd}
+                          className="px-4 py-1.5 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={closePicker}
+                          className="px-3 py-1.5 text-sm font-semibold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* + Add Size button */}
+                  {!picker.show && catKeys.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={openPicker}
+                      className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 rounded-xl px-4 py-2.5 transition-all w-full justify-center"
+                    >
+                      <Plus size={15} /> Add Size
+                    </button>
+                  )}
+
+                </div>
               </div>
             );
           })}
+
 
         </div>
 

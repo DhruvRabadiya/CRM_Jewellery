@@ -1,0 +1,79 @@
+PRINTVIEW COMPONENT REPLACEMENT - COMPLETION REPORT
+=====================================================
+
+FILE: frontend/src/pages/OrderBills.jsx
+LINES: 277-511 (new, was 277-462)
+
+CHANGES MADE:
+=============
+
+1. REMOVED FEATURES:
+   - Auto-print via useEffect (window.print() on 150ms timer)
+   - CSS print classes scattered throughout JSX
+   - No print preview modal
+
+2. ADDED FEATURES:
+   - Manual print trigger: handlePrint() function
+   - Full-screen preview modal with dark backdrop (bg-slate-900/70)
+   - Toolbar with Back button, bill title, Print button
+   - White paper card: max-w-[680px], shadow, scrollable (max-h-[90vh])
+   - Print CSS via <style> tag injected at component root
+
+3. PRINT CSS RULES:
+   - @page: A4 portrait, 12mm 15mm 15mm 15mm margins
+   - body * visibility: hidden (hides all page chrome)
+   - #estimate-print-area * visibility: visible (shows only bill content)
+   - position: fixed layout for uninterrupted printing
+   - print-color-adjust: exact (preserves colors during print)
+
+4. BILL LAYOUT (in #estimate-print-area):
+   - Header: "JEWELLERY WORKS" + "Est. Jewellery Order Estimate" + divider
+   - Meta row (2-col): Estimate #, Date, Metal, Product | Customer name, phone, address, type badge
+   - Items per metal:
+     * Metal type section (slate-100 background, uppercase)
+     * Category subsection
+     * Table with Size | Pcs | Weight(g) | [LC/pc | Labour] (labour hidden for retail)
+     * Zebra rows (even rows: bg-slate-50)
+     * Compact borders: 1px solid slate-300
+   - Summary box (right-aligned, w-64):
+     * Total Pcs, Total Weight
+     * Labour Total (non-retail only)
+     * Metal required/received/due/shortfall/extra (color-coded)
+     * Money Received, Final Payable, Discount
+     * Settlement outcome (Amount Given/Refund Due/Cash Remaining) - color-coded
+   - Footer:
+     * Customer Signature and Date lines
+     * "This is a computer-generated estimate." footer text
+
+5. ALL EXISTING LOGIC PRESERVED:
+   - bill, items, products, paymentEntries, summary variables (same scope)
+   - All formatting helpers: fmt(), fmtMoney(), fmtDate()
+   - All summary calculations: computeEstimateBalance()
+   - isRetail logic for conditional labour column display
+   - Metal payment types and settlement logic
+
+6. STYLING:
+   - Print-friendly: no gradients, no complex layouts
+   - Tailwind classes for layout and colors
+   - Readable fonts: text-xs to text-sm
+   - Color-coded outcomes: rose (due), emerald (credit), amber (given)
+
+VERIFICATION:
+=============
+- JSX syntax: PASS (babel parser)
+- ESLint: PASS (no errors in OrderBills.jsx)
+- Component boundaries: PASS (lines 277-511, ends with }; before // --- Modal state ---)
+- Props interface: SAME ({ bill, onClose })
+- No new dependencies added
+
+CODE QUALITY:
+=============
+- Old component: 10,569 chars
+- New component: 13,089 chars
+- Increase due to: improved layout, print CSS, modal structure, comments
+- No external imports required (ArrowLeft, Printer already imported)
+
+READY TO USE:
+=============
+Component is production-ready. User clicks Print button in preview to trigger OS print dialog.
+Only the bill content (#estimate-print-area) will print due to CSS rules.

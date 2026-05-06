@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Estimate Print</title>
+  <style>
+    /* ── Thermal paper: 80mm wide, auto height ── */
+    @page {
+      size: 80mm auto;
+      margin: 3mm 2mm;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 76mm;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 9.5px;
+      color: #000;
+      background: #fff;
+      line-height: 1.4;
+    }
+
+    /* ── Layout helpers ── */
+    .center   { text-align: center; }
+    .right    { text-align: right; }
+    .bold     { font-weight: bold; }
+    .small    { font-size: 8.5px; }
+    .italic   { font-style: italic; }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    /* ── Dividers ── */
+    .divider-solid  { border-top: 1px solid #000; margin: 3px 0; }
+    .divider-dashed { border-top: 1px dashed #000; margin: 3px 0; }
+    .divider-double { border-top: 3px double #000; margin: 3px 0; }
+
+    /* ── Header ── */
+    .shop-name {
+      font-size: 14px;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+
+    .estimate-label {
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+
+    /* ── Section labels ── */
+    .section-header {
+      font-weight: bold;
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 3px 0 1px;
+    }
+
+    /* ── Items table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9px;
+    }
+
+    th {
+      text-align: left;
+      font-weight: bold;
+      border-bottom: 1px solid #000;
+      padding: 1px 2px;
+    }
+
+    th.r, td.r { text-align: right; }
+    th.c, td.c { text-align: center; }
+
+    td {
+      padding: 1px 2px;
+      vertical-align: top;
+    }
+
+    tr.subtotal td {
+      border-top: 1px dashed #000;
+      font-weight: bold;
+    }
+
+    /* ── Summary rows ── */
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 1px 0;
+    }
+
+    .summary-row.grand {
+      font-weight: bold;
+      font-size: 10.5px;
+      padding: 2px 0;
+    }
+
+    .summary-row.due {
+      font-weight: bold;
+      font-size: 11px;
+      padding: 3px 0;
+    }
+
+    /* ── Signature area ── */
+    .sig-area {
+      margin-top: 6px;
+      font-size: 9px;
+    }
+
+    .sig-line {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 5px;
+    }
+
+    .sig-underline {
+      flex: 1;
+      border-bottom: 1px solid #000;
+      margin-left: 4px;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 6px;
+      text-align: center;
+      font-size: 8.5px;
+      font-style: italic;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div id="receipt"></div>
+
+  <script>
+    /* ── Helpers ── */
+    function fmt(n, d) {
+      const num = parseFloat(n) || 0;
+      return num.toFixed(d === undefined ? 3 : d);
+    }
+
+    function fmtMoney(n) {
+      const num = parseFloat(n) || 0;
+      return 'Rs.' + num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    function fmtDate(d) {
+      if (!d) return '';
+      try {
+        const dt = new Date(d);
+        return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      } catch (_) { return d; }
+    }
+
+    /* ── Render the receipt once data is available ── */
+    function render(data) {
+      const {
+        shopName     = 'Jewellery Shop',
+        billNo,
+        date,
+        customerName = '',
+        customerPhone = '',
+        customerType  = 'Retail',
+        isRetail      = true,
+        products      = [],
+        items         = [],
+        summary       = {},
+      } = data;
+
+      const s = summary;
+
+      let html = '';
+
+      /* ── Header ── */
+      html += `
+        <div class="center">
+          <div class="shop-name">${shopName}</div>
+          <div class="estimate-label">ESTIMATE</div>
+          <div>#${billNo} &nbsp;|&nbsp; ${fmtDate(date)}</div>
+        </div>`;
+
+      if (customerName) {
+        html += `<div class="divider-dashed"></div>`;
+        html += `<div><span class="bold">Customer:</span> ${customerName}</div>`;
+        if (customerPhone) html += `<div><span class="bold">Phone:</span> ${customerPhone}</div>`;
+        if (customerType && customerType !== 'Retail') {
+          html += `<div><span class="bold">Type:</span> ${customerType}</div>`;
+        }
+      }
+
+      html += `<div class="divider-double"></div>`;
+
+      /* ── Items per metal type ── */
+      products.forEach((metalType) => {
+        const metalItems = items.filter((it) => (it.metal_type || 'Gold 24K') === metalType);
+        if (!metalItems.length) return;
+
+        // Group by category
+        const categories = [...new Set(metalItems.map((it) => it.category || 'Standard'))];
+
+        html += `<div class="section-header">${metalType}</div>`;
+
+        // Table header
+        if (!isRetail) {
+          html += `
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th class="c">Pcs</th>
+                  <th class="r">Wt(g)</th>
+                  <th class="r">LC</th>
+                </tr>
+              </thead>
+              <tbody>`;
+        } else {
+          html += `
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th class="c">Pcs</th>
+                  <th class="r">Wt(g)</th>
+                </tr>
+              </thead>
+              <tbody>`;
+        }
+
+        let metalTotalPcs    = 0;
+        let metalTotalWeight = 0;
+        let metalTotalLC     = 0;
+
+        metalItems.forEach((item) => {
+          const pcs    = parseInt(item.pcs, 10) || 0;
+          const weight = parseFloat(item.weight) || ((parseFloat(item.size_value) || 0) * pcs);
+          const lc     = parseFloat(item.t_lc)   || ((parseFloat(item.lc_pp) || 0) * pcs);
+          metalTotalPcs    += pcs;
+          metalTotalWeight += weight;
+          metalTotalLC     += lc;
+
+          if (!isRetail) {
+            html += `
+              <tr>
+                <td>${item.size_label || item.category || ''}</td>
+                <td class="c">${pcs}</td>
+                <td class="r">${fmt(weight, 3)}</td>
+                <td class="r">${fmt(lc, 0)}</td>
+              </tr>`;
+          } else {
+            html += `
+              <tr>
+                <td>${item.size_label || item.category || ''}</td>
+                <td class="c">${pcs}</td>
+                <td class="r">${fmt(weight, 3)}</td>
+              </tr>`;
+          }
+        });
+
+        // Subtotal row (only if more than one item)
+        if (metalItems.length > 1) {
+          if (!isRetail) {
+            html += `
+              <tr class="subtotal">
+                <td>Subtotal</td>
+                <td class="c">${metalTotalPcs}</td>
+                <td class="r">${fmt(metalTotalWeight, 3)}</td>
+                <td class="r">${fmt(metalTotalLC, 0)}</td>
+              </tr>`;
+          } else {
+            html += `
+              <tr class="subtotal">
+                <td>Subtotal</td>
+                <td class="c">${metalTotalPcs}</td>
+                <td class="r">${fmt(metalTotalWeight, 3)}</td>
+              </tr>`;
+          }
+        }
+
+        html += `</tbody></table>`;
+        html += `<div class="divider-dashed"></div>`;
+      });
+
+      /* ── Overall totals ── */
+      html += `
+        <div class="summary-row"><span>Total Pieces</span><span>${s.totalPcs || 0}</span></div>
+        <div class="summary-row"><span>Total Weight</span><span>${fmt(s.totalWeight, 3)}g</span></div>`;
+
+      if (!isRetail && (s.labourTotal || 0) > 0) {
+        html += `<div class="summary-row"><span>Labour Charges</span><span>${fmtMoney(s.labourTotal)}</span></div>`;
+        if ((s.discount || 0) > 0) {
+          html += `<div class="summary-row"><span>Discount</span><span>- ${fmtMoney(s.discount)}</span></div>`;
+          html += `<div class="summary-row"><span>Labour (Net)</span><span>${fmtMoney(s.labourAfterDiscount)}</span></div>`;
+        }
+      }
+
+      html += `<div class="divider-solid"></div>`;
+
+      /* ── Metal section ── */
+      const metalTypes = Object.keys(s.requiredMetal || {}).filter((mt) => (s.requiredMetal[mt] || 0) > 0 || (s.metalReceived?.[mt] || 0) > 0);
+
+      if (metalTypes.length > 0) {
+        html += `<div class="section-header">Metal</div>`;
+
+        metalTypes.forEach((mt) => {
+          const needed   = s.requiredMetal?.[mt]         || 0;
+          const received = s.metalReceived?.[mt]         || 0;
+          const due      = s.metalDueUnsettled?.[mt]     || 0;
+          const settled  = s.metalShortfallSettled?.[mt] || 0;
+          const credit   = s.metalCredit?.[mt]           || 0;
+
+          if (needed > 0)   html += `<div class="summary-row"><span>${mt} Needed</span><span>${fmt(needed, 3)}g</span></div>`;
+          if (received > 0) html += `<div class="summary-row"><span>${mt} Received</span><span>${fmt(received, 3)}g</span></div>`;
+          if (due > 0)      html += `<div class="summary-row bold"><span>${mt} Due</span><span>${fmt(due, 3)}g</span></div>`;
+          if (settled > 0)  html += `<div class="summary-row small"><span>&nbsp;&nbsp;&#8627; Settled in Cash</span><span>${fmt(settled, 3)}g</span></div>`;
+          if (credit > 0)   html += `<div class="summary-row"><span>${mt} Extra Received</span><span>${fmt(credit, 3)}g</span></div>`;
+        });
+
+        html += `<div class="divider-solid"></div>`;
+      }
+
+      /* ── Payment section ── */
+      html += `<div class="section-header">Payment</div>`;
+
+      if ((s.moneyPaid || 0) > 0) {
+        html += `<div class="summary-row"><span>Cash Received</span><span>${fmtMoney(s.moneyPaid)}</span></div>`;
+      }
+
+      // Show any metal received as payment (value)
+      const metalTypes2 = Object.keys(s.metalReceived || {}).filter((mt) => (s.metalReceived[mt] || 0) > 0);
+      metalTypes2.forEach((mt) => {
+        const wt   = s.metalReceived[mt] || 0;
+        const rate = s.settlementRate?.[mt] || 0;
+        if (wt > 0) {
+          const label = rate > 0 ? `${mt} (${fmt(wt, 3)}g @ ${fmt(rate, 0)}/10g)` : `${mt} Received`;
+          const value = rate > 0 ? fmtMoney((wt * rate) / 10) : `${fmt(wt, 3)}g`;
+          html += `<div class="summary-row"><span>${label}</span><span>${value}</span></div>`;
+        }
+      });
+
+      html += `<div class="divider-dashed"></div>`;
+
+      html += `<div class="summary-row grand"><span>Final Payable</span><span>${fmtMoney(s.totalAmount)}</span></div>`;
+
+      html += `<div class="divider-solid"></div>`;
+
+      /* ── Balance ── */
+      if ((s.amountGiven || 0) > 0) {
+        html += `<div class="summary-row due"><span>Return to Customer</span><span>${fmtMoney(s.amountGiven)}</span></div>`;
+      } else if ((s.refundDue || 0) > 0) {
+        html += `<div class="summary-row due"><span>Cash Refund</span><span>${fmtMoney(s.refundDue)}</span></div>`;
+      } else {
+        const cashDue = s.cashDue || s.amountDue || 0;
+        html += `<div class="summary-row due"><span>Amount Due</span><span>${fmtMoney(cashDue)}</span></div>`;
+
+        // Metal still owed (unsettled)
+        const unsettledTypes = Object.keys(s.metalDueUnsettled || {}).filter((mt) => (s.metalDueUnsettled[mt] || 0) > 0);
+        unsettledTypes.forEach((mt) => {
+          html += `<div class="summary-row bold"><span>${mt} Still Owed</span><span>${fmt(s.metalDueUnsettled[mt], 3)}g</span></div>`;
+        });
+      }
+
+      html += `<div class="divider-double"></div>`;
+
+      /* ── Signature ── */
+      html += `
+        <div class="sig-area">
+          <div class="sig-line">
+            <span>Customer Sign:</span>
+            <div class="sig-underline"></div>
+          </div>
+          <div class="sig-line" style="margin-top:8px;">
+            <span>Date:</span>
+            <div class="sig-underline"></div>
+          </div>
+        </div>`;
+
+      /* ── Footer ── */
+      html += `
+        <div class="footer">
+          <div class="divider-dashed"></div>
+          This is a computer-generated estimate.
+        </div>`;
+
+      document.getElementById('receipt').innerHTML = html;
+    }
+
+    /* ── Poll for injected data (set by main process via executeJavaScript) ── */
+    (function poll() {
+      if (window.__ESTIMATE_DATA__) {
+        render(window.__ESTIMATE_DATA__);
+      } else {
+        setTimeout(poll, 30);
+      }
+    })();
+  </script>
+</body>
+</html>
