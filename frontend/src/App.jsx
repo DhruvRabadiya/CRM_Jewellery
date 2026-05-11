@@ -18,6 +18,7 @@ import SellingLedger from "./pages/SellingLedger";
 import SellingAdmin from "./pages/SellingAdmin";
 import OrderBills from "./pages/OrderBills";
 import SellingDashboard from "./pages/SellingDashboard";
+import RojMed from "./pages/RojMed";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 // Guard wrapper to ensure user is logged in
@@ -70,6 +71,8 @@ function App() {
             {/* Back-compat: old /selling/order-bills and /selling/billing URLs redirect to /selling/estimate. */}
             <Route path="order-bills" element={<Navigate to="/selling/estimate" replace />} />
             <Route path="billing" element={<Navigate to="/selling/estimate" replace />} />
+            {/* Roj Med — Daily Accounting */}
+            <Route path="roj-med" element={<RojMed />} />
             <Route path="admin" element={<ProtectedRoute requireAdmin={true}><SellingAdmin /></ProtectedRoute>} />
           </Route>
 

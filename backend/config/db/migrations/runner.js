@@ -17,9 +17,13 @@ const MIGRATIONS = [
   require('./001_base_schema'),
   require('./002_data_fixes'),
   require('./003_backfills'),
+  require('./004_order_bill_status_columns'),
+  require('./005_roj_med'),
+  require('./006_metal_purchase'),
+  require('./007_bank_tracking'),
 ];
 
-const CURRENT_VERSION = MIGRATIONS.length; // 3
+const CURRENT_VERSION = MIGRATIONS.length; // 5
 
 /**
  * @param {import('sqlite3').Database} db  opened, pragma-configured db instance
@@ -87,7 +91,7 @@ async function runMigrations(db) {
     }
   }
 
-  return { isFreshDb };
+  return { isFreshDb};
 }
 
 module.exports = { runMigrations };

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   Store, LogOut, ArrowLeft, ShieldCheck, Users, Settings,
-  FileText, LayoutDashboard, BookOpen, PanelLeftClose, PanelLeftOpen,
+  FileText, LayoutDashboard, BookOpen, NotebookPen, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { SellingSyncProvider } from "../context/SellingSyncContext";
@@ -58,6 +58,12 @@ const SellingLayout = () => {
       icon: <BookOpen size={20} />,
       label: "Ledger",
       match: (path) => path.includes("/selling/ledger"),
+    },
+    {
+      to: "/selling/roj-med",
+      icon: <NotebookPen size={20} />,
+      label: "Roj Med",
+      match: (path) => path.includes("/selling/roj-med"),
     },
     {
       to: "/selling/estimate",

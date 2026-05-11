@@ -537,12 +537,24 @@ async function up(db) {
   await addColumnIfMissing(db, 'order_bills', 'balance_snapshot', "TEXT DEFAULT '{}'");
   await addColumnIfMissing(db, 'order_bills', 'customer_address', "TEXT DEFAULT ''");
   await addColumnIfMissing(db, 'order_bills', 'discount',         'REAL DEFAULT 0');
+  await addColumnIfMissing(db, 'order_bills', 'round_off',        'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'order_bills', 'total_amount',     'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'order_bills', 'refund_due',       'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'order_bills', 'jama_gold_22k',    'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'order_bills', 'rate_gold_22k',    'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'order_bills', 'jama_silver',      'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'order_bills', 'rate_silver',      'REAL DEFAULT 0');
+  await addColumnIfMissing(db, 'order_bills', 'bill_type',        "TEXT DEFAULT 'estimate'");
+  await addColumnIfMissing(db, 'order_bills', 'delivery_date',    "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'order_bills', 'order_status',     "TEXT DEFAULT 'Ready'");
+  // One-time data fix: existing estimates incorrectly received 'Pending' from the old migration
+  // default. Reset them to 'Ready' so stock behaviour is correct for pre-existing records.
+  await db.pRun(`
+    UPDATE order_bills
+       SET order_status = 'Ready'
+     WHERE order_status = 'Pending'
+       AND (bill_type = 'estimate' OR bill_type IS NULL OR bill_type = '')
+  `);
 
   // ── 21. order_bill_items ──────────────────────────────────────────────────
   await db.pRun(`

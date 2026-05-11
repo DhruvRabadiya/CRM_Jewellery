@@ -19,6 +19,7 @@ const customerRoutes = require("./routes/customerRoutes");
 const sellingDashboardRoutes = require("./routes/sellingDashboardRoutes");
 const labourChargeRoutes = require("./routes/labourChargeRoutes");
 const estimateRoutes = require("./routes/orderBillRoutes");
+const rojMedRoutes = require("./routes/rojMedRoutes");
 const authRoutes = require("./routes/authRoutes");
 const { authenticateToken } = require("./middleware/authMiddleware");
 
@@ -56,6 +57,9 @@ app.use("/api/labour-charges", authenticateToken, labourChargeRoutes);
 // Backward-compat alias at /api/order-bills keeps older clients working.
 app.use("/api/estimates", authenticateToken, estimateRoutes);
 app.use("/api/order-bills", authenticateToken, estimateRoutes);
+
+// Roj Med - Daily accounting (Debit / Credit ledger with day open/close)
+app.use("/api/roj-med", authenticateToken, rojMedRoutes);
 
 app.get("/", (req, res) => {
   res.send("Jewelry CRM Backend is Running");

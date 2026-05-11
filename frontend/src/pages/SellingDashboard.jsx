@@ -1,34 +1,30 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { LayoutDashboard, Coins, Wallet, Receipt, Users, RefreshCw } from "lucide-react";
+import {
+  LayoutDashboard, Coins, Wallet, Receipt, Users, RefreshCw,
+  NotebookPen, TrendingUp, TrendingDown, Lock, Plus, X,
+  CheckCircle2, ArrowDownCircle, ArrowUpCircle, Building2,
+  ShoppingBag, Wrench, Scale,
+} from "lucide-react";
+import { Link } from "react-router-dom";
 import Toast from "../components/Toast";
 import { getSellingDashboard } from "../api/sellingDashboardService";
+import { getTodaySummary as getRojMedSummary, addEntry as addRojMedEntry } from "../api/rojMedService";
+import { getCustomers } from "../api/customerService";
+import { useSellingSync } from "../context/SellingSyncContext";
 
-const fmtWeight = (value, digits = 3) => `${Number(value || 0).toFixed(digits)}g`;
-const fmtINR = (value) =>
-  `₹${Number(value || 0).toLocaleString("en-IN", {
+// ─── formatters ───────────────────────────────────────────────────────────────
+
+const fmtWeight = (v, d = 3) => `${Number(v || 0).toFixed(d)}g`;
+const fmtINR = (v) =>
+  `₹${Number(v || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 
-const METAL_META = {
-  "Gold 24K": {
-    accent: "from-yellow-400 to-amber-500",
-    bg: "bg-amber-50",
-    border: "border-amber-200",
-  },
-  "Gold 22K": {
-    accent: "from-amber-500 to-orange-500",
-    bg: "bg-orange-50",
-    border: "border-orange-200",
-  },
-  Silver: {
-    accent: "from-slate-400 to-slate-500",
-    bg: "bg-slate-50",
-    border: "border-slate-200",
-  },
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-
-const METAL_KEYS = ["Gold 24K", "Gold 22K", "Silver"];
 
 const paymentModeClass = (mode) => {
   if (mode === "Metal")      return "bg-amber-100 text-amber-700";
@@ -38,52 +34,185 @@ const paymentModeClass = (mode) => {
   return "bg-slate-100 text-slate-500";
 };
 
+// ─── Quick-entry config ───────────────────────────────────────────────────────
+
+const QUICK_TYPES = [
+  { value: "CASH_IN",  label: "Cash In",  color: "bg-emerald-600 hover:bg-emerald-700" },
+  { value: "CASH_OUT", label: "Cash Out", color: "bg-red-600 hover:bg-red-700"         },
+  { value: "EXPENSE",  label: "Expense",  color: "bg-violet-600 hover:bg-violet-700"   },
+];
+const EXPENSE_CATS = ["Labour", "Rent", "Electricity", "Travel", "Misc / Other"];
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** A single balance card — used in the Counter Position row */
+function BalanceCard({ icon, label, value, sub, colorBg, colorBorder, colorVal, colorSub, pulse = false }) {
+  return (
+    <div className={`${colorBg} border ${colorBorder} rounded-2xl p-4 flex flex-col gap-1 min-w-0`}>
+      <div className="flex items-center gap-2 mb-1">
+        <div className={`text-sm ${colorVal} opacity-70`}>{icon}</div>
+        <span className={`text-[10px] font-black uppercase tracking-widest ${colorSub}`}>{label}</span>
+        {pulse && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+      </div>
+      <p className={`text-xl font-black ${colorVal} leading-none`}>{value}</p>
+      {sub && <p className={`text-[10px] font-semibold ${colorSub} mt-0.5 truncate`}>{sub}</p>}
+    </div>
+  );
+}
+
+/** A mini flow tile — used in the "Today's Flow" bar */
+function FlowTile({ icon, label, value, colorBg, colorBorder, colorIcon, colorVal }) {
+  return (
+    <div className={`${colorBg} border ${colorBorder} rounded-xl px-4 py-2.5 flex items-center gap-2.5`}>
+      <div className={`${colorIcon} flex-shrink-0`}>{icon}</div>
+      <div className="min-w-0">
+        <p className={`text-[10px] font-black uppercase tracking-wider ${colorIcon}`}>{label}</p>
+        <p className={`text-sm font-black ${colorVal} truncate`}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function SellingDashboard() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState(null);
+  const { versions, markDirty } = useSellingSync();
+
+  const [data,      setData]      = useState(null);
+  const [rojMed,    setRojMed]    = useState(null);
+  const [customers, setCustomers] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [toast,     setToast]     = useState(null);
+
+  // Quick Entry state
+  const [qeOpen,    setQeOpen]    = useState(false);
+  const [qeType,    setQeType]    = useState("CASH_IN");
+  const [qeAmount,  setQeAmount]  = useState("");
+  const [qeParty,   setQeParty]   = useState("");
+  const [qeMode,    setQeMode]    = useState("Cash");
+  const [qeExpCat,  setQeExpCat]  = useState("Labour");
+  const [qeNotes,   setQeNotes]   = useState("");
+  const [qeSaving,  setQeSaving]  = useState(false);
+  const [qeSuccess, setQeSuccess] = useState(false);
+
+  const resetQe = () => {
+    setQeAmount(""); setQeParty(""); setQeNotes("");
+    setQeMode("Cash"); setQeExpCat("Labour"); setQeSuccess(false);
+  };
 
   const showToast = (message, type = "error") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
+  // ── Data loading ────────────────────────────────────────────────────────────
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getSellingDashboard();
+      const [result, rm] = await Promise.all([
+        getSellingDashboard(),
+        getRojMedSummary().catch(() => null),
+      ]);
       setData(result);
-    } catch (error) {
-      showToast(error?.message || "Failed to fetch selling dashboard");
+      setRojMed(rm);
+    } catch (err) {
+      showToast(err?.message || "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Re-fetch whenever Roj Med mutates (add / edit / delete / close)
   useEffect(() => {
     loadDashboard();
-  }, [loadDashboard]);
+  }, [loadDashboard, versions.dashboard]);
+
+  useEffect(() => {
+    getCustomers().then(r => setCustomers(r?.data || r || [])).catch(() => {});
+  }, []);
+
+  // ── Quick Entry submit ──────────────────────────────────────────────────────
+
+  const handleQuickEntry = async (e) => {
+    e.preventDefault();
+    const amt = parseFloat(qeAmount);
+    if (!amt || amt <= 0) { showToast("Enter a valid amount"); return; }
+    setQeSaving(true);
+    try {
+      await addRojMedEntry(todayStr(), {
+        entry_type:       qeType,
+        amount:           amt,
+        payment_mode:     qeMode,
+        party_id:         qeParty ? parseInt(qeParty, 10) : null,
+        expense_category: qeType === "EXPENSE" ? qeExpCat : "",
+        notes:            qeNotes,
+      });
+      setQeSuccess(true);
+      resetQe();
+      markDirty(["dashboard"]);
+      setTimeout(() => setQeSuccess(false), 3000);
+    } catch (err) {
+      showToast(err?.response?.data?.message || err?.message || "Failed to save entry");
+    } finally {
+      setQeSaving(false);
+    }
+  };
+
+  // ── Loading skeleton ────────────────────────────────────────────────────────
 
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-500 font-semibold text-sm">Loading selling dashboard...</p>
+          <p className="text-slate-500 font-semibold text-sm">Loading dashboard…</p>
         </div>
       </div>
     );
   }
 
-  const metalPayments   = data?.metal_payments_received || {};
-  const recentBills     = data?.recent_bills             || [];
-  const totalMetalValue = data?.total_metal_payment_value || 0;
+  // ── Derived values ──────────────────────────────────────────────────────────
+
+  const recentBills = data?.recent_bills || [];
+
+  // Roj Med live balances (from getTodaySummary)
+  const rmExists        = rojMed?.exists ?? false;
+  const rmStatus        = rojMed?.status ?? "NOT_STARTED";
+  const rmCash          = rojMed?.cash_balance        ?? 0;
+  const rmBank          = rojMed?.bank_balance         ?? 0;
+  const rmGold24k       = rojMed?.metal_bal_gold24k   ?? 0;
+  const rmGold22k       = rojMed?.metal_bal_gold22k   ?? 0;
+  const rmSilver        = rojMed?.metal_bal_silver     ?? 0;
+  const rmCashIn        = rojMed?.total_cash_in        ?? 0;
+  const rmCashOut       = rojMed?.total_cash_out       ?? 0;
+  const rmBankIn        = rojMed?.total_bank_in        ?? 0;
+  const rmBankOut       = rojMed?.total_bank_out       ?? 0;
+  const rmOpenCash      = rojMed?.opening_cash         ?? 0;
+  const rmOpenBank      = rojMed?.opening_bank         ?? 0;
+  const rmExpenses      = rojMed?.total_expenses       ?? 0;
+  const rmSales         = rojMed?.total_counter_sales  ?? 0;
+  const rmMetalPurchVal = rojMed?.total_metal_purchase_value ?? 0;
+  const rmEntries       = rojMed?.entry_count          ?? 0;
+  const rmBills         = rojMed?.bill_count           ?? 0;
+
+  const hasBankActivity = rmBankIn + rmBankOut > 0;
+
+  // Estimate-based totals (from getSellingDashboard)
+  const billCount       = data?.bill_count      ?? 0;
+  const billedTotal     = data?.billed_total    ?? 0;
+  const receivableTotal = data?.receivable_total ?? 0;
+
+  const isClosed  = rmStatus === "CLOSED";
+  const isOpen    = rmStatus === "OPEN";
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2.5">
@@ -93,7 +222,7 @@ export default function SellingDashboard() {
             Selling Dashboard
           </h1>
           <p className="text-slate-500 text-sm mt-1 ml-[52px]">
-            Counter collections, customer metal pool, and recent estimate activity
+            Live counter position, balances, and today's activity
           </p>
         </div>
         <button
@@ -104,41 +233,207 @@ export default function SellingDashboard() {
         </button>
       </div>
 
-      {/* Customer Metal cards — total received as payment */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {METAL_KEYS.map((key) => {
-          const m   = METAL_META[key];
-          const rec = metalPayments[key] || { weight: 0, value: 0 };
-          return (
-            <div key={key} className={`${m.bg} ${m.border} rounded-2xl border p-5`}>
-              <div className={`w-12 h-2 rounded-full bg-gradient-to-r ${m.accent} mb-4`} />
-              <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Payment Received</p>
-              <p className="text-xl font-black text-slate-800 mt-1">{key}</p>
-              <p className="text-3xl font-black text-slate-900 mt-3">{fmtWeight(rec.weight, 4)}</p>
-              {rec.value > 0 ? (
-                <p className="text-xs font-semibold text-slate-500 mt-1">{fmtINR(rec.value)} est. value</p>
-              ) : (
-                <p className="text-xs text-slate-400 mt-1">No payments recorded yet</p>
+      {/* ── Counter Position — live balances from Roj Med ── */}
+      <section>
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+            Counter Position — Today
+          </h2>
+          {rmExists && (
+            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+              isClosed ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+            }`}>
+              {isClosed ? "Day Closed" : "Live"}
+            </span>
+          )}
+        </div>
+
+        {rmExists ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* Cash in Counter */}
+            <BalanceCard
+              icon={<Wallet size={16} />}
+              label="Cash in Counter"
+              value={fmtINR(rmCash)}
+              sub={`Open: ${fmtINR(rmOpenCash)}`}
+              colorBg={rmCash >= 0 ? "bg-emerald-50" : "bg-red-50"}
+              colorBorder={rmCash >= 0 ? "border-emerald-200" : "border-red-200"}
+              colorVal={rmCash >= 0 ? "text-emerald-700" : "text-red-600"}
+              colorSub="text-emerald-500"
+              pulse={isOpen}
+            />
+
+            {/* Bank / UPI Balance */}
+            <BalanceCard
+              icon={<Building2 size={16} />}
+              label="Bank / UPI"
+              value={fmtINR(rmBank)}
+              sub={`Open: ${fmtINR(rmOpenBank)}`}
+              colorBg={hasBankActivity ? (rmBank >= 0 ? "bg-blue-50" : "bg-red-50") : "bg-slate-50"}
+              colorBorder={hasBankActivity ? (rmBank >= 0 ? "border-blue-200" : "border-red-200") : "border-slate-200"}
+              colorVal={hasBankActivity ? (rmBank >= 0 ? "text-blue-700" : "text-red-600") : "text-slate-500"}
+              colorSub={hasBankActivity ? "text-blue-500" : "text-slate-400"}
+              pulse={isOpen && hasBankActivity}
+            />
+
+            {/* Gold 24K */}
+            <BalanceCard
+              icon={<Scale size={16} />}
+              label="Gold 24K"
+              value={fmtWeight(rmGold24k, 3)}
+              sub="Available weight"
+              colorBg="bg-amber-50"
+              colorBorder="border-amber-200"
+              colorVal="text-amber-700"
+              colorSub="text-amber-500"
+            />
+
+            {/* Gold 22K */}
+            <BalanceCard
+              icon={<Scale size={16} />}
+              label="Gold 22K"
+              value={fmtWeight(rmGold22k, 3)}
+              sub="Available weight"
+              colorBg="bg-orange-50"
+              colorBorder="border-orange-200"
+              colorVal="text-orange-700"
+              colorSub="text-orange-500"
+            />
+
+            {/* Silver */}
+            <BalanceCard
+              icon={<Coins size={16} />}
+              label="Silver"
+              value={fmtWeight(rmSilver, 3)}
+              sub="Available weight"
+              colorBg="bg-slate-50"
+              colorBorder="border-slate-200"
+              colorVal="text-slate-700"
+              colorSub="text-slate-400"
+            />
+          </div>
+        ) : (
+          /* Roj Med not started yet — prompt */
+          <Link to="/selling/roj-med" className="block">
+            <div className="border border-dashed border-indigo-300 rounded-2xl p-6 text-center bg-indigo-50/40 hover:bg-indigo-50 transition-colors">
+              <NotebookPen size={24} className="text-indigo-400 mx-auto mb-2" />
+              <p className="text-sm font-black text-indigo-600">Roj Med not started for today</p>
+              <p className="text-xs text-slate-400 mt-1">Open Roj Med to see live counter balances here</p>
+            </div>
+          </Link>
+        )}
+      </section>
+
+      {/* ── Today's Flow bar — cash/bank in & out ── */}
+      {rmExists && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <FlowTile
+            icon={<ArrowDownCircle size={14} />}
+            label="Cash In"
+            value={fmtINR(rmCashIn)}
+            colorBg="bg-emerald-50"
+            colorBorder="border-emerald-200"
+            colorIcon="text-emerald-500"
+            colorVal="text-emerald-700"
+          />
+          <FlowTile
+            icon={<ArrowUpCircle size={14} />}
+            label="Cash Out"
+            value={fmtINR(rmCashOut)}
+            colorBg="bg-red-50"
+            colorBorder="border-red-200"
+            colorIcon="text-red-500"
+            colorVal="text-red-600"
+          />
+          <FlowTile
+            icon={<ArrowDownCircle size={14} />}
+            label="Bank / UPI In"
+            value={fmtINR(rmBankIn)}
+            colorBg="bg-blue-50"
+            colorBorder="border-blue-200"
+            colorIcon="text-blue-500"
+            colorVal="text-blue-700"
+          />
+          <FlowTile
+            icon={<ArrowUpCircle size={14} />}
+            label="Bank / UPI Out"
+            value={fmtINR(rmBankOut)}
+            colorBg="bg-orange-50"
+            colorBorder="border-orange-200"
+            colorIcon="text-orange-500"
+            colorVal="text-orange-600"
+          />
+        </div>
+      )}
+
+      {/* ── Roj Med status strip (compact clickable link) ── */}
+      <Link to="/selling/roj-med" className="block group">
+        <div className={`rounded-2xl border px-5 py-3 transition-all group-hover:shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+          isClosed   ? "bg-slate-50 border-slate-200" :
+          rmExists   ? "bg-indigo-50 border-indigo-200" :
+                       "bg-white border-dashed border-indigo-300"
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
+              <NotebookPen size={15} className="text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-slate-800 text-sm">Roj Med — Today</span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                  isClosed ? "bg-red-100 text-red-700" :
+                  rmExists ? "bg-emerald-100 text-emerald-700" :
+                             "bg-slate-100 text-slate-500"
+                }`}>
+                  {isClosed ? "Closed" : rmExists ? "Open" : "Not Started"}
+                </span>
+                {isClosed && <Lock size={11} className="text-slate-400" />}
+              </div>
+              {rmExists && (
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {rmEntries} manual {rmEntries === 1 ? "entry" : "entries"} · {rmBills} {rmBills === 1 ? "estimate" : "estimates"} · Click to open full ledger →
+                </p>
+              )}
+              {!rmExists && (
+                <p className="text-xs text-slate-500 mt-0.5">Click to open today's accounting ledger →</p>
               )}
             </div>
-          );
-        })}
-      </div>
+          </div>
+          {rmExists && (
+            <div className="flex flex-wrap gap-3 text-xs font-semibold ml-11 sm:ml-0">
+              {rmExpenses > 0 && (
+                <span className="text-violet-600">Exp: {fmtINR(rmExpenses)}</span>
+              )}
+              {rmSales > 0 && (
+                <span className="text-blue-600">Sales: {fmtINR(rmSales)}</span>
+              )}
+              {rmMetalPurchVal > 0 && (
+                <span className="text-yellow-700">Metal Buy: {fmtINR(rmMetalPurchVal)}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </Link>
 
-      {/* Main grid */}
+      {/* ── Main grid ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
-        {/* Recent Estimates */}
-        <div className="xl:col-span-2 space-y-5">
+        {/* Left: Recent Estimates */}
+        <div className="xl:col-span-2">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">
               <Receipt size={18} className="text-indigo-500" />
               <h2 className="font-black text-slate-800">Recent Estimates</h2>
+              {billCount > 0 && (
+                <span className="ml-auto text-xs text-slate-500 font-semibold">{billCount} today</span>
+              )}
             </div>
+
             {recentBills.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
+                <Receipt size={32} className="mx-auto mb-3 opacity-30" />
                 <p className="font-bold">No estimates yet</p>
-                <p className="text-sm mt-1">Estimate activity will appear here once estimates are created.</p>
+                <p className="text-sm mt-1">Estimates appear here as they are created on the counter.</p>
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -155,45 +450,45 @@ export default function SellingDashboard() {
                   </thead>
                   <tbody>
                     {recentBills.map((bill, idx) => {
-                      const hasRefund  = parseFloat(bill.refund_due) > 0;
-                      const hasBalance = parseFloat(bill.outstanding_amount) > 0;
+                      const hasRefund  = parseFloat(bill.refund_due)         > 0;
+                      const hasBalance = parseFloat(bill.outstanding_amount)  > 0;
                       const metalParts = [
                         bill.metal_gold24k > 0 ? `24K ${fmtWeight(bill.metal_gold24k, 4)}` : null,
                         bill.metal_gold22k > 0 ? `22K ${fmtWeight(bill.metal_gold22k, 4)}` : null,
-                        bill.metal_silver  > 0 ? `Ag ${fmtWeight(bill.metal_silver, 4)}`   : null,
+                        bill.metal_silver  > 0 ? `Ag ${fmtWeight(bill.metal_silver,  4)}`  : null,
                       ].filter(Boolean);
 
                       return (
-                        <tr key={`${bill.bill_no}-${idx}`} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                          <td className="px-4 py-3 font-black text-indigo-600 whitespace-nowrap">#{bill.bill_no}</td>
-
+                        <tr
+                          key={`${bill.bill_no}-${idx}`}
+                          className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
+                        >
+                          <td className="px-4 py-3 font-black text-indigo-600 whitespace-nowrap">
+                            #{bill.bill_no}
+                          </td>
                           <td className="px-4 py-3">
                             <p className="font-semibold text-slate-800">{bill.customer_name || "Walk-in"}</p>
                             {bill.customer_type && bill.customer_type !== "Retail" && (
                               <span className="text-[9px] font-bold text-slate-400">{bill.customer_type}</span>
                             )}
                           </td>
-
                           <td className="px-4 py-3">
                             {bill.payment_mode ? (
                               <span className={`text-[10px] font-black px-2 py-0.5 rounded-full inline-block ${paymentModeClass(bill.payment_mode)}`}>
                                 {bill.payment_mode}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-slate-300 font-semibold">-</span>
+                              <span className="text-[10px] text-slate-300 font-semibold">—</span>
                             )}
                           </td>
-
                           <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
                             {fmtINR(bill.total_amount)}
                           </td>
-
-                          {/* Cash collected + metal badges */}
                           <td className="px-4 py-3 text-right">
                             <p className="font-semibold text-green-700 whitespace-nowrap">{fmtINR(bill.amount_paid)}</p>
                             {metalParts.length > 0 && (
                               <div className="flex flex-wrap justify-end gap-1 mt-1">
-                                {metalParts.map((part) => (
+                                {metalParts.map(part => (
                                   <span key={part} className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
                                     {part}
                                   </span>
@@ -201,14 +496,17 @@ export default function SellingDashboard() {
                               </div>
                             )}
                           </td>
-
                           <td className="px-4 py-3 text-right whitespace-nowrap">
                             {hasRefund ? (
-                              <span className="text-emerald-600 font-bold text-xs">Refund {fmtINR(bill.refund_due)}</span>
+                              <span className="text-emerald-600 font-bold text-xs">
+                                Refund {fmtINR(bill.refund_due)}
+                              </span>
                             ) : hasBalance ? (
                               <span className="font-black text-red-600">{fmtINR(bill.outstanding_amount)}</span>
                             ) : (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Settled</span>
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                                Settled
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -222,65 +520,218 @@ export default function SellingDashboard() {
         </div>
 
         {/* Right sidebar */}
-        <div className="space-y-5">
+        <div className="space-y-4">
 
-          {/* Collections */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <Wallet size={18} className="text-emerald-500" />
-              <h2 className="font-black text-slate-800">Collections</h2>
-            </div>
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-              <p className="text-[11px] font-black text-emerald-700 uppercase tracking-widest">Cash Received</p>
-              <p className="text-3xl font-black text-emerald-800 mt-2">{fmtINR(data?.cash_status?.cash_total)}</p>
-            </div>
-            <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
-              <p className="text-[11px] font-black text-blue-700 uppercase tracking-widest">Bank / UPI Received</p>
-              <p className="text-2xl font-black text-blue-800 mt-2">{fmtINR(data?.cash_status?.online_total)}</p>
-            </div>
-            {totalMetalValue > 0 && (
-              <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
-                <p className="text-[11px] font-black text-amber-700 uppercase tracking-widest">Metal Value Received</p>
-                <p className="text-2xl font-black text-amber-800 mt-2">{fmtINR(totalMetalValue)}</p>
-                <p className="text-xs text-amber-600 mt-1">Estimated at recorded reference rates</p>
+          {/* Quick Roj Med Entry */}
+          <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden">
+            <button
+              onClick={() => { setQeOpen(o => !o); resetQe(); }}
+              className="w-full px-5 py-3.5 flex items-center justify-between hover:bg-indigo-50/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-lg flex items-center justify-center">
+                  <NotebookPen size={14} className="text-white" />
+                </div>
+                <span className="font-black text-slate-800 text-sm">Quick Roj Med Entry</span>
               </div>
+              <div className="flex items-center gap-2">
+                {qeSuccess && <CheckCircle2 size={15} className="text-emerald-500" />}
+                {qeOpen
+                  ? <X size={16} className="text-slate-400" />
+                  : <Plus size={16} className="text-indigo-500" />}
+              </div>
+            </button>
+
+            {qeOpen && (
+              <form onSubmit={handleQuickEntry} className="px-5 pb-5 space-y-3 border-t border-indigo-100 pt-4">
+                {/* Type */}
+                <div className="flex gap-1.5">
+                  {QUICK_TYPES.map(qt => (
+                    <button
+                      key={qt.value}
+                      type="button"
+                      onClick={() => setQeType(qt.value)}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${
+                        qeType === qt.value
+                          ? `${qt.color} text-white shadow-sm`
+                          : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      }`}
+                    >
+                      {qt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Amount + Mode */}
+                <div className="flex gap-2">
+                  <input
+                    required
+                    type="number" min="0.01" step="0.01"
+                    value={qeAmount}
+                    onChange={e => setQeAmount(e.target.value)}
+                    placeholder="Amount ₹"
+                    className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400"
+                  />
+                  <select
+                    value={qeMode}
+                    onChange={e => setQeMode(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-2 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-300"
+                  >
+                    <option>Cash</option>
+                    <option>Bank / UPI</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+
+                {/* Expense category */}
+                {qeType === "EXPENSE" && (
+                  <select
+                    value={qeExpCat}
+                    onChange={e => setQeExpCat(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-300"
+                  >
+                    {EXPENSE_CATS.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                )}
+
+                {/* Party */}
+                <select
+                  value={qeParty}
+                  onChange={e => setQeParty(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-300"
+                >
+                  <option value="">— No party / General —</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.party_name}</option>
+                  ))}
+                </select>
+
+                {/* Notes */}
+                <input
+                  type="text"
+                  value={qeNotes}
+                  onChange={e => setQeNotes(e.target.value)}
+                  placeholder="Notes (optional)"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-300"
+                />
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={qeSaving}
+                    className={`flex-1 py-2 rounded-xl text-sm font-black text-white transition-all disabled:opacity-50 ${
+                      qeType === "CASH_IN"  ? "bg-emerald-600 hover:bg-emerald-700" :
+                      qeType === "CASH_OUT" ? "bg-red-600 hover:bg-red-700" :
+                                              "bg-violet-600 hover:bg-violet-700"
+                    }`}
+                  >
+                    {qeSaving ? "Saving…" : "Save to Roj Med"}
+                  </button>
+                  <Link
+                    to="/selling/roj-med"
+                    className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 flex items-center"
+                    title="Open full Roj Med"
+                  >
+                    Open
+                  </Link>
+                </div>
+
+                {qeSuccess && (
+                  <p className="text-xs text-emerald-600 font-bold flex items-center gap-1.5">
+                    <CheckCircle2 size={13} /> Saved to Roj Med ✓
+                  </p>
+                )}
+              </form>
             )}
           </div>
 
-          {/* Counter Summary */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <Coins size={18} className="text-amber-500" />
-              <h2 className="font-black text-slate-800">Counter Summary</h2>
+          {/* Counter Summary — Roj Med + Estimates combined */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <ShoppingBag size={16} className="text-indigo-500" />
+              <h2 className="font-black text-slate-800 text-sm">Counter Summary</h2>
+              <span className="text-[10px] text-slate-400 font-semibold ml-auto">Today</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Total Estimates</span>
-              <span className="font-bold text-slate-800">{data?.bill_count || 0}</span>
+
+            {/* Estimate totals */}
+            <div className="space-y-2 pb-3 border-b border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estimates</p>
+              <Row label="Bills Raised"       value={billCount}               plain />
+              <Row label="Total Billed"       value={fmtINR(billedTotal)} />
+              <Row label="Outstanding (due)"  value={fmtINR(receivableTotal)} red={receivableTotal > 0} />
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Total Billed</span>
-              <span className="font-bold text-slate-800">{fmtINR(data?.billed_total)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Customer Receivable</span>
-              <span className="font-bold text-red-600">{fmtINR(data?.receivable_total)}</span>
-            </div>
+
+            {/* Roj Med totals */}
+            {rmExists && (
+              <div className="space-y-2 pb-3 border-b border-slate-100">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Roj Med Ledger</p>
+                <Row label="Total Entries"      value={rmEntries}              plain />
+                <Row label="Counter Sales"      value={fmtINR(rmSales)} />
+                {rmExpenses > 0 && (
+                  <Row label="Expenses"         value={fmtINR(rmExpenses)}    red />
+                )}
+                {rmMetalPurchVal > 0 && (
+                  <Row label="Metal Purchases"  value={fmtINR(rmMetalPurchVal)} amber />
+                )}
+              </div>
+            )}
+
+            {/* Available balances summary */}
+            {rmExists && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Available Balances</p>
+                <Row
+                  label="Cash in Counter"
+                  value={fmtINR(rmCash)}
+                  green={rmCash >= 0}
+                  red={rmCash < 0}
+                />
+                {hasBankActivity && (
+                  <Row
+                    label="Bank / UPI"
+                    value={fmtINR(rmBank)}
+                    blue={rmBank >= 0}
+                    red={rmBank < 0}
+                  />
+                )}
+                {rmGold24k > 0 && (
+                  <Row label="Gold 24K" value={fmtWeight(rmGold24k, 3)} amber />
+                )}
+                {rmGold22k > 0 && (
+                  <Row label="Gold 22K" value={fmtWeight(rmGold22k, 3)} amber />
+                )}
+                {rmSilver > 0 && (
+                  <Row label="Silver" value={fmtWeight(rmSilver, 3)} />
+                )}
+              </div>
+            )}
+
+            {!rmExists && (
+              <p className="text-xs text-slate-400 pt-1">
+                Open today's Roj Med to see live balance summary here.
+              </p>
+            )}
           </div>
 
-          {/* Accounting note */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Users size={18} className="text-purple-500" />
-              <h2 className="font-black text-slate-800">Accounting Note</h2>
-            </div>
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Cash and Bank/UPI reflect counter ledger receipts net of refunds. Metal payments are
-              tracked per customer in the ledger. Metal credit cards show net excess held, plus
-              total weight received as payment.
-            </p>
-          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Row helper for the Counter Summary card ──────────────────────────────────
+
+function Row({ label, value, plain, red, green, blue, amber }) {
+  const valClass = red    ? "text-red-600 font-black"
+                 : green  ? "text-emerald-700 font-black"
+                 : blue   ? "text-blue-700 font-black"
+                 : amber  ? "text-amber-700 font-bold"
+                 : plain  ? "text-slate-800 font-bold"
+                 :          "text-slate-800 font-semibold";
+  return (
+    <div className="flex justify-between items-center text-xs">
+      <span className="text-slate-500">{label}</span>
+      <span className={valClass}>{value}</span>
     </div>
   );
 }

@@ -14,8 +14,13 @@ const {
   roundWeight,
 } = require("../utils/sellingPayments");
 
-const REFERENCE_TYPE = "ORDER_BILL";
+const { isBillStockActive, BILL_STATUS_LIST } = require('../utils/constants');
+
+const REFERENCE_TYPE       = "ORDER_BILL";
 const VALID_CUSTOMER_TYPES = ["Retail", "Showroom", "Wholesale"];
+// bill_type is kept in the DB for backward-compat but no longer drives behaviour.
+// order_status is the single source of truth.
+const VALID_ORDER_STATUSES = BILL_STATUS_LIST;
 
 const parseProducts = (raw) => {
   if (!raw) return ["Gold 24K"];
@@ -62,12 +67,13 @@ const _extractLegacyMetalFields = (paymentEntries, settlementRates = {}) => {
   };
 };
 
-const _buildBalanceSnapshot = (items, paymentEntries, discount, settlementRates = {}) => {
+const _buildBalanceSnapshot = (items, paymentEntries, discount, settlementRates = {}, roundOff = 0) => {
   const computed = computeEstimateBalance({
     items,
     paymentEntries,
     discount,
     settlementRates,
+    roundOff,
   });
 
   return {
@@ -84,6 +90,7 @@ const _buildBalanceSnapshot = (items, paymentEntries, discount, settlementRates 
     labour_total: computed.labour_total,
     labour_after_discount: computed.labour_after_discount,
     discount: computed.discount,
+    round_off: computed.round_off,
     subtotal: computed.subtotal,
     total_amount: computed.total_amount,
     amount_due: computed.amount_due,
@@ -96,8 +103,8 @@ const _buildBalanceSnapshot = (items, paymentEntries, discount, settlementRates 
   };
 };
 
-const _computeSummary = (items, paymentEntries, discount = 0, settlementRates = {}) => {
-  const balance = _buildBalanceSnapshot(items, paymentEntries, discount, settlementRates);
+const _computeSummary = (items, paymentEntries, discount = 0, settlementRates = {}, roundOff = 0) => {
+  const balance = _buildBalanceSnapshot(items, paymentEntries, discount, settlementRates, roundOff);
   const gold24Due = balance.metal_due["Gold 24K"] || 0;
   const gold24Credit = balance.metal_credit["Gold 24K"] || 0;
 
@@ -113,6 +120,7 @@ const _computeSummary = (items, paymentEntries, discount = 0, settlementRates = 
     gold_rs: balance.metal_adjustment_value || 0,
     subtotal: balance.subtotal || 0,
     discount: balance.discount,
+    round_off: balance.round_off || 0,
     total_amount: balance.total_amount || 0,
     amt_baki: balance.amount_due || 0,
     refund_due: balance.refund_due || 0,
@@ -274,6 +282,23 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
     }
   }
 
+  if (data.round_off != null && data.round_off !== "") {
+    const ro = parseFloat(data.round_off);
+    if (!Number.isFinite(ro)) {
+      throw createAppError("Round off must be a valid number", 400, "ROUND_OFF_INVALID");
+    }
+  }
+
+  if (data.order_status != null && data.order_status !== "") {
+    if (!VALID_ORDER_STATUSES.includes(String(data.order_status).trim())) {
+      throw createAppError(
+        `Invalid status. Must be one of: ${VALID_ORDER_STATUSES.join(", ")}`,
+        400,
+        "ORDER_STATUS_INVALID"
+      );
+    }
+  }
+
   // Customer fields on estimates are all optional (walk-in allowed).
   // Only constraint: name required if phone is provided (so CRM lookup works).
   if (!data.customer_id) {
@@ -293,6 +318,7 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
         paymentEntries,
         discount: Math.max(0, parseFloat(data.discount) || 0),
         settlementRates: normalizeSettlementRates(data.settlement_rates, data.settlement_rates),
+        roundOff: parseFloat(data.round_off) || 0,
       });
       const isBalanceDue =
         (balCheck.amount_due || 0) > 0 ||
@@ -315,6 +341,7 @@ const _validateBillInput = (data, { requireObNo = false } = {}) => {
       paymentEntries,
       discount: Math.max(0, parseFloat(data.discount) || 0),
       settlementRates,
+      roundOff: parseFloat(data.round_off) || 0,
     });
 
     const missingRateMetal = METAL_PAYMENT_TYPES.find((metalType) => {
@@ -748,9 +775,16 @@ const createBill = async (data) => {
 
   const hasMetalPayment = paymentEntries.some((entry) => entry.payment_type === "Metal");
 
-  const discount = Math.max(0, parseFloat(data.discount) || 0);
+  const discount     = Math.max(0, parseFloat(data.discount) || 0);
+  const roundOff     = parseFloat(data.round_off) || 0;
+  // order_status is the single source of truth for workflow state.
+  // Default to 'Ready' so new bills behave like classic estimates unless explicitly set.
+  const orderStatus  = VALID_ORDER_STATUSES.includes(String(data.order_status || "").trim())
+    ? String(data.order_status).trim()
+    : "Ready";
+  const deliveryDate = String(data.delivery_date || "").trim();
   const settlementRates = normalizeSettlementRates(data.settlement_rates, data.settlement_rates);
-  const summary = _computeSummary(data.items || [], paymentEntries, discount, settlementRates);
+  const summary = _computeSummary(data.items || [], paymentEntries, discount, settlementRates, roundOff);
   const productsJson = JSON.stringify(
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
@@ -761,7 +795,10 @@ const createBill = async (data) => {
   const resolvedCustomerId = await _resolveCustomerId(data, { createIfBalanceDue: isBalanceDue });
 
   return db.runTransaction(async (run) => {
-    await counterService.assertStockAvailable(data.items || []);
+    // Skip counter-stock checks for Pending orders (items not yet produced)
+    if (isBillStockActive(orderStatus)) {
+      await counterService.assertStockAvailable(data.items || []);
+    }
     const { lastID } = await run(
       `INSERT INTO order_bills
         (ob_no, date, product, products,
@@ -769,8 +806,9 @@ const createBill = async (data) => {
          fine_jama, rate_10g, jama_gold_22k, rate_gold_22k, jama_silver, rate_silver,
          amt_jama, cash_amount, online_amount, payment_mode, payment_entries, balance_snapshot,
          total_pcs, total_weight, labour_total, fine_diff, gold_rs,
-         subtotal, discount, total_amount, amt_baki, refund_due, ofg_status, fine_carry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+         subtotal, discount, round_off, total_amount, amt_baki, refund_due, ofg_status, fine_carry,
+         delivery_date, order_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         obNo, data.date, data.product || "", productsJson,
         resolvedCustomerId || null,
@@ -785,13 +823,16 @@ const createBill = async (data) => {
         legacyFields.amt_jama, legacyFields.cash_amount, legacyFields.online_amount,
         _derivePaymentMode(paymentEntries), JSON.stringify(paymentEntries), JSON.stringify(summary.balance_snapshot),
         summary.total_pcs, summary.total_weight, summary.labour_total, summary.fine_diff, summary.gold_rs,
-        summary.subtotal, summary.discount, summary.total_amount, summary.amt_baki, summary.refund_due,
+        summary.subtotal, summary.discount, summary.round_off, summary.total_amount, summary.amt_baki, summary.refund_due,
         summary.ofg_status, summary.fine_carry,
+        deliveryDate, orderStatus,
       ]
     );
 
     await _insertItems(run, lastID, data.items || []);
-    await counterService.reserveEstimateStock(run, lastID, obNo, data.date, data.items || []);
+    if (isBillStockActive(orderStatus)) {
+      await counterService.reserveEstimateStock(run, lastID, obNo, data.date, data.items || []);
+    }
     await _insertAccountingEntries(run, lastID, obNo, data.date, resolvedCustomerId, summary, paymentEntries);
     if (resolvedCustomerId) {
       await _applyOutstandingDelta(run, resolvedCustomerId);
@@ -810,9 +851,15 @@ const updateBill = async (id, data) => {
     throw createAppError(`Estimate No. ${obNo} already exists. Please use a different number.`, 409, "ESTIMATE_NO_CONFLICT");
   }
 
-  const discount = Math.max(0, parseFloat(data.discount) || 0);
+  const discount     = Math.max(0, parseFloat(data.discount) || 0);
+  const roundOff     = parseFloat(data.round_off) || 0;
+  // order_status is the single source of truth for workflow state.
+  const orderStatus  = VALID_ORDER_STATUSES.includes(String(data.order_status || "").trim())
+    ? String(data.order_status).trim()
+    : "Ready";
+  const deliveryDate = String(data.delivery_date || "").trim();
   const settlementRates = normalizeSettlementRates(data.settlement_rates, data.settlement_rates);
-  const summary = _computeSummary(data.items || [], paymentEntries, discount, settlementRates);
+  const summary = _computeSummary(data.items || [], paymentEntries, discount, settlementRates, roundOff);
   const productsJson = JSON.stringify(
     Array.isArray(data.products) && data.products.length ? data.products : ["Gold 24K"]
   );
@@ -821,12 +868,24 @@ const updateBill = async (id, data) => {
     (summary.amt_baki || 0) > 0 ||
     METAL_PAYMENT_TYPES.some((mt) => (summary.balance_snapshot?.metal_due_unsettled?.[mt] || 0) > 0);
   const resolvedCustomerId = await _resolveCustomerId(data, { createIfBalanceDue: isBalanceDue });
+
   return db.runTransaction(async (run, get) => {
-    const oldBill = await get(`SELECT customer_id FROM order_bills WHERE id = ?`, [id]);
+    const oldBill = await get(`SELECT customer_id, order_status FROM order_bills WHERE id = ?`, [id]);
     if (!oldBill) throw createAppError("Estimate not found", 404, "ESTIMATE_NOT_FOUND");
 
-    await counterService.releaseEstimateStock(run, id);
-    await counterService.assertStockAvailable(data.items || []);
+    // Treat legacy records with no status as Ready (classic estimate behaviour)
+    const oldStatus        = oldBill.order_status || "Ready";
+    const wasStockActive   = isBillStockActive(oldStatus);
+    const willBeStockActive = isBillStockActive(orderStatus);
+
+    // Release any existing counter reservation before re-evaluating stock
+    if (wasStockActive) {
+      await counterService.releaseEstimateStock(run, id);
+    }
+    // Assert availability only if the new status requires stock
+    if (willBeStockActive) {
+      await counterService.assertStockAvailable(data.items || []);
+    }
 
     await run(
       `UPDATE order_bills SET
@@ -835,7 +894,8 @@ const updateBill = async (id, data) => {
          fine_jama=?, rate_10g=?, jama_gold_22k=?, rate_gold_22k=?, jama_silver=?, rate_silver=?,
          amt_jama=?, cash_amount=?, online_amount=?, payment_mode=?, payment_entries=?, balance_snapshot=?,
          total_pcs=?, total_weight=?, labour_total=?, fine_diff=?, gold_rs=?,
-         subtotal=?, discount=?, total_amount=?, amt_baki=?, refund_due=?, ofg_status=?, fine_carry=?
+         subtotal=?, discount=?, round_off=?, total_amount=?, amt_baki=?, refund_due=?, ofg_status=?, fine_carry=?,
+         delivery_date=?, order_status=?
        WHERE id=?`,
       [
         obNo, data.date, data.product || "", productsJson,
@@ -851,21 +911,24 @@ const updateBill = async (id, data) => {
         legacyFields.amt_jama, legacyFields.cash_amount, legacyFields.online_amount,
         _derivePaymentMode(paymentEntries), JSON.stringify(paymentEntries), JSON.stringify(summary.balance_snapshot),
         summary.total_pcs, summary.total_weight, summary.labour_total, summary.fine_diff, summary.gold_rs,
-        summary.subtotal, summary.discount, summary.total_amount, summary.amt_baki, summary.refund_due,
+        summary.subtotal, summary.discount, summary.round_off, summary.total_amount, summary.amt_baki, summary.refund_due,
         summary.ofg_status, summary.fine_carry,
+        deliveryDate, orderStatus,
         id,
       ]
     );
 
     await run(`DELETE FROM order_bill_items WHERE bill_id = ?`, [id]);
     await _insertItems(run, id, data.items || []);
-    await counterService.reserveEstimateStock(run, id, obNo, data.date, data.items || []);
+    if (willBeStockActive) {
+      await counterService.reserveEstimateStock(run, id, obNo, data.date, data.items || []);
+    }
 
     await _deleteAccountingEntries(run, id);
     await _insertAccountingEntries(run, id, obNo, data.date, resolvedCustomerId, summary, paymentEntries);
 
     const customerIdsToSync = new Set(
-      [oldBill.customer_id, resolvedCustomerId].filter((customerId) => Number.isInteger(customerId) && customerId > 0)
+      [oldBill.customer_id, resolvedCustomerId].filter((id) => Number.isInteger(id) && id > 0)
     );
     for (const customerId of customerIdsToSync) {
       await _applyOutstandingDelta(run, customerId);
@@ -904,4 +967,5 @@ module.exports = {
   deleteBill,
   validateStock,
   _computeSummary,
+  VALID_ORDER_STATUSES,
 };

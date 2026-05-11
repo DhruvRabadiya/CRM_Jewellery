@@ -35,7 +35,9 @@ import {
   METAL_PAYMENT_TYPES,
   normalizePaymentEntries,
   normalizeSettlementRates,
+  roundMoney,
 } from "../utils/sellingPayments";
+import { BILL_STATUS_LIST, BILL_STATUS_CONFIG, getStatusConfig, isStockActive } from "../utils/billStatuses";
 
 // --- Constants ---
 const METAL_TYPES    = METAL_PAYMENT_TYPES;
@@ -520,59 +522,50 @@ const PrintView = ({ bill, onClose }) => {
             </div>
           </div>
 
-          {/* Items per metal */}
+          {/* Items per metal — one flat table per metal type, no category sub-grouping */}
           {products.map((metalType) => {
             const metalItems = items.filter((item) => (item.metal_type || "Gold 24K") === metalType);
             if (!metalItems.length) return null;
-            const categories = [...new Set(metalItems.map((item) => item.category || "Standard"))];
             return (
               <div key={metalType} style={{ marginBottom: 16 }}>
                 <div style={{ background: "#f1f5f9", padding: "4px 8px", fontWeight: 900, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#334155", marginBottom: 8 }}>
                   {metalType}
                 </div>
-                {categories.map((category) => {
-                  const catItems = metalItems.filter((item) => (item.category || "Standard") === category);
-                  return (
-                    <div key={`${metalType}-${category}`} style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, color: "#64748b", marginBottom: 4 }}>{category}</div>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                        <thead>
-                          <tr style={{ background: "#f8fafc" }}>
-                            <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "left",   fontWeight: 800, color: "#334155" }}>Size</th>
-                            <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "center", fontWeight: 800, color: "#334155" }}>Pcs</th>
-                            <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right",  fontWeight: 800, color: "#334155" }}>Weight (g)</th>
-                            {!isRetail && (
-                              <>
-                                <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>LC/pc</th>
-                                <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>Labour</th>
-                              </>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {catItems.map((item, idx) => {
-                            const pcs    = parseInt(item.pcs, 10) || 0;
-                            const weight = (parseFloat(item.size_value) || 0) * pcs;
-                            const lc     = (parseFloat(item.lc_pp) || 0) * pcs;
-                            return (
-                              <tr key={itemKey(item.metal_type, item.category, item.size_label)} style={{ background: idx % 2 === 1 ? "#f8fafc" : "#fff" }}>
-                                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", color: "#1e293b" }}>{item.size_label}</td>
-                                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "center", fontWeight: 600, color: "#1e293b" }}>{pcs}</td>
-                                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#1e293b" }}>{fmt(weight, 4)}</td>
-                                {!isRetail && (
-                                  <>
-                                    <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#475569" }}>{fmt(item.lc_pp, 0)}</td>
-                                    <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{fmt(lc, 0)}</td>
-                                  </>
-                                )}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                })}
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ background: "#f8fafc" }}>
+                      <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "left",   fontWeight: 800, color: "#334155" }}>Size</th>
+                      <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "center", fontWeight: 800, color: "#334155" }}>Pcs</th>
+                      <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right",  fontWeight: 800, color: "#334155" }}>Weight (g)</th>
+                      {!isRetail && (
+                        <>
+                          <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>LC/pc</th>
+                          <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>Labour</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metalItems.map((item, idx) => {
+                      const pcs    = parseInt(item.pcs, 10) || 0;
+                      const weight = (parseFloat(item.size_value) || 0) * pcs;
+                      const lc     = (parseFloat(item.lc_pp) || 0) * pcs;
+                      return (
+                        <tr key={itemKey(item.metal_type, item.category, item.size_label)} style={{ background: idx % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                          <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", color: "#1e293b" }}>{item.size_label}</td>
+                          <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "center", fontWeight: 600, color: "#1e293b" }}>{pcs}</td>
+                          <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#1e293b" }}>{fmt(weight, 4)}</td>
+                          {!isRetail && (
+                            <>
+                              <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#475569" }}>{fmt(item.lc_pp, 0)}</td>
+                              <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{fmt(lc, 0)}</td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             );
           })}
@@ -856,6 +849,9 @@ export default function OrderBills() {
   const [paymentEntries, setPaymentEntries] = useState([createEmptyPaymentEntry()]);
   const [settlementRates, setSettlementRates] = useState(() => normalizeSettlementRates());
   const [discount, setDiscount] = useState("");
+  // roundOff: numeric amount; roundOffSign: "+" (customer pays more) | "-" (customer pays less)
+  const [roundOff, setRoundOff]         = useState("");
+  const [roundOffSign, setRoundOffSign] = useState("+");
   const [stockValidation, setStockValidation] = useState({ valid: true, items: [] });
   const [validatingStock, setValidatingStock] = useState(false);
   const [showCustomerDetails, setShowCustomerDetails] = useState(false);
@@ -865,6 +861,13 @@ export default function OrderBills() {
   // A row stays visible as long as its key is here — even when pcs is cleared.
   const [addedKeys, setAddedKeys] = useState(() => new Set());
 
+  // Unified workflow status: "Pending" (production order) | "Ready" (estimate) | "Delivered"
+  // This is the single field that drives stock behaviour, UI colours, and list filtering.
+  const [billStatus, setBillStatus]       = useState("Ready");
+  // Delivery date — relevant for Pending (production) orders
+  const [deliveryDate, setDeliveryDate]   = useState("");
+  // List-view status filter: "all" | "Pending" | "Ready" | "Delivered"
+  const [statusFilter, setStatusFilter]   = useState("all");
   // Keyboard-nav refs for PCS inputs
   const pcsInputRefs = useRef({});
 
@@ -914,6 +917,10 @@ export default function OrderBills() {
     setSettlementRates(normalizeSettlementRates());
     setDiscount("");
     setItems(buildItemsFromCharges(charges, ["Gold 24K"], "Retail"));
+    setRoundOff("");
+    setRoundOffSign("+");
+    setBillStatus("Ready");
+    setDeliveryDate("");
     setAddedKeys(new Set());
     setAddPicker({});
   }, []);
@@ -940,9 +947,13 @@ export default function OrderBills() {
   }, [initializing, loadBills, selectedDate, versions.estimates]);
 
 // --- State ---
+  // Compute the signed round-off: positive = customer pays more, negative = pays less
+  const signedRoundOff = (roundOffSign === "-" ? -1 : 1) * (parseFloat(roundOff) || 0);
+
   const summary = useMemo(
-    () => computeEstimateBalance(items, paymentEntries, discount, settlementRates),
-    [items, paymentEntries, discount, settlementRates]
+    () => computeEstimateBalance(items, paymentEntries, discount, settlementRates, signedRoundOff),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, paymentEntries, discount, settlementRates, signedRoundOff]
   );
 
   const stockValidationMap = useMemo(() => {
@@ -970,6 +981,10 @@ export default function OrderBills() {
   // List filtering + sorting + pagination - operates within the selected day data
   const filteredBills = useMemo(() => {
     let result = [...bills];
+    // Type filter: all | estimate | order
+    if (statusFilter !== "all") {
+      result = result.filter((b) => (b.order_status || "Ready") === statusFilter);
+    }
     if (listSearch.trim()) {
       const q = listSearch.toLowerCase().trim();
       result = result.filter(
@@ -989,7 +1004,7 @@ export default function OrderBills() {
       return 0;
     });
     return result;
-  }, [bills, listSearch, listSort]);
+  }, [bills, statusFilter, listSearch, listSort]);
 
   const totalBillPages = Math.ceil(filteredBills.length / BILLS_PER_PAGE);
   const pagedBills = useMemo(() => {
@@ -998,7 +1013,7 @@ export default function OrderBills() {
   }, [filteredBills, listPage]);
 
   // Reset to page 1 whenever the active filter set changes
-  useEffect(() => { setListPage(1); }, [listSearch, listSort, selectedDate]);
+  useEffect(() => { setListPage(1); }, [listSearch, listSort, selectedDate, statusFilter]);
 
   // Reset search when date changes so the new day opens clean
   useEffect(() => { setListSearch(""); }, [selectedDate]);
@@ -1165,6 +1180,11 @@ export default function OrderBills() {
       setPaymentEntries(normalizePaymentEntries(full.payment_entries || [], full));
       setSettlementRates(extractSettlementRates(full));
       setDiscount(full.discount != null && parseFloat(full.discount) > 0 ? String(full.discount) : "");
+      const savedRoundOff = parseFloat(full.round_off) || 0;
+      setRoundOff(savedRoundOff !== 0 ? String(Math.abs(savedRoundOff)) : "");
+      setRoundOffSign(savedRoundOff < 0 ? "-" : "+");
+      setBillStatus(BILL_STATUS_LIST.includes(full.order_status) ? full.order_status : "Ready");
+      setDeliveryDate(full.delivery_date || "");
       const builtItems = buildItemsFromCharges(charges, products, full.customer_type || "Retail", full.items || []);
       setItems(builtItems);
       setAddedKeys(new Set(
@@ -1236,7 +1256,8 @@ export default function OrderBills() {
       });
 
     if (!nonZeroItems.length) { showToast("Enter quantity for at least one size", "error"); return; }
-    if (stockValidation.items.length > 0 && !stockValidation.valid) {
+    // Stock validation only applies to Ready/Delivered bills (Pending = items not yet produced)
+    if (isStockActive(billStatus) && stockValidation.items.length > 0 && !stockValidation.valid) {
       showToast("Insufficient stock available for selected size/category", "error"); return;
     }
 
@@ -1285,18 +1306,22 @@ export default function OrderBills() {
       payment_entries: cleanedPaymentEntries,
       settlement_rates: normalizeSettlementRates(settlementRates),
       discount: parseFloat(discount) || 0,
+      round_off: signedRoundOff,
+      order_status: billStatus,
+      delivery_date: billStatus === "Pending" ? deliveryDate : "",
       items: nonZeroItems,
     };
 
     setSaving(true);
     try {
       let saved;
+      const label = billStatus === "Pending" ? "Order" : "Estimate";
       if (editBill) {
         saved = await updateOrderBill(editBill.id, payload);
-        showToast("Estimate updated");
+        showToast(`${label} updated`);
       } else {
         saved = await createOrderBill(payload);
-        showToast("Estimate created");
+        showToast(`${label} created`);
       }
       markDirty(["inventory", "ledger", "customers", "estimates", "dashboard"]);
       setSelectedDate(payload.date);
@@ -1313,7 +1338,7 @@ export default function OrderBills() {
     } finally {
       setSaving(false);
     }
-  }, [customerAddress, customerName, customerPhone, customerType, discount, editBill, formDate, items, loadBills, obNo, paymentEntries, product, selectedCustomer, selectedProducts, settlementRates, showToast, stockValidation.items.length, stockValidation.valid, markDirty, summary.amountDue, summary.metalDueUnsettled]);
+  }, [billStatus, customerAddress, customerName, customerPhone, customerType, deliveryDate, discount, roundOff, roundOffSign, signedRoundOff, editBill, formDate, items, loadBills, obNo, paymentEntries, product, selectedCustomer, selectedProducts, settlementRates, showToast, stockValidation.items.length, stockValidation.valid, markDirty, summary.amountDue, summary.metalDueUnsettled]);
 
   const handleDelete = useCallback(async (id) => {
     try {
@@ -1456,6 +1481,32 @@ export default function OrderBills() {
               )}
             </div>
           </div>
+          {/* Status filter tabs */}
+          <div className="flex items-center gap-1.5 mb-2">
+            {[{ key: "all", label: "All" }, ...BILL_STATUS_LIST.map(s => ({ key: s, label: s }))].map(({ key, label }) => {
+              const cfg = key === "all" ? null : BILL_STATUS_CONFIG[key];
+              const isActive = statusFilter === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setStatusFilter(key)}
+                  className={"px-3.5 py-1.5 rounded-xl text-xs font-black border-2 transition-all " + (
+                    isActive
+                      ? (cfg ? cfg.pillActive : "bg-indigo-50 border-indigo-500 text-indigo-700")
+                      : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+                  )}
+                >
+                  {label}
+                  {key !== "all" && (
+                    <span className="ml-1.5 text-[10px] font-bold opacity-60">
+                      {bills.filter(b => (b.order_status || "Ready") === key).length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
           <div className="flex flex-col sm:flex-row gap-2.5">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -1463,7 +1514,7 @@ export default function OrderBills() {
                 type="text"
                 value={listSearch}
                 onChange={(e) => setListSearch(e.target.value)}
-                placeholder="Search by estimate no., customer name..."
+                placeholder="Search by no., customer name..."
                 className="w-full pl-8 pr-8 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 placeholder:text-slate-400"
               />
               {listSearch && (
@@ -1498,10 +1549,10 @@ export default function OrderBills() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-340px)] min-h-[120px]">
                 <table className="w-full text-sm min-w-[640px]">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400 shadow-sm">
                       <th className="text-left px-4 py-3 font-black">No. / Date</th>
                       <th className="text-left px-4 py-3 font-black">Customer</th>
                       <th className="text-right px-4 py-3 font-black">Total</th>
@@ -1539,7 +1590,7 @@ export default function OrderBills() {
                         </td>
                       </tr>
                     ) : (
-                      pagedBills.map((bill) => {
+                      filteredBills.map((bill) => {
                         const hasRefund  = parseFloat(bill.refund_due) > 0;
                         const hasPending = parseFloat(bill.amt_baki) > 0;
                         const metals     = parseProducts(bill.products);
@@ -1567,6 +1618,9 @@ export default function OrderBills() {
                           "Mixed":      "bg-violet-100 text-violet-700",
                           "Unpaid":     "bg-slate-100 text-slate-400",
                         }[bill.payment_mode] || "bg-slate-100 text-slate-400";
+                        const rowStatus = bill.order_status || "Ready";
+                        const rowStatusCfg = getStatusConfig(rowStatus);
+                        const isPending = rowStatus === "Pending";
 
                         return (
                           <tr
@@ -1588,10 +1642,18 @@ export default function OrderBills() {
                                   <span key={mt} className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">{mt}</span>
                                 ))}
                               </div>
-                              {bill.payment_mode && (
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full mt-1 inline-block ${pmClass}`}>
-                                  {bill.payment_mode}
+                              <div className="flex flex-wrap gap-0.5 mt-1">
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${rowStatusCfg.badgeClass}`}>
+                                  {rowStatus}
                                 </span>
+                                {bill.payment_mode && (
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${pmClass}`}>
+                                    {bill.payment_mode}
+                                  </span>
+                                )}
+                              </div>
+                              {isPending && bill.delivery_date && (
+                                <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Due: {fmtDate(bill.delivery_date)}</p>
                               )}
                             </td>
 
@@ -1686,13 +1748,15 @@ export default function OrderBills() {
                 </table>
               </div>
 
+              {/* Row count footer */}
               {filteredBills.length > 0 && (
-                <Pagination
-                  page={listPage}
-                  totalPages={totalBillPages}
-                  onChange={setListPage}
-                  label={`Showing ${(listPage - 1) * BILLS_PER_PAGE + 1}-${Math.min(listPage * BILLS_PER_PAGE, filteredBills.length)} of ${filteredBills.length}`}
-                />
+                <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+                  <p className="text-[11px] font-semibold text-slate-400">
+                    {filteredBills.length} estimate{filteredBills.length !== 1 ? "s" : ""}
+                    {listSearch ? ` matching "${listSearch}"` : ` on ${fmtDate(selectedDate)}`}
+                  </p>
+                  <p className="text-[11px] text-slate-300 font-medium">Scroll to browse ↕</p>
+                </div>
               )}
             </>
           )}
@@ -1749,7 +1813,9 @@ export default function OrderBills() {
           </div>
           <div>
             <h1 className="text-lg font-black text-slate-800 leading-tight">
-              {editBill ? `Edit Estimate #${obNo}` : "New Estimate"}
+              {editBill
+              ? `Edit ${billStatus === "Pending" ? "Order" : "Estimate"} #${obNo}`
+              : billStatus === "Pending" ? "New Order" : "New Estimate"}
             </h1>
             <p className="text-xs text-slate-400">Labour charges auto-filled from Admin settings</p>
           </div>
@@ -1760,150 +1826,170 @@ export default function OrderBills() {
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Left column Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <div className="space-y-4">
 
-          {/* Section 1: Estimate Details — compact single-row header */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4">
-            <div className="flex flex-wrap items-end gap-4">
-              {/* Date — primary, always visible */}
-              <div className="flex-shrink-0">
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Date</label>
-                <input
-                  type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)}
-                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 font-semibold text-slate-700"
-                />
+          {/* ── Unified form card: Status · Details · Customer · Metal types ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
+
+            {/* Status */}
+            <div className="px-5 py-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2.5">Status</p>
+              <div className="flex gap-2">
+                {BILL_STATUS_LIST.map((status) => {
+                  const cfg = BILL_STATUS_CONFIG[status];
+                  const isActive = billStatus === status;
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setBillStatus(status)}
+                      className={"flex-1 py-2.5 px-4 rounded-xl border-2 font-black text-sm transition-all " + (
+                        isActive
+                          ? cfg.bgClass + " " + cfg.borderClass + " " + cfg.textClass
+                          : "bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                      )}
+                    >
+                      {cfg.label}
+                    </button>
+                  );
+                })}
               </div>
-
-              {/* Product description — grows to fill space */}
-              <div className="flex-1 min-w-[160px]">
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Product / Description <span className="font-normal text-slate-400">(optional)</span></label>
-                <input
-                  type="text" value={product} onChange={(e) => setProduct(e.target.value)}
-                  placeholder="e.g. Necklace set, Bangles, Ring..."
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
-                />
-              </div>
-
-              {/* Estimate No — secondary, tucked at end */}
-              <div className="flex-shrink-0">
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Bill No.</label>
-                <input
-                  type="number" min="1" value={obNo} onChange={(e) => setObNo(e.target.value)}
-                  className="w-20 px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 text-slate-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Customer */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <SectionHeader step="2" title="Customer" subtitle="Search existing customers or type a new name." />
-
-            {/* Unified name + search combo */}
-            <CustomerNameCombo
-              value={customerName}
-              linkedCustomer={selectedCustomer}
-              onChange={(name) => setCustomerName(name)}
-              onSelect={(c) => {
-                setSelectedCustomer(c);
-                setCustomerName(c.party_name || "");
-                setCustomerPhone(c.phone_no || "");
-                setCustomerAddress(c.address || "");
-                setCustomerType(c.customer_type || "Retail");
-                setShowCustomerDetails(!!(c.phone_no || c.address));
-              }}
-              onUnlink={() => setSelectedCustomer(null)}
-            />
-
-            {/* Type pills */}
-            <div className="flex items-center gap-1.5 mt-3">
-              <span className="text-xs font-bold text-slate-500 mr-1">Type:</span>
-              {CUSTOMER_TYPES.map((type) => (
-                <button
-                  key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all ${
-                    customerType === type
-                      ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                      : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
-                  }`}
-                >{type}</button>
-              ))}
+              <p className={"text-[10px] font-semibold mt-2 pl-0.5 " + BILL_STATUS_CONFIG[billStatus].textClass}>
+                {BILL_STATUS_CONFIG[billStatus].description}
+              </p>
             </div>
 
-            {/* Balance-due nudge: show when items entered, balance owed, no customer yet */}
-            {summary.totalPcs > 0 && (() => {
-              const hasDue =
-                summary.amountDue > 0 ||
-                METAL_PAYMENT_TYPES.some((mt) => (summary.metalDueUnsettled?.[mt] || 0) > 0);
-              if (!hasDue || selectedCustomer || customerName.trim()) return null;
-              return (
-                <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-                  <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700 font-semibold leading-snug">
-                    Balance is due — add the customer's name above so this can be tracked in their ledger.
-                  </p>
-                </div>
-              );
-            })()}
-
-            {/* Expandable: Phone + Address */}
-            {!showCustomerDetails ? (
-              <button
-                type="button"
-                onClick={() => setShowCustomerDetails(true)}
-                className="mt-2 text-xs text-indigo-500 font-bold hover:text-indigo-700 flex items-center gap-1 transition-colors"
-              >
-                <Plus size={11} /> Add phone / address
-              </button>
-            ) : (
-              <div className="mt-3 space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Phone</label>
+            {/* Date · Metal Type · Bill No */}
+            <div className="px-5 py-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2.5">Details</p>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex-shrink-0">
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Date</label>
                   <input
-                    type="text" value={customerPhone}
-                    onChange={(e) => { setSelectedCustomer(null); setCustomerPhone(e.target.value); }}
-                    placeholder="Phone number"
-                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
+                    type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)}
+                    className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 font-semibold text-slate-700"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Address</label>
-                  <textarea
-                    value={customerAddress}
-                    onChange={(e) => { setSelectedCustomer(null); setCustomerAddress(e.target.value); }}
-                    rows={2} placeholder="Customer address"
-                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 resize-none"
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Metal Type</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {METAL_TYPES.map((metalType) => {
+                      const selected = selectedProducts.includes(metalType);
+                      return (
+                        <button
+                          key={metalType} type="button" onClick={() => handleProductToggle(metalType)}
+                          className={`px-3 py-2 rounded-xl text-xs font-black border-2 transition-all ${
+                            selected
+                              ? "bg-amber-50 border-amber-400 text-amber-800 shadow-sm"
+                              : "bg-white border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-700"
+                          }`}
+                        >
+                          {metalType}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {billStatus === "Pending" && (
+                  <div className="flex-shrink-0">
+                    <label className="block text-xs font-bold text-amber-600 mb-1.5">Expected By</label>
+                    <input
+                      type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
+                      className="px-3 py-2.5 text-sm border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/50 font-semibold text-slate-700"
+                    />
+                  </div>
+                )}
+                <div className="flex-shrink-0">
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Bill No.</label>
+                  <input
+                    type="number" min="1" value={obNo} onChange={(e) => setObNo(e.target.value)}
+                    className="w-20 px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 text-slate-500"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setShowCustomerDetails(false); setCustomerPhone(""); setCustomerAddress(""); }}
-                  className="text-xs text-slate-400 font-semibold hover:text-rose-500 transition-colors"
-                >
-                  Remove phone / address
-                </button>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Section 3: Metal Types */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <SectionHeader step="3" title="Metal Types" subtitle="Which metal is the customer ordering in?" />
-            <div className="flex gap-2 flex-wrap">
-              {METAL_TYPES.map((metalType) => {
-                const selected = selectedProducts.includes(metalType);
-                return (
+            {/* Customer */}
+            <div className="px-5 py-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2.5">Customer</p>
+              <CustomerNameCombo
+                value={customerName}
+                linkedCustomer={selectedCustomer}
+                onChange={(name) => setCustomerName(name)}
+                onSelect={(c) => {
+                  setSelectedCustomer(c);
+                  setCustomerName(c.party_name || "");
+                  setCustomerPhone(c.phone_no || "");
+                  setCustomerAddress(c.address || "");
+                  setCustomerType(c.customer_type || "Retail");
+                  setShowCustomerDetails(!!(c.phone_no || c.address));
+                }}
+                onUnlink={() => setSelectedCustomer(null)}
+              />
+              <div className="flex items-center gap-1.5 mt-3">
+                <span className="text-xs font-bold text-slate-500 mr-1">Type:</span>
+                {CUSTOMER_TYPES.map((type) => (
                   <button
-                    key={metalType} type="button" onClick={() => handleProductToggle(metalType)}
-                    className={`px-4 py-2 rounded-xl text-sm font-black border-2 transition-all ${
-                      selected
-                        ? "bg-amber-50 border-amber-400 text-amber-800 shadow-sm"
+                    key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all ${
+                      customerType === type
+                        ? "bg-indigo-50 border-indigo-500 text-indigo-700"
                         : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
                     }`}
-                  >
-                    {metalType}
-                  </button>
+                  >{type}</button>
+                ))}
+              </div>
+              {summary.totalPcs > 0 && (() => {
+                const hasDue =
+                  summary.amountDue > 0 ||
+                  METAL_PAYMENT_TYPES.some((mt) => (summary.metalDueUnsettled?.[mt] || 0) > 0);
+                if (!hasDue || selectedCustomer || customerName.trim()) return null;
+                return (
+                  <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                    <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700 font-semibold leading-snug">
+                      Balance is due — add the customer's name above so this can be tracked in their ledger.
+                    </p>
+                  </div>
                 );
-              })}
+              })()}
+              {!showCustomerDetails ? (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerDetails(true)}
+                  className="mt-2 text-xs text-indigo-500 font-bold hover:text-indigo-700 flex items-center gap-1 transition-colors"
+                >
+                  <Plus size={11} /> Add phone / address
+                </button>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Phone</label>
+                    <input
+                      type="text" value={customerPhone}
+                      onChange={(e) => { setSelectedCustomer(null); setCustomerPhone(e.target.value); }}
+                      placeholder="Phone number"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Address</label>
+                    <textarea
+                      value={customerAddress}
+                      onChange={(e) => { setSelectedCustomer(null); setCustomerAddress(e.target.value); }}
+                      rows={2} placeholder="Customer address"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 resize-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCustomerDetails(false); setCustomerPhone(""); setCustomerAddress(""); }}
+                    className="text-xs text-slate-400 font-semibold hover:text-rose-500 transition-colors"
+                  >
+                    Remove phone / address
+                  </button>
+                </div>
+              )}
             </div>
+
           </div>
 
           {/* Section 4: Items per metal — add only what's needed */}
@@ -2187,14 +2273,145 @@ export default function OrderBills() {
 
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right column: sticky summary Ã¢â€â‚¬Ã¢â€â‚¬ */}
+
+        {/* ── Right column: Payment + Summary ── */}
         <div className="xl:sticky xl:top-4 space-y-4 h-fit">
+
+          {/* Payment Received */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-sm leading-none">💰</span>
+              </div>
+              <div>
+                <h2 className="font-black text-slate-700 text-sm leading-tight">Payment Received</h2>
+                <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Cash, bank transfer, or metal</p>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 space-y-2">
+
+              {/* Payment rows — compact */}
+              <div className="space-y-1.5">
+                {paymentEntries.map((entry, index) => {
+                  const isMetal = entry.payment_type === "Metal";
+                  return (
+                    <div key={`payment-entry-${index}`}
+                      className={`rounded-xl border ${isMetal ? "border-amber-200 bg-amber-50/30" : "border-slate-100 bg-slate-50/60"}`}
+                    >
+                      {/* Main row: segmented type control + value + remove */}
+                      <div className="flex items-center gap-2 p-2.5">
+                        {/* Segmented control */}
+                        <div className="flex rounded-lg border border-slate-200 overflow-hidden shrink-0">
+                          {[["Cash", "Cash"], ["Bank / UPI", "Bank"], ["Metal", "Metal"]].map(([realType, label]) => {
+                            const isActive = entry.payment_type === realType;
+                            return (
+                              <button
+                                key={realType} type="button"
+                                onClick={() => updatePaymentEntry(index, "payment_type", realType)}
+                                className={`px-2 py-1.5 text-[10px] font-black border-r border-slate-200 last:border-r-0 transition-colors ${
+                                  isActive
+                                    ? realType === "Metal"
+                                      ? "bg-amber-500 text-white border-amber-500"
+                                      : "bg-indigo-600 text-white border-indigo-600"
+                                    : "bg-white text-slate-400 hover:text-slate-600"
+                                }`}
+                              >{label}</button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Amount or metal type selector */}
+                        {!isMetal ? (
+                          <div className="relative flex-1">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={entry.amount || ""}
+                              onChange={(e) => updatePaymentEntry(index, "amount", e.target.value)}
+                              className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white font-semibold"
+                              placeholder="0.00"
+                              autoComplete="off"
+                            />
+                          </div>
+                        ) : (
+                          <select
+                            value={entry.metal_type}
+                            onChange={(e) => updatePaymentEntry(index, "metal_type", e.target.value)}
+                            className="flex-1 px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold text-amber-800"
+                          >
+                            {METAL_TYPES.map((mt) => <option key={mt} value={mt}>{mt}</option>)}
+                          </select>
+                        )}
+
+                        {/* Remove */}
+                        <button
+                          type="button"
+                          onClick={() => removePaymentEntry(index)}
+                          disabled={paymentEntries.length <= 1}
+                          className="p-1 text-slate-300 hover:text-rose-500 rounded transition-colors disabled:opacity-20 shrink-0"
+                        ><X size={12} /></button>
+                      </div>
+
+                      {/* Metal detail fields — weight / purity / rate */}
+                      {isMetal && (
+                        <div className="grid grid-cols-3 gap-1.5 px-2.5 pb-2.5">
+                          <div>
+                            <p className="text-[9px] font-black text-amber-600 mb-0.5">Weight (g)</p>
+                            <input type="number" min="0" step="0.001"
+                              value={entry.weight || ""}
+                              onChange={(e) => updatePaymentEntry(index, "weight", e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold"
+                              placeholder="0.000"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-amber-600 mb-0.5">Purity</p>
+                            <input type="text"
+                              value={entry.purity || ""}
+                              onChange={(e) => updatePaymentEntry(index, "purity", e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                              placeholder="99.9"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-amber-600 mb-0.5">Rate/10g</p>
+                            <input type="number" min="0" step="1"
+                              value={entry.reference_rate || ""}
+                              onChange={(e) => updatePaymentEntry(index, "reference_rate", e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                              placeholder="opt."
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={addPaymentEntry}
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-500 hover:text-indigo-700 py-1 px-0.5 transition-colors"
+                >
+                  <Plus size={11} /> Add another
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {/* Summary header */}
-            <div className="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-white">
-              <h2 className="font-black text-slate-800 text-sm">Estimate Summary</h2>
+            <div className={"px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r " + getStatusConfig(billStatus).accentFrom + " to-white"}>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-slate-800 text-sm">{billStatus === "Pending" ? "Order Summary" : "Estimate Summary"}</h2>
+                {billStatus === "Pending" && (
+                  <span className={"text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide " + getStatusConfig(billStatus).badgeClass}>Order</span>
+                )}
+              </div>
               {summary.totalPcs > 0 && (
-                <p className="text-xs text-indigo-500 font-semibold mt-0.5">{summary.totalPcs} pcs  ·  {fmt(summary.totalWeight, 4)}g</p>
+                <p className={"text-xs font-semibold mt-0.5 " + getStatusConfig(billStatus).textClass}>{summary.totalPcs} pcs  ·  {fmt(summary.totalWeight, 4)}g</p>
               )}
             </div>
 
@@ -2271,67 +2488,96 @@ export default function OrderBills() {
                 </div>
               ) : null}
 
-              {/* Labour total */}
+              {/* ── Metal Rate inputs — always shown when items have qty ── */}
+              {Object.entries(summary.requiredMetal || {}).some(([, w]) => (w || 0) > 0) && (
+                <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 space-y-2">
+                  <p className="text-[10px] font-black text-amber-800 uppercase tracking-wider">
+                    Metal Rate <span className="font-normal normal-case text-amber-600">— rate customer pays per 10g</span>
+                  </p>
+                  {Object.entries(summary.requiredMetal).map(([mt, w]) => {
+                    if ((w || 0) === 0) return null;
+                    const rate       = parseFloat(settlementRates?.[mt]) || 0;
+                    const metalValue = rate > 0 ? roundMoney((w * rate) / 10) : 0;
+                    return (
+                      <div key={mt} className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-semibold text-amber-700 mb-0.5">{mt} · {fmt(w, 4)}g</p>
+                          <input
+                            type="number" min="0" step="1"
+                            value={settlementRates?.[mt] || ""}
+                            onChange={(e) => updateSettlementRate(mt, e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-semibold placeholder:text-amber-300"
+                            placeholder="Enter rate / 10g"
+                          />
+                        </div>
+                        <div className="text-right shrink-0 min-w-[64px]">
+                          {metalValue > 0 ? (
+                            <>
+                              <p className="text-[9px] text-amber-500 font-semibold">Metal value</p>
+                              <p className="text-sm font-black text-amber-900">{fmtMoney(metalValue)}</p>
+                            </>
+                          ) : (
+                            <p className="text-[9px] text-amber-400 font-semibold leading-snug">rate not<br/>set yet</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Object.entries(summary.requiredMetal).some(([, w]) => (w || 0) > 0) &&
+                   Object.entries(summary.requiredMetal).every(([mt, w]) => (w || 0) === 0 || !(parseFloat(settlementRates?.[mt]) > 0)) && (
+                    <p className="text-[10px] text-amber-600 font-semibold pt-0.5">
+                      ⚠ Enter rate above — metal cost is not included in the total yet
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── 1. Labour Charges ── */}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500">Labour Charges</span>
                 <span className="font-bold text-slate-800">{fmtMoney(summary.labourTotal)}</span>
               </div>
 
-              {/* Per-metal breakdown — Rate/10g inputs removed (now in Payment section) */}
-              {Object.entries(summary.requiredMetal || {}).some(([mt, w]) =>
-                (w || 0) > 0 || (summary.metalReceived?.[mt] || 0) > 0
+              {/* ── 2. Per-metal payment breakdown (only when metal received or still owed) ── */}
+              {Object.entries(summary.requiredMetal || {}).some(([mt]) =>
+                (summary.metalReceived?.[mt] || 0) > 0 ||
+                (summary.metalDueUnsettled?.[mt] || 0) > 0 ||
+                (summary.metalShortfallSettled?.[mt] || 0) > 0 ||
+                (summary.metalCredit?.[mt] || 0) > 0
               ) && (
-                <div className="space-y-2 pt-1 border-t border-slate-100">
+                <div className="space-y-1.5 pt-1 border-t border-slate-100">
                   {Object.entries(summary.requiredMetal).map(([mt, w]) => {
-                    const metalGiven    = summary.metalReceived?.[mt] || 0;
-                    const metalDueUns   = summary.metalDueUnsettled?.[mt] || 0;
-                    const metalSettled  = summary.metalShortfallSettled?.[mt] || 0;
-                    const metalExcess   = summary.metalCredit?.[mt] || 0;
-                    const shortfallVal  = summary.metalValueDue?.[mt] || 0;
-                    const excessCredit  = summary.metalValueCredit?.[mt] || 0;
-                    if ((w || 0) === 0 && metalGiven === 0) return null;
+                    const metalGiven   = summary.metalReceived?.[mt] || 0;
+                    const metalDueUns  = summary.metalDueUnsettled?.[mt] || 0;
+                    const metalSettled = summary.metalShortfallSettled?.[mt] || 0;
+                    const metalExcess  = summary.metalCredit?.[mt] || 0;
+                    const excessCredit = summary.metalValueCredit?.[mt] || 0;
+                    if (metalGiven === 0 && metalDueUns === 0 && metalSettled === 0 && metalExcess === 0) return null;
                     return (
-                      <div key={mt} className="bg-slate-50 rounded-xl p-3 space-y-1.5">
+                      <div key={mt} className="bg-slate-50 rounded-xl px-3 py-2.5 space-y-1">
                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">{mt}</p>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-500">Metal Needed</span>
-                          <span className="font-bold text-slate-700">{fmt(w, 4)}g</span>
-                        </div>
                         {metalGiven > 0 && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">Received</span>
+                            <span className="text-slate-500">Metal Received</span>
                             <span className="font-bold text-slate-700">{fmt(metalGiven, 4)}g</span>
                           </div>
                         )}
                         {metalDueUns > 0 && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">Still Owed</span>
+                            <span className="text-slate-500">Metal Still Owed</span>
                             <span className="font-bold text-rose-600">{fmt(metalDueUns, 4)}g</span>
                           </div>
                         )}
                         {metalSettled > 0 && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-amber-600 italic">&#8627; Paid in Cash</span>
+                            <span className="text-amber-600 italic">↳ Converted to cash</span>
                             <span className="font-bold text-amber-600">{fmt(metalSettled, 4)}g</span>
                           </div>
                         )}
                         {metalExcess > 0 && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">Extra Metal</span>
+                            <span className="text-slate-500">Extra Metal Given</span>
                             <span className="font-bold text-emerald-600">{fmt(metalExcess, 4)}g</span>
-                          </div>
-                        )}
-                        {/* Rate display-only (input has moved to Payment section) */}
-                        {summary.settlementRate?.[mt] > 0 && (
-                          <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">Rate / 10g</span>
-                            <span className="font-bold text-slate-600">{fmtMoney(summary.settlementRate[mt])}</span>
-                          </div>
-                        )}
-                        {shortfallVal > 0 && (
-                          <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">Cash Value Due</span>
-                            <span className="font-bold text-slate-700">{fmtMoney(shortfallVal)}</span>
                           </div>
                         )}
                         {excessCredit > 0 && (
@@ -2360,194 +2606,112 @@ export default function OrderBills() {
                 </div>
               )}
 
-              <div className="flex justify-between text-sm border-t border-slate-100 pt-2">
-                <span className="text-slate-600 font-semibold">Subtotal</span>
-                <span className="font-bold text-slate-800">{fmtMoney(summary.subtotal)}</span>
-              </div>
 
-              {/* Discount */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Discount</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rs.</span>
-                  <input
-                    type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-slate-50"
-                    placeholder="0.00"
-                  />
+              {/* ── 4. Calculation: Subtotal → Discount → Final Payable ── */}
+              <div className="border-t border-slate-100 pt-2 space-y-2">
+
+                {/* Subtotal */}
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500 font-semibold">Subtotal</span>
+                  <span className="font-bold text-slate-800">{fmtMoney(summary.subtotal)}</span>
                 </div>
-                {summary.discount > 0 && (
-                  <p className="flex justify-between text-xs text-emerald-700 font-semibold mt-1">
-                    <span>Discount</span><span>- {fmtMoney(summary.discount)}</span>
-                  </p>
-                )}
-              </div>
 
-              {/* Final Payable */}
-              <div className="flex justify-between items-center bg-indigo-50 rounded-xl px-3 py-2.5">
-                <span className="font-black text-indigo-800">Final Payable</span>
-                <span className="font-black text-indigo-800 text-base">{fmtMoney(summary.totalAmount)}</span>
-              </div>
-
-              {/* ── Payment Received — integrated into summary ── */}
-              <div className="border-t-2 border-dashed border-slate-200 pt-3 mt-1 space-y-2">
-                <p className="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  💰 How did the customer pay?
-                </p>
-
-                {/* Metal rate strip — only when items have qty */}
-                {items.some((item) => (parseInt(item.pcs, 10) || 0) > 0) &&
-                 selectedProducts.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 space-y-1.5">
-                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider">Gold / Silver Rate per 10g</p>
-                    {selectedProducts.map((mt) => (
-                      <div key={mt} className="flex items-center gap-2">
-                        <span className="text-[10px] font-semibold text-amber-600 w-16 shrink-0">{mt}</span>
-                        <input
-                          type="number" min="0" step="1"
-                          value={settlementRates?.[mt] || ""}
-                          onChange={(e) => updateSettlementRate(mt, e.target.value)}
-                          className="flex-1 px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
-                          placeholder="Rate / 10g"
-                        />
-                      </div>
-                    ))}
+                {/* Discount + Round Off — side by side */}
+                <div className="grid grid-cols-2 gap-2 min-w-0">
+                  {/* Discount */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Discount</label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">Rs.</span>
+                      <input
+                        type="number" min="0" step="0.01" value={discount}
+                        onChange={(e) => setDiscount(e.target.value)}
+                        className="w-full pl-8 pr-2 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-slate-50"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    {summary.discount > 0 && (
+                      <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 text-right">
+                        − {fmtMoney(summary.discount)}
+                      </p>
+                    )}
                   </div>
-                )}
 
-                {/* Payment entries */}
-                <div className="space-y-2">
-                  {paymentEntries.map((entry, index) => {
-                    const isMetal = entry.payment_type === "Metal";
-                    return (
-                      <div key={`payment-entry-${index}`}
-                        className={`rounded-xl border p-3 transition-colors ${isMetal ? "bg-amber-50/60 border-amber-200" : "bg-slate-50 border-slate-200"}`}
+                  {/* Round Off */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Round Off</label>
+                    <div className="flex gap-1">
+                      {/* +/- toggle */}
+                      <button
+                        type="button"
+                        onClick={() => setRoundOffSign((s) => (s === "+" ? "-" : "+"))}
+                        title={roundOffSign === "+" ? "Customer pays more (round up)" : "Customer pays less (round down)"}
+                        className={`w-8 shrink-0 rounded-lg border-2 text-sm font-black transition-all ${
+                          roundOffSign === "+"
+                            ? "bg-rose-50 border-rose-300 text-rose-600 hover:bg-rose-100"
+                            : "bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-100"
+                        }`}
                       >
-                        {/* Type pills + amount */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <div className="flex gap-1 shrink-0">
-                            {["Cash", "Bank / UPI", "Metal"].map((type) => (
-                              <button
-                                key={type} type="button"
-                                onClick={() => updatePaymentEntry(index, "payment_type", type)}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black border-2 transition-all ${
-                                  entry.payment_type === type
-                                    ? type === "Metal"
-                                      ? "bg-amber-500 border-amber-500 text-white"
-                                      : "bg-indigo-600 border-indigo-600 text-white"
-                                    : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300"
-                                }`}
-                              >{type}</button>
-                            ))}
-                          </div>
-                          {!isMetal ? (
-                            <div className="relative flex-1 min-w-[80px]">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
-                              <input
-                                type="number" min="0" step="0.01"
-                                value={entry.amount || ""}
-                                onChange={(e) => updatePaymentEntry(index, "amount", e.target.value)}
-                                className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white font-semibold"
-                                placeholder="0.00"
-                                autoComplete="off"
-                              />
-                            </div>
-                          ) : (
-                            <select
-                              value={entry.metal_type}
-                              onChange={(e) => updatePaymentEntry(index, "metal_type", e.target.value)}
-                              className="flex-1 min-w-[80px] px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold text-amber-800"
-                            >
-                              {METAL_TYPES.map((mt) => (
-                                <option key={mt} value={mt}>{mt}</option>
-                              ))}
-                            </select>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removePaymentEntry(index)}
-                            disabled={paymentEntries.length <= 1}
-                            className="p-1 text-slate-300 hover:text-rose-500 rounded-lg transition-colors disabled:opacity-20 shrink-0"
-                          ><X size={13} /></button>
-                        </div>
-
-                        {/* Metal details row */}
-                        {isMetal && (
-                          <div className="grid grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-amber-200">
-                            <div>
-                              <p className="text-[9px] font-black text-amber-600 mb-1">Weight (g)</p>
-                              <input type="number" min="0" step="0.001"
-                                value={entry.weight || ""}
-                                onChange={(e) => updatePaymentEntry(index, "weight", e.target.value)}
-                                className="w-full px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold"
-                                placeholder="0.000"
-                              />
-                            </div>
-                            <div>
-                              <p className="text-[9px] font-black text-amber-600 mb-1">Purity</p>
-                              <input type="text"
-                                value={entry.purity || ""}
-                                onChange={(e) => updatePaymentEntry(index, "purity", e.target.value)}
-                                className="w-full px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
-                                placeholder="99.99"
-                              />
-                            </div>
-                            <div>
-                              <p className="text-[9px] font-black text-amber-600 mb-1">Rate / 10g</p>
-                              <input type="number" min="0" step="1"
-                                value={entry.reference_rate || ""}
-                                onChange={(e) => updatePaymentEntry(index, "reference_rate", e.target.value)}
-                                className="w-full px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
-                                placeholder="opt."
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={addPaymentEntry}
-                    className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-500 hover:text-indigo-700 py-1.5 px-1 transition-colors"
-                  >
-                    <Plus size={11} /> Add payment method
-                  </button>
-                </div>
-              </div>
-
-              {/* Money received */}
-              <div className="rounded-xl px-3 py-2.5 border bg-slate-50 border-slate-200 flex justify-between items-center">
-                <span className="text-sm font-bold text-slate-600">Total Paid So Far</span>
-                <span className="text-sm font-black text-slate-800">{fmtMoney(summary.moneyPaid)}</span>
-              </div>
-
-              {/* Settlement outcome — mutually exclusive */}
-              {summary.amountGiven > 0 ? (
-                <div className="rounded-xl px-3 py-2.5 border bg-amber-50 border-amber-200 flex justify-between items-center">
-                  <span className="text-sm font-bold text-amber-700">Amount Given to Customer</span>
-                  <span className="text-sm font-black text-amber-800">{fmtMoney(summary.amountGiven)}</span>
-                </div>
-              ) : summary.refundDue > 0 ? (
-                <>
-                  <div className="rounded-xl px-3 py-2.5 border bg-emerald-50 border-emerald-200 text-emerald-800 font-black flex justify-between items-center">
-                    <span>Refund Due</span>
-                    <span className="text-base">{fmtMoney(summary.refundDue)}</span>
+                        {roundOffSign}
+                      </button>
+                      <input
+                        type="number" min="0" step="0.01" value={roundOff}
+                        onChange={(e) => setRoundOff(e.target.value)}
+                        className="flex-1 min-w-0 px-2 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-300 bg-slate-50"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    {(parseFloat(roundOff) || 0) > 0 && (
+                      <p className={`text-[10px] font-semibold mt-0.5 text-right ${roundOffSign === "+" ? "text-rose-500" : "text-emerald-600"}`}>
+                        {roundOffSign === "+" ? "+ " : "− "}{fmtMoney(parseFloat(roundOff))}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-[11px] text-emerald-600 -mt-1.5 leading-relaxed">
-                    Customer over-paid by {fmtMoney(summary.refundDue)}. Adjust accordingly.
-                  </p>
-                </>
-              ) : (
-                <div className={`rounded-xl px-3 py-2.5 border font-black flex justify-between items-center ${
-                  summary.amountDue === 0
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                    : "bg-rose-50 border-rose-200 text-rose-700"
-                }`}>
-                  <span>Amount Still Owed</span>
-                  <span className="text-base">{fmtMoney(summary.amountDue)}</span>
                 </div>
-              )}
+
+                {/* Final Payable */}
+                <div className="flex justify-between items-center bg-indigo-50 rounded-xl px-3 py-2.5">
+                  <span className="font-black text-indigo-800">Final Payable</span>
+                  <span className="font-black text-indigo-800 text-base">{fmtMoney(summary.totalAmount)}</span>
+                </div>
+              </div>
+
+              {/* ── 5. Settlement: Total Paid + Amount Due/Return ── */}
+              <div className="space-y-2">
+
+                {/* Total paid */}
+                <div className="rounded-xl px-3 py-2.5 border bg-slate-50 border-slate-200 flex justify-between items-center">
+                  <span className="text-sm font-bold text-slate-600">Total Paid So Far</span>
+                  <span className="text-sm font-black text-slate-800">{fmtMoney(summary.moneyPaid)}</span>
+                </div>
+
+                {/* Outcome — mutually exclusive */}
+                {summary.amountGiven > 0 ? (
+                  <div className="rounded-xl px-3 py-2.5 border bg-amber-50 border-amber-200 flex justify-between items-center">
+                    <span className="text-sm font-bold text-amber-700">Amount Given to Customer</span>
+                    <span className="text-sm font-black text-amber-800">{fmtMoney(summary.amountGiven)}</span>
+                  </div>
+                ) : summary.refundDue > 0 ? (
+                  <>
+                    <div className="rounded-xl px-3 py-2.5 border bg-emerald-50 border-emerald-200 text-emerald-800 font-black flex justify-between items-center">
+                      <span>Refund Due</span>
+                      <span className="text-base">{fmtMoney(summary.refundDue)}</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-600 -mt-1 leading-relaxed px-1">
+                      Customer over-paid by {fmtMoney(summary.refundDue)}. Adjust accordingly.
+                    </p>
+                  </>
+                ) : (
+                  <div className={`rounded-xl px-3 py-2.5 border font-black flex justify-between items-center ${
+                    summary.amountDue === 0
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-rose-50 border-rose-200 text-rose-700"
+                  }`}>
+                    <span>Amount Still Owed</span>
+                    <span className="text-base">{fmtMoney(summary.amountDue)}</span>
+                  </div>
+                )}
+              </div>
 
               {/* OFG status */}
               <div className="rounded-xl px-3 py-2.5 border bg-slate-50 border-slate-200">
@@ -2563,15 +2727,15 @@ export default function OrderBills() {
               <div className="space-y-2 pt-2 border-t border-slate-100">
                 <button
                   onClick={() => handleSave(false)}
-                  disabled={saving || validatingStock || !stockValidation.valid}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition-colors"
+                  disabled={saving || validatingStock || (!isStockActive(billStatus) ? false : !stockValidation.valid)}
+                  className={"w-full py-2.5 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition-colors " + getStatusConfig(billStatus).buttonClass}
                 >
                   <Save size={14} />
-                  {saving ? "Saving..." : editBill ? "Update Estimate" : "Save Estimate"}
+                  {saving ? "Saving..." : editBill ? `Update ${billStatus === "Pending" ? "Order" : "Estimate"}` : `Save ${billStatus === "Pending" ? "Order" : "Estimate"}`}
                 </button>
                 <button
                   onClick={() => handleSave(true)}
-                  disabled={saving || validatingStock || !stockValidation.valid}
+                  disabled={saving || validatingStock || (!isStockActive(billStatus) ? false : !stockValidation.valid)}
                   className="w-full py-2.5 bg-slate-700 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition-colors"
                 >
                   <Printer size={14} />
@@ -2594,8 +2758,8 @@ export default function OrderBills() {
             <ul className="space-y-1.5 text-[11px] text-slate-500">
               <li>Press Enter after typing a number to jump to the next size</li>
               <li>Rows with a quantity entered will turn blue</li>
-              <li>Stock is checked automatically as you type</li>
-              <li>Payment status updates live in the summary panel →</li>
+              <li>Stock is checked automatically as you type (Estimates only)</li>
+              <li>Payment status updates live in the summary below</li>
             </ul>
           </div>
         </div>

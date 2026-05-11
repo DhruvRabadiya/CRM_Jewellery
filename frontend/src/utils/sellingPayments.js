@@ -96,7 +96,7 @@ export const summarizePaymentEntries = (entries = []) => {
   return { moneyTotals, metalTotals, metalReference };
 };
 
-export const computeEstimateBalance = (items = [], paymentEntries = [], discount = 0, settlementRates = {}) => {
+export const computeEstimateBalance = (items = [], paymentEntries = [], discount = 0, settlementRates = {}, roundOff = 0) => {
   let totalPcs = 0;
   let totalWeight = 0;
   let labourTotal = 0;
@@ -160,9 +160,12 @@ export const computeEstimateBalance = (items = [], paymentEntries = [], discount
   const subtotal = roundMoney(labourAfterDiscount + totalMetalValueDue);
   const metalAdjustmentValue = roundMoney(totalMetalValueDue - totalMetalValueCredit);
   const settlementBeforeMoney = roundMoney(labourAfterDiscount + metalAdjustmentValue);
-  const totalAmount = roundMoney(Math.max(settlementBeforeMoney, 0));
-  const amountDue = roundMoney(Math.max(settlementBeforeMoney - moneyPaid, 0));
-  const refundDue = roundMoney(Math.max(moneyPaid - settlementBeforeMoney, 0));
+  // roundOff: positive = shopkeeper rounds UP (customer pays a bit more),
+  //           negative = shopkeeper rounds DOWN (customer pays a bit less).
+  const clampedRoundOff = roundMoney(parseFloat(roundOff) || 0);
+  const totalAmount = roundMoney(Math.max(settlementBeforeMoney, 0) + clampedRoundOff);
+  const amountDue = roundMoney(Math.max(totalAmount - moneyPaid, 0));
+  const refundDue = roundMoney(Math.max(moneyPaid - totalAmount, 0));
   const hasExcessMetal = METAL_PAYMENT_TYPES.some((metalType) => (metalCredit[metalType] || 0) > 0);
   const amountGiven = refundDue > 0 ? refundDue : 0;
 
@@ -172,6 +175,7 @@ export const computeEstimateBalance = (items = [], paymentEntries = [], discount
     labourTotal,
     labourAfterDiscount,
     discount: appliedDiscount,
+    roundOff: clampedRoundOff,
     moneyPaid,
     cashDue: amountDue,
     cashCredit: refundDue,
