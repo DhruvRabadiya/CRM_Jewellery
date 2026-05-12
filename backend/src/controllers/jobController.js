@@ -49,14 +49,8 @@ const deleteFinishedGoodsEntry = async (req, res) => {
     return formatResponse(res, 500, false, error.message);
   }
 };
-const getAllReturnItems = () => {
-  return new Promise((resolve, reject) => {
-    db.all(`SELECT * FROM process_return_items`, [], (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows || []);
-    });
-  });
-};
+const getAllReturnItems = () =>
+  db.pAll(`SELECT * FROM process_return_items`, []);
 
 const getCombinedProcesses = async (req, res) => {
   try {

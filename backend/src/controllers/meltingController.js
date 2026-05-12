@@ -102,17 +102,12 @@ const completeMelting = async (req, res) => {
     );
 
     // Save return items
-    await new Promise((resolve, reject) => {
-      db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'melting'`, [process_id], (err) => err ? reject(err) : resolve());
-    });
+    await db.pRun(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'melting'`, [process_id]);
     for (const item of items) {
-      await new Promise((resolve, reject) => {
-        db.run(
-          `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'melting', ?, ?, ?)`,
-          [process_id, item.category || "", parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0],
-          (err) => err ? reject(err) : resolve()
-        );
-      });
+      await db.pRun(
+        `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'melting', ?, ?, ?)`,
+        [process_id, item.category || "", parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0]
+      );
     }
 
     // Return weight goes back to opening_stock (non-packing)
@@ -247,17 +242,12 @@ const editMeltingProcess = async (req, res) => {
 
     // Update process_return_items if new items provided and process is COMPLETED
     if (hasReturnItems && process.status === "COMPLETED") {
-      await new Promise((resolve, reject) => {
-        db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'melting'`, [id], (err) => err ? reject(err) : resolve());
-      });
+      await db.pRun(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'melting'`, [id]);
       for (const item of return_items) {
-        await new Promise((resolve, reject) => {
-          db.run(
-            `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'melting', ?, ?, ?)`,
-            [id, item.category || process.category || '', parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.pRun(
+          `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'melting', ?, ?, ?)`,
+          [id, item.category || process.category || '', parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0]
+        );
       }
     }
 

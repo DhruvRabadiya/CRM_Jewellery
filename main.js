@@ -77,8 +77,13 @@ function createWindow() {
     width: 1280,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      // Security: contextIsolation=true + nodeIntegration=false is the
+      // current Electron best practice.  The preload script exposes only the
+      // four IPC channels actually needed via contextBridge.exposeInMainWorld.
+      nodeIntegration:  false,
+      contextIsolation: true,
+      sandbox:          false, // keep false — preload needs ipcRenderer
+      preload:          path.join(__dirname, "preload.js"),
     },
     autoHideMenuBar: true,
   });
@@ -226,7 +231,6 @@ app.whenReady().then(async () => {
     startBackend();
     try {
       await waitForBackend(3000, 30, 500);
-      console.log("Backend is ready.");
     } catch (err) {
       console.error("Backend failed to start in time:", err.message);
     }

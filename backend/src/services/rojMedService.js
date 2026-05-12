@@ -15,31 +15,11 @@
 const db = require('../../config/dbConfig');
 const stockService = require('./stockService');
 
-// ─── tiny promise helpers ────────────────────────────────────────────────────
-
-const pRun = (sql, params = []) =>
-  new Promise((resolve, reject) =>
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve({ lastID: this.lastID, changes: this.changes });
-    })
-  );
-
-const pGet = (sql, params = []) =>
-  new Promise((resolve, reject) =>
-    db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row || null);
-    })
-  );
-
-const pAll = (sql, params = []) =>
-  new Promise((resolve, reject) =>
-    db.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows || []);
-    })
-  );
+// Use the promise helpers attached by the connection layer (db.pRun / db.pGet / db.pAll).
+// There is no need for local re-implementations.
+const pRun = (sql, params = []) => db.pRun(sql, params);
+const pGet = (sql, params = []) => db.pGet(sql, params).then(row => row ?? null);
+const pAll = (sql, params = []) => db.pAll(sql, params);
 
 const r2 = (v) => Math.round((v || 0) * 100) / 100;
 const r4 = (v) => Math.round((v || 0) * 10000) / 10000;

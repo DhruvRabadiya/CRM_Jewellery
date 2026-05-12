@@ -21,9 +21,11 @@ const MIGRATIONS = [
   require('./005_roj_med'),
   require('./006_metal_purchase'),
   require('./007_bank_tracking'),
+  require('./008_performance_indexes'),
 ];
 
-const CURRENT_VERSION = MIGRATIONS.length; // 5
+// CURRENT_VERSION is derived dynamically from the array length — no manual sync needed.
+const CURRENT_VERSION = MIGRATIONS.length;
 
 /**
  * @param {import('sqlite3').Database} db  opened, pragma-configured db instance
@@ -91,7 +93,7 @@ async function runMigrations(db) {
     }
   }
 
-  return { isFreshDb};
+  return { isFreshDb };
 }
 
 module.exports = { runMigrations };

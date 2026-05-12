@@ -320,12 +320,11 @@ const PrintView = ({ bill, onClose }) => {
 
   // Load printer list + saved preference once on mount.
   React.useEffect(() => {
-    const isElectron = typeof window !== "undefined" && typeof window.require === "function";
+    const isElectron = typeof window !== "undefined" && typeof window.electronAPI !== "undefined";
     if (!isElectron) { setPrintersLoading(false); return; }
-    const { ipcRenderer } = window.require("electron");
     Promise.all([
-      ipcRenderer.invoke("get-printers"),
-      ipcRenderer.invoke("get-printer-pref"),
+      window.electronAPI.getPrinters(),
+      window.electronAPI.getPrinterPref(),
     ])
       .then(([list, pref]) => {
         const printerList = list || [];
@@ -346,10 +345,8 @@ const PrintView = ({ bill, onClose }) => {
   const handlePrinterChange = (e) => {
     const name = e.target.value;
     setSelectedPrinter(name);
-    const isElectron = typeof window !== "undefined" && typeof window.require === "function";
-    if (isElectron) {
-      const { ipcRenderer } = window.require("electron");
-      ipcRenderer.invoke("save-printer-pref", { printerName: name }).catch(() => {});
+    if (typeof window !== "undefined" && typeof window.electronAPI !== "undefined") {
+      window.electronAPI.savePrinterPref({ printerName: name }).catch(() => {});
     }
   };
 
@@ -357,15 +354,13 @@ const PrintView = ({ bill, onClose }) => {
     // Electron: send structured data via IPC → main creates hidden 80mm window
     // → webContents.print({ silent: true, deviceName }) → direct to thermal printer.
     // Browser/dev: fall back to window.print().
-    const isElectron = typeof window !== "undefined" && typeof window.require === "function";
+    const isElectron = typeof window !== "undefined" && typeof window.electronAPI !== "undefined";
     if (!isElectron) {
       window.print();
       return;
     }
     setPrinting(true);
     try {
-      const { ipcRenderer } = window.require("electron");
-
       // Build the data payload — use pre-computed values from summary; no recalculation here.
       const estimateData = {
         billNo:        bill.ob_no,
@@ -411,7 +406,7 @@ const PrintView = ({ bill, onClose }) => {
         },
       };
 
-      const result = await ipcRenderer.invoke("print-estimate", { ...estimateData, printerName: selectedPrinter });
+      const result = await window.electronAPI.printEstimate({ ...estimateData, printerName: selectedPrinter });
       if (!result?.ok) {
         alert("Print failed: " + (result?.error || "Unknown error"));
       }

@@ -1,48 +1,36 @@
-const db = require("../../config/dbConfig");
+'use strict';
 
-const getSvgInventory = () => {
-  return new Promise((resolve, reject) => {
-    const query = `
-      SELECT metal_type, target_product, SUM(pieces) as total_pieces, SUM(weight) as total_weight 
-      FROM svg_inventory 
-      GROUP BY metal_type, target_product
-      HAVING total_pieces > 0
-      ORDER BY metal_type, target_product
-    `;
-    db.all(query, [], (err, rows) => {
-      if (err) reject(err);
-      resolve(rows || []);
-    });
-  });
-};
+const db = require('../../config/dbConfig');
 
-const addSvgInventory = (metal_type, target_product, pieces, weight) => {
-  return new Promise((resolve, reject) => {
-    const query = `INSERT INTO svg_inventory (metal_type, target_product, pieces, weight) VALUES (?, ?, ?, ?)`;
-    db.run(query, [metal_type, target_product, pieces, weight], function (err) {
-      if (err) reject(err);
-      resolve(this.lastID);
-    });
-  });
-};
-
-const getSvgHistory = (limit = 50) =>
-  new Promise((resolve, reject) => {
-    db.all(
-      `SELECT id, metal_type, target_product, pieces, weight, created_at
+const getSvgInventory = async () => {
+  const rows = await db.pAll(
+    `SELECT metal_type, target_product,
+            SUM(pieces)  AS total_pieces,
+            SUM(weight)  AS total_weight
        FROM svg_inventory
-       ORDER BY id DESC
-       LIMIT ?`,
-      [limit],
-      (err, rows) => {
-        if (err) return reject(err);
-        resolve(rows || []);
-      }
-    );
-  });
-
-module.exports = {
-  getSvgInventory,
-  addSvgInventory,
-  getSvgHistory,
+      GROUP BY metal_type, target_product
+     HAVING total_pieces > 0
+      ORDER BY metal_type, target_product`
+  );
+  return rows;
 };
+
+const addSvgInventory = async (metal_type, target_product, pieces, weight) => {
+  const { lastID } = await db.pRun(
+    `INSERT INTO svg_inventory (metal_type, target_product, pieces, weight) VALUES (?, ?, ?, ?)`,
+    [metal_type, target_product, pieces, weight]
+  );
+  return lastID;
+};
+
+const getSvgHistory = async (limit = 50) => {
+  return db.pAll(
+    `SELECT id, metal_type, target_product, pieces, weight, created_at
+       FROM svg_inventory
+      ORDER BY id DESC
+      LIMIT ?`,
+    [limit]
+  );
+};
+
+module.exports = { getSvgInventory, addSvgInventory, getSvgHistory };

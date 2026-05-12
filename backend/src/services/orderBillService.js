@@ -1,4 +1,6 @@
-const db = require("../../config/dbConfig");
+'use strict';
+
+const db = require('../../config/dbConfig');
 const customerService = require("./customerService");
 const counterService = require("./counterService");
 const { createAppError, isValidMetalType } = require("../utils/common");
@@ -31,14 +33,6 @@ const parseProducts = (raw) => {
     return ["Gold 24K"];
   }
 };
-
-const all = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows || []);
-    });
-  });
 
 const _derivePaymentMode = (paymentEntries) => {
   const types = new Set((paymentEntries || []).map((entry) => entry.payment_type));
@@ -398,17 +392,12 @@ const _resolveCustomerId = async (data, { createIfBalanceDue = false } = {}) => 
   return null;
 };
 
-const getNextObNo = () =>
-  new Promise((resolve, reject) => {
-    db.get(
-      `SELECT COALESCE(MAX(ob_no), 0) + 1 AS next_no FROM order_bills`,
-      [],
-      (err, row) => {
-        if (err) return reject(err);
-        resolve(row.next_no);
-      }
-    );
-  });
+const getNextObNo = async () => {
+  const row = await db.pGet(
+    `SELECT COALESCE(MAX(ob_no), 0) + 1 AS next_no FROM order_bills`
+  );
+  return row.next_no;
+};
 
 const _decorateBillRow = (row) => {
   const paymentEntries = normalizePaymentEntries(parseJsonSafe(row.payment_entries, []), row);
@@ -424,68 +413,54 @@ const _decorateBillRow = (row) => {
   };
 };
 
-const listBills = ({ date } = {}) =>
-  new Promise((resolve, reject) => {
-    const filters = [];
-    const params = [];
+const listBills = async ({ date } = {}) => {
+  const filters = [];
+  const params  = [];
 
-    if (date && String(date).trim()) {
-      filters.push("b.date = ?");
-      params.push(String(date).trim());
-    }
+  if (date && String(date).trim()) {
+    filters.push('b.date = ?');
+    params.push(String(date).trim());
+  }
 
-    const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const rows = await db.pAll(
+    `SELECT b.*, c.party_name AS customer_party_name
+       FROM order_bills b
+       LEFT JOIN customers c ON b.customer_id = c.id
+       ${whereClause}
+      ORDER BY b.date DESC, b.ob_no DESC`,
+    params
+  );
+  return rows.map(_decorateBillRow);
+};
 
-    db.all(
-      `SELECT b.*, c.party_name AS customer_party_name
-         FROM order_bills b
-         LEFT JOIN customers c ON b.customer_id = c.id
-         ${whereClause}
-        ORDER BY b.date DESC, b.ob_no DESC`,
-      params,
-      (err, rows) => {
-        if (err) return reject(err);
-        resolve((rows || []).map(_decorateBillRow));
-      }
-    );
-  });
+const getBillById = async (id) => {
+  const bill = await db.pGet(
+    `SELECT b.*, c.party_name AS customer_party_name
+       FROM order_bills b
+       LEFT JOIN customers c ON b.customer_id = c.id
+      WHERE b.id = ?`,
+    [id]
+  );
+  if (!bill) return null;
 
-const getBillById = (id) =>
-  new Promise((resolve, reject) => {
-    db.get(
-      `SELECT b.*, c.party_name AS customer_party_name
-         FROM order_bills b
-         LEFT JOIN customers c ON b.customer_id = c.id
-        WHERE b.id = ?`,
-      [id],
-      (err, bill) => {
-        if (err) return reject(err);
-        if (!bill) return resolve(null);
-        db.all(
-          `SELECT * FROM order_bill_items WHERE bill_id = ? ORDER BY metal_type, category, sort_order`,
-          [id],
-          (err2, items) => {
-            if (err2) return reject(err2);
-            const paymentEntries = normalizePaymentEntries(parseJsonSafe(bill.payment_entries, []), bill);
-            const balanceSnapshot =
-              parseJsonSafe(bill.balance_snapshot, null) ||
-              _buildBalanceSnapshot(items || [], paymentEntries, bill.discount);
+  const items = await db.pAll(
+    `SELECT * FROM order_bill_items WHERE bill_id = ? ORDER BY metal_type, category, sort_order`,
+    [id]
+  );
 
-            resolve({
-              ...bill,
-              products: parseProducts(bill.products),
-              items: (items || []).map((i) => ({
-                ...i,
-                metal_type: i.metal_type || "Gold 24K",
-              })),
-              payment_entries: paymentEntries,
-              balance_snapshot: balanceSnapshot,
-            });
-          }
-        );
-      }
-    );
-  });
+  const paymentEntries  = normalizePaymentEntries(parseJsonSafe(bill.payment_entries, []), bill);
+  const balanceSnapshot = parseJsonSafe(bill.balance_snapshot, null) ||
+    _buildBalanceSnapshot(items || [], paymentEntries, bill.discount);
+
+  return {
+    ...bill,
+    products:         parseProducts(bill.products),
+    items:            (items || []).map((i) => ({ ...i, metal_type: i.metal_type || 'Gold 24K' })),
+    payment_entries:  paymentEntries,
+    balance_snapshot: balanceSnapshot,
+  };
+};
 
 const _insertItems = async (run, billId, items) => {
   for (const [i, item] of items.entries()) {
@@ -517,16 +492,13 @@ const _insertItems = async (run, billId, items) => {
 
 const _deleteAccountingEntries = async (run, billId) => {
   // Reverse metal stock additions before deleting the transaction rows
-  const metalReceipts = await new Promise((resolve, reject) => {
-    db.all(
-      `SELECT metal_type, ROUND(SUM(weight), 4) AS total_weight
-         FROM stock_transactions
-        WHERE reference_type = ? AND reference_id = ? AND transaction_type = 'ESTIMATE_METAL_RECEIPT'
-        GROUP BY metal_type`,
-      [REFERENCE_TYPE, billId],
-      (err, rows) => (err ? reject(err) : resolve(rows || []))
-    );
-  });
+  const metalReceipts = await db.pAll(
+    `SELECT metal_type, ROUND(SUM(weight), 4) AS total_weight
+       FROM stock_transactions
+      WHERE reference_type = ? AND reference_id = ? AND transaction_type = 'ESTIMATE_METAL_RECEIPT'
+      GROUP BY metal_type`,
+    [REFERENCE_TYPE, billId]
+  );
   for (const row of metalReceipts) {
     await run(
       `UPDATE stock_master SET opening_stock = MAX(ROUND(opening_stock - ?, 4), 0) WHERE metal_type = ?`,
@@ -550,18 +522,12 @@ const _deleteAccountingEntries = async (run, billId) => {
 
 const _applyOutstandingDelta = async (run, customerId, delta) => {
   if (!customerId) return;
-  const row = await new Promise((resolve, reject) => {
-    db.get(
-      `SELECT ROUND(COALESCE(SUM(amount_delta), 0), 2) AS outstanding_balance
-         FROM customer_ledger_entries
-        WHERE customer_id = ?`,
-      [customerId],
-      (err, result) => {
-        if (err) return reject(err);
-        resolve(result || { outstanding_balance: 0 });
-      }
-    );
-  });
+  const row = await db.pGet(
+    `SELECT ROUND(COALESCE(SUM(amount_delta), 0), 2) AS outstanding_balance
+       FROM customer_ledger_entries
+      WHERE customer_id = ?`,
+    [customerId]
+  );
 
   await run(
     `UPDATE customers
@@ -766,9 +732,7 @@ const _insertAccountingEntries = async (
 const createBill = async (data) => {
   const paymentEntries = _validateBillInput(data);
   const obNo = data.ob_no ? parseInt(data.ob_no, 10) : await getNextObNo();
-  const existing = await new Promise((resolve, reject) =>
-    db.get(`SELECT id FROM order_bills WHERE ob_no = ?`, [obNo], (err, row) => err ? reject(err) : resolve(row))
-  );
+  const existing = await db.pGet(`SELECT id FROM order_bills WHERE ob_no = ?`, [obNo]);
   if (existing) {
     throw createAppError(`Estimate No. ${obNo} already exists. Please use a different number.`, 409, "ESTIMATE_NO_CONFLICT");
   }
@@ -844,8 +808,8 @@ const createBill = async (data) => {
 const updateBill = async (id, data) => {
   const paymentEntries = _validateBillInput(data, { requireObNo: true });
   const obNo = parseInt(data.ob_no, 10);
-  const conflict = await new Promise((resolve, reject) =>
-    db.get(`SELECT id FROM order_bills WHERE ob_no = ? AND id != ?`, [obNo, id], (err, row) => err ? reject(err) : resolve(row))
+  const conflict = await db.pGet(
+    `SELECT id FROM order_bills WHERE ob_no = ? AND id != ?`, [obNo, id]
   );
   if (conflict) {
     throw createAppError(`Estimate No. ${obNo} already exists. Please use a different number.`, 409, "ESTIMATE_NO_CONFLICT");

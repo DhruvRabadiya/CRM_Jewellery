@@ -48,13 +48,10 @@ const removeFinishedGoodsForProcess = async (process) => {
     return;
   }
 
-  const returnItems = await new Promise((resolve, reject) => {
-    db.all(
-      `SELECT category, return_weight, return_pieces FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`,
-      [process.id],
-      (err, rows) => (err ? reject(err) : resolve(rows || []))
-    );
-  });
+  const returnItems = await db.pAll(
+    `SELECT category, return_weight, return_pieces FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`,
+    [process.id]
+  );
 
   if (returnItems.length > 0) {
     for (const item of returnItems) {
@@ -164,22 +161,17 @@ const completePacking = async (req, res) => {
     }
 
     // Remove old return items
-    await new Promise((resolve, reject) => {
-      db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`, [process_id], (err) => err ? reject(err) : resolve());
-    });
+    await db.pRun(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`, [process_id]);
 
     if (items.length > 0) {
       for (const item of items) {
         const itemRetW = parseFloat(item.return_weight) || 0;
         const itemRetPieces = parseInt(item.return_pieces) || 0;
         const itemCategory = item.category || process.category || "";
-        await new Promise((resolve, reject) => {
-          db.run(
-            `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'packing', ?, ?, ?)`,
-            [process_id, itemCategory, itemRetW, itemRetPieces],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.pRun(
+          `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'packing', ?, ?, ?)`,
+          [process_id, itemCategory, itemRetW, itemRetPieces]
+        );
       }
     }
 
@@ -317,20 +309,13 @@ const editPacking = async (req, res) => {
 
     // Update process_return_items if new items provided and process is COMPLETED
     if (hasReturnItems && process.status === "COMPLETED") {
-      const db = require("../../config/dbConfig");
-      await new Promise((resolve, reject) => {
-        db.run(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`, [process_id], (err) => err ? reject(err) : resolve());
-      });
+      await db.pRun(`DELETE FROM process_return_items WHERE process_id = ? AND process_type = 'packing'`, [process_id]);
       for (const item of return_items) {
-        await new Promise((resolve, reject) => {
-          db.run(
-            `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'packing', ?, ?, ?)`,
-            [process_id, item.category || process.category || '', parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.pRun(
+          `INSERT INTO process_return_items (process_id, process_type, category, return_weight, return_pieces) VALUES (?, 'packing', ?, ?, ?)`,
+          [process_id, item.category || process.category || '', parseFloat(item.return_weight) || 0, parseInt(item.return_pieces) || 0]
+        );
       }
-
     }
 
     if (process.status === "COMPLETED" && shouldRebuildFinishedGoods && (newRetWeight > 0 || newPieces > 0)) {
