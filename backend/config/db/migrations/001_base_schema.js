@@ -290,6 +290,7 @@ async function up(db) {
       category       TEXT     DEFAULT '',
       size_label     TEXT     DEFAULT '',
       size_value     REAL     DEFAULT 0,
+      weight         REAL     DEFAULT 0,
       pieces         INTEGER,
       reference_type TEXT     DEFAULT '',
       reference_id   INTEGER,
@@ -300,6 +301,7 @@ async function up(db) {
   await addColumnIfMissing(db, 'counter_inventory', 'category',       "TEXT DEFAULT ''");
   await addColumnIfMissing(db, 'counter_inventory', 'size_label',     "TEXT DEFAULT ''");
   await addColumnIfMissing(db, 'counter_inventory', 'size_value',     'REAL DEFAULT 0');
+  await addColumnIfMissing(db, 'counter_inventory', 'weight',         'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'counter_inventory', 'reference_type', "TEXT DEFAULT ''");
   await addColumnIfMissing(db, 'counter_inventory', 'reference_id',   'INTEGER');
   await addColumnIfMissing(db, 'counter_inventory', 'notes',          "TEXT DEFAULT ''");

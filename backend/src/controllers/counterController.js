@@ -1,19 +1,14 @@
 const counterService = require("../services/counterService");
 const jobService = require("../services/jobService");
 const packingService = require("../services/packingService");
-const { formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
-
-/**
- * Parse the unit weight (grams) from a category/target_product string.
- * Examples: "1 gm" → 1, "0.05gm" → 0.05, "10g -C|B" → 10, "Mix" → null
- */
-const parseUnitWeight = (category) => {
-  if (!category) return null;
-  const trimmed = category.trim();
-  if (trimmed === "Mix" || trimmed === "Other") return null;
-  const match = trimmed.match(/^(\d+(?:\.\d+)?)/);
-  return match ? parseFloat(match[1]) : null;
-};
+const db = require("../../config/dbConfig");
+const {
+  calculateTransferWeight,
+  formatResponse,
+  isValidMetalType,
+  parseUnitWeight,
+  sanitizePieces,
+} = require("../utils/common");
 
 const getInventory = async (req, res) => {
   try {
@@ -51,24 +46,27 @@ const sendToCounter = async (req, res) => {
       return formatResponse(res, 400, false, "Insufficient finished goods available for transfer");
     }
 
-    // Calculate weight to deduct: use parsed unit weight for consistency with counter display,
-    // fall back to proportional calculation for unparseable categories (Mix, Other)
     const unitWeight = parseUnitWeight(target_product);
-    const weightToDeduct = unitWeight != null
-      ? piecesToSend * unitWeight
-      : (available.total_pieces > 0 ? (piecesToSend / available.total_pieces) * available.total_weight : 0);
-
-    // Deduct from finished goods (insert negative adjustment)
-    await packingService.addFinishedGoods(metal_type, target_product, -piecesToSend, -weightToDeduct, {
-      reference_type: "COUNTER_SEND",
+    const weightToDeduct = calculateTransferWeight({
+      requestedPieces: piecesToSend,
+      sourcePieces: available.total_pieces,
+      sourceWeight: available.total_weight,
+      fallbackUnitWeight: unitWeight,
     });
 
-    // Add to counter inventory
-    await counterService.addCounterInventory(metal_type, target_product, piecesToSend, {
-      category: target_product,
-      size_label: target_product,
-      size_value: unitWeight || 0,
-      notes: "Sent from finished goods",
+    await db.runTransaction(async () => {
+      await packingService.addFinishedGoods(metal_type, target_product, -piecesToSend, -weightToDeduct, {
+        reference_type: "COUNTER_SEND",
+      });
+
+      await counterService.addCounterInventory(metal_type, target_product, piecesToSend, {
+        category: target_product,
+        size_label: target_product,
+        size_value: unitWeight || 0,
+        weight: weightToDeduct,
+        reference_type: "COUNTER_SEND",
+        notes: "Sent from finished goods",
+      });
     });
 
     return formatResponse(res, 200, true, "Successfully sent to counter");
@@ -104,35 +102,27 @@ const returnFromCounter = async (req, res) => {
       return formatResponse(res, 400, false, "Insufficient items in counter to return");
     }
 
-    // Calculate weight to return using the same logic as send:
-    // parsed unit weight for standard categories, proportional for Mix/Other
     const unitWeight = parseUnitWeight(target_product);
-    // For unparseable categories, attempt proportional estimate from finished goods
-    let weightToReturn = 0;
-    if (unitWeight != null) {
-      weightToReturn = piecesToReturn * unitWeight;
-    } else {
-      // Fallback: estimate from current finished goods average weight per piece
-      const finishedGoods = await jobService.getFinishedGoodsInventory();
-      const fgItem = finishedGoods.find(
-        (item) => item.metal_type === metal_type && item.target_product === target_product
-      );
-      if (fgItem && fgItem.total_pieces > 0) {
-        weightToReturn = (piecesToReturn / fgItem.total_pieces) * fgItem.total_weight;
-      }
-    }
-
-    // Deduct from counter (insert negative adjustment)
-    await counterService.addCounterInventory(metal_type, target_product, -piecesToReturn, {
-      category: target_product,
-      size_label: target_product,
-      size_value: unitWeight || 0,
-      notes: "Returned to finished goods",
+    const weightToReturn = calculateTransferWeight({
+      requestedPieces: piecesToReturn,
+      sourcePieces: available.total_pieces,
+      sourceWeight: available.total_weight,
+      fallbackUnitWeight: unitWeight,
     });
 
-    // Add back to finished goods
-    await packingService.addFinishedGoods(metal_type, target_product, piecesToReturn, weightToReturn, {
-      reference_type: "COUNTER_RETURN",
+    await db.runTransaction(async () => {
+      await counterService.addCounterInventory(metal_type, target_product, -piecesToReturn, {
+        category: target_product,
+        size_label: target_product,
+        size_value: unitWeight || 0,
+        weight: -weightToReturn,
+        reference_type: "COUNTER_RETURN",
+        notes: "Returned to finished goods",
+      });
+
+      await packingService.addFinishedGoods(metal_type, target_product, piecesToReturn, weightToReturn, {
+        reference_type: "COUNTER_RETURN",
+      });
     });
 
     return formatResponse(res, 200, true, "Successfully returned from counter to finished goods");

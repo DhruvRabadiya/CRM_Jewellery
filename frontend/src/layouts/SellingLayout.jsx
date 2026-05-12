@@ -5,7 +5,6 @@ import {
   FileText, LayoutDashboard, BookOpen, NotebookPen, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { SellingSyncProvider } from "../context/SellingSyncContext";
 
 const SellingLayout = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -23,7 +22,9 @@ const SellingLayout = () => {
   const toggleSidebar = () => {
     setSidebarOpen((prev) => {
       const next = !prev;
-      try { localStorage.setItem("selling_sidebar_open", String(next)); } catch {}
+      try { localStorage.setItem("selling_sidebar_open", String(next)); } catch {
+        // Ignore storage write failures and still update the in-memory UI state.
+      }
       return next;
     });
   };
@@ -86,8 +87,7 @@ const SellingLayout = () => {
   const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
-    <SellingSyncProvider>
-      <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
 
         {/* ── Top Navigation Bar ── */}
         <header className="bg-white border-b border-gray-200 shadow-sm flex-none z-20">
@@ -226,7 +226,6 @@ const SellingLayout = () => {
         </div>
 
       </div>
-    </SellingSyncProvider>
   );
 };
 

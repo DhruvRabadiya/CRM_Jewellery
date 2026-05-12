@@ -1,18 +1,13 @@
 const svgService = require("../services/svgService");
 const counterService = require("../services/counterService");
-const { formatResponse, isValidMetalType, sanitizePieces } = require("../utils/common");
-
-/**
- * Parse the unit weight (grams) from a category/target_product string.
- * Examples: "1 gm" => 1, "0.05gm" => 0.05, "10g -C|B" => 10, "Mix" => null
- */
-const parseUnitWeight = (category) => {
-  if (!category) return null;
-  const trimmed = category.trim();
-  if (trimmed === "Mix" || trimmed === "Other") return null;
-  const match = trimmed.match(/^(\d+(?:\.\d+)?)/);
-  return match ? parseFloat(match[1]) : null;
-};
+const db = require("../../config/dbConfig");
+const {
+  calculateTransferWeight,
+  formatResponse,
+  isValidMetalType,
+  parseUnitWeight,
+  sanitizePieces,
+} = require("../utils/common");
 
 const getInventory = async (req, res) => {
   try {
@@ -54,20 +49,25 @@ const addToSvg = async (req, res) => {
       return formatResponse(res, 400, false, "Insufficient items at the counter for transfer to vault");
     }
 
-    // Calculate weight using unit weight parsing
     const unitWeight = parseUnitWeight(target_product);
-    const weight = unitWeight != null
-      ? piecesToMove * unitWeight
-      : 0; // Mix/Other items get 0 weight in SVG - proportional not reliable
-
-    // Double-entry: Remove from Counter, Add to SVG Vault
-    await counterService.addCounterInventory(metal_type, target_product, -piecesToMove, {
-      category: target_product,
-      size_label: target_product,
-      size_value: unitWeight || 0,
-      notes: "Moved from counter to SVG vault",
+    const weight = calculateTransferWeight({
+      requestedPieces: piecesToMove,
+      sourcePieces: available.total_pieces,
+      sourceWeight: available.total_weight,
+      fallbackUnitWeight: unitWeight,
     });
-    await svgService.addSvgInventory(metal_type, target_product, piecesToMove, weight);
+
+    await db.runTransaction(async () => {
+      await counterService.addCounterInventory(metal_type, target_product, -piecesToMove, {
+        category: target_product,
+        size_label: target_product,
+        size_value: unitWeight || 0,
+        weight: -weight,
+        reference_type: "SVG_TRANSFER_OUT",
+        notes: "Moved from counter to SVG vault",
+      });
+      await svgService.addSvgInventory(metal_type, target_product, piecesToMove, weight);
+    });
 
     return formatResponse(res, 200, true, `Successfully moved ${piecesToMove} pieces to SVG Vault`);
   } catch (error) {
@@ -106,22 +106,24 @@ const removeFromSvg = async (req, res) => {
       return formatResponse(res, 400, false, "Insufficient items in SVG Vault");
     }
 
-    // Calculate weight to remove - use unit weight or proportional from SVG stock
     const unitWeight = parseUnitWeight(target_product);
-    let weight = 0;
-    if (unitWeight != null) {
-      weight = piecesToMove * unitWeight;
-    } else if (available.total_pieces > 0 && available.total_weight > 0) {
-      weight = (piecesToMove / available.total_pieces) * available.total_weight;
-    }
+    const weight = calculateTransferWeight({
+      requestedPieces: piecesToMove,
+      sourcePieces: available.total_pieces,
+      sourceWeight: available.total_weight,
+      fallbackUnitWeight: unitWeight,
+    });
 
-    // Double-entry: Remove from SVG, Add back to Counter
-    await svgService.addSvgInventory(metal_type, target_product, -piecesToMove, -weight);
-    await counterService.addCounterInventory(metal_type, target_product, piecesToMove, {
-      category: target_product,
-      size_label: target_product,
-      size_value: unitWeight || 0,
-      notes: "Returned from SVG vault",
+    await db.runTransaction(async () => {
+      await svgService.addSvgInventory(metal_type, target_product, -piecesToMove, -weight);
+      await counterService.addCounterInventory(metal_type, target_product, piecesToMove, {
+        category: target_product,
+        size_label: target_product,
+        size_value: unitWeight || 0,
+        weight,
+        reference_type: "SVG_TRANSFER_IN",
+        notes: "Returned from SVG vault",
+      });
     });
 
     return formatResponse(res, 200, true, `Successfully returned ${piecesToMove} pieces to Selling Counter`);

@@ -10,6 +10,8 @@ const normalizeInventoryRow = (row) => ({
   category:      row.category     || row.target_product || '',
   size_label:    row.size_label   || row.target_product || '',
   total_pieces:  parseInt(row.total_pieces, 10) || 0,
+  total_weight:  parseFloat(row.total_weight)   || 0,
+  display_weight: parseFloat(row.display_weight) || 0,
   size_value:    parseFloat(row.size_value)     || 0,
 });
 
@@ -22,7 +24,21 @@ const getCounterInventory = async () => {
             COALESCE(NULLIF(size_label, ''), target_product) AS size_label,
             target_product,
             MAX(COALESCE(size_value, 0)) AS size_value,
-            SUM(pieces) AS total_pieces
+            SUM(pieces) AS total_pieces,
+            SUM(
+              CASE
+                WHEN ABS(COALESCE(weight, 0)) > 0 THEN COALESCE(weight, 0)
+                WHEN COALESCE(size_value, 0) > 0 THEN pieces * size_value
+                ELSE 0
+              END
+            ) AS total_weight,
+            SUM(
+              CASE
+                WHEN COALESCE(size_value, 0) > 0 THEN pieces * size_value
+                WHEN ABS(COALESCE(weight, 0)) > 0 THEN COALESCE(weight, 0)
+                ELSE 0
+              END
+            ) AS display_weight
        FROM counter_inventory
       GROUP BY metal_type,
                COALESCE(NULLIF(category,   ''), target_product),
@@ -41,18 +57,23 @@ const addCounterInventory = async (
     category       = target_product,
     size_label     = target_product,
     size_value     = 0,
+    weight         = null,
     reference_type = '',
     reference_id   = null,
     notes          = '',
   } = metadata;
 
+  const resolvedWeight = weight != null
+    ? parseFloat(weight) || 0
+    : (size_value > 0 ? pieces * size_value : 0);
+
   const { lastID } = await db.pRun(
     `INSERT INTO counter_inventory
-       (metal_type, target_product, category, size_label, size_value,
+       (metal_type, target_product, category, size_label, size_value, weight,
         pieces, reference_type, reference_id, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [metal_type, target_product, category, size_label, size_value,
-     pieces, reference_type, reference_id, notes]
+     resolvedWeight, pieces, reference_type, reference_id, notes]
   );
   return lastID;
 };
@@ -184,18 +205,20 @@ const reserveEstimateStock = async (run, billId, obNo, date, items = []) => {
   for (const item of items) {
     const pcs = parseInt(item.pcs, 10) || 0;
     if (pcs <= 0) continue;
+    const sizeValue = parseFloat(item.size_value) || 0;
 
     await run(
       `INSERT INTO counter_inventory
-         (metal_type, target_product, category, size_label, size_value,
+         (metal_type, target_product, category, size_label, size_value, weight,
           pieces, reference_type, reference_id, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.metal_type,
         item.size_label || item.category || '',
         item.category   || item.size_label || '',
         item.size_label || item.category   || '',
-        parseFloat(item.size_value) || 0,
+        sizeValue,
+        -(pcs * sizeValue),
         -pcs,
         ESTIMATE_STOCK_REFERENCE,
         billId,

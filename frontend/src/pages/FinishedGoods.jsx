@@ -6,6 +6,7 @@ import {
 import { getFinishedGoods } from "../api/finishedGoodsService";
 import { sendToCounter } from "../api/counterService";
 import Toast from "../components/Toast";
+import { useSellingSync } from "../context/SellingSyncContext";
 
 const TAB_CONFIG = {
   "Gold 24K": {
@@ -53,6 +54,7 @@ const TAB_CONFIG = {
 };
 
 const FinishedGoods = () => {
+  const { markDirty } = useSellingSync();
   const [inventory, setInventory] = useState({ "Gold 24K": [], Silver: [], "Gold 22K": [] });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Gold 24K");
@@ -80,7 +82,7 @@ const FinishedGoods = () => {
         });
         setInventory(grouped);
       }
-    } catch (error) {
+    } catch {
       showToast("Failed to load finished goods", "error");
     } finally {
       setLoading(false);
@@ -119,6 +121,7 @@ const FinishedGoods = () => {
       if (result.success) {
         showToast(result.message, "success");
         setShowSendModal(false);
+        markDirty(["inventory", "dashboard"]);
 
         // Optimistically remove / decrement the item so the Send button disappears
         // immediately while the background refetch completes.

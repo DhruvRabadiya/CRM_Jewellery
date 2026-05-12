@@ -8,17 +8,6 @@ import { addToSvg } from "../api/svgService";
 import Toast from "../components/Toast";
 import { useSellingSync } from "../context/SellingSyncContext";
 
-/**
- * Parse the unit weight (grams) from a category/target_product string.
- */
-const parseUnitWeight = (category) => {
-  if (!category) return null;
-  const trimmed = category.trim();
-  if (trimmed === "Mix" || trimmed === "Other") return null;
-  const match = trimmed.match(/^(\d+(?:\.\d+)?)/);
-  return match ? parseFloat(match[1]) : null;
-};
-
 const TAB_CONFIG = {
   "Gold 24K": {
     dot: "bg-yellow-400",
@@ -80,16 +69,22 @@ const SellingCounter = () => {
       if (result.success) {
         const grouped = { "Gold 24K": [], Silver: [], "Gold 22K": [] };
         result.data.forEach((item) => {
-          const unitWeight = parseUnitWeight(item.target_product);
-          const calculatedWeight = unitWeight != null ? item.total_pieces * unitWeight : null;
-          const enriched = { ...item, calculated_weight: calculatedWeight, unit_weight: unitWeight };
+          const actualWeight = Number(item.total_weight || 0);
+          const displayWeight = Number(item.display_weight || item.total_weight || 0);
+          const averageWeight = item.total_pieces > 0 ? displayWeight / item.total_pieces : 0;
+          const enriched = {
+            ...item,
+            total_weight: actualWeight,
+            display_weight: displayWeight,
+            average_weight: averageWeight,
+          };
           if (grouped[item.metal_type]) {
             grouped[item.metal_type].push(enriched);
           }
         });
         setInventory(grouped);
       }
-    } catch (error) {
+    } catch {
       showToast("Failed to load counter inventory", "error");
     } finally {
       setLoading(false);
@@ -166,7 +161,7 @@ const SellingCounter = () => {
   const cfg = TAB_CONFIG[activeTab];
   const items = inventory[activeTab] || [];
   const totalPieces = items.reduce((s, i) => s + (i.total_pieces || 0), 0);
-  const totalWeight = items.reduce((s, i) => s + (i.calculated_weight || 0), 0);
+  const totalWeight = items.reduce((s, i) => s + (i.display_weight || 0), 0);
 
   // Grand totals for header
   const allItems = [...(inventory["Gold 24K"] || []), ...(inventory["Silver"] || []), ...(inventory["Gold 22K"] || [])];
@@ -225,7 +220,7 @@ const SellingCounter = () => {
         {Object.entries(TAB_CONFIG).map(([metal, c]) => {
           const metalItems = inventory[metal] || [];
           const pieces = metalItems.reduce((s, i) => s + (i.total_pieces || 0), 0);
-          const weight = metalItems.reduce((s, i) => s + (i.calculated_weight || 0), 0);
+          const weight = metalItems.reduce((s, i) => s + (i.display_weight || 0), 0);
           return (
             <button
               key={metal}
@@ -339,7 +334,7 @@ const SellingCounter = () => {
                         <span className="font-black text-slate-800 text-base">{item.total_pieces}</span>
                       </td>
                       <td className="py-3 px-4 text-right font-semibold text-slate-600">
-                        {item.calculated_weight != null ? `${item.calculated_weight.toFixed(2)}g` : "—"}
+                        {`${(item.display_weight || 0).toFixed(3)}g`}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-center gap-2">
@@ -391,8 +386,8 @@ const SellingCounter = () => {
       {/* Transfer Modal */}
       {modalType && selectedItem && (() => {
         const mc = modalConfig[modalType];
-        const computedWeight = piecesInput && selectedItem.unit_weight != null && parseInt(piecesInput) > 0
-          ? (parseInt(piecesInput) * selectedItem.unit_weight)
+        const computedWeight = piecesInput && parseInt(piecesInput) > 0
+          ? (parseInt(piecesInput) * (selectedItem.average_weight || 0))
           : null;
 
         return (
@@ -442,10 +437,10 @@ const SellingCounter = () => {
                       </p>
                     </div>
                   </div>
-                  {selectedItem.calculated_weight != null && (
+                  {selectedItem.total_weight != null && (
                     <div className="mt-2 pt-2 border-t border-slate-200">
                       <p className="text-xs font-bold text-slate-400">
-                        Total Weight: <span className="text-slate-600">{selectedItem.calculated_weight.toFixed(2)}g</span>
+                        Total Weight: <span className="text-slate-600">{(selectedItem.display_weight || 0).toFixed(3)}g</span>
                       </p>
                     </div>
                   )}

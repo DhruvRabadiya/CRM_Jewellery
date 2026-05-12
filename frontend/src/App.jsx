@@ -20,14 +20,16 @@ import OrderBills from "./pages/OrderBills";
 import SellingDashboard from "./pages/SellingDashboard";
 import RojMed from "./pages/RojMed";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { SellingSyncProvider } from "./context/SellingSyncContext";
 
-// Guard wrapper to ensure user is logged in
 const ProtectedRoute = ({ children, requireAdmin }) => {
   const { user, loading, isAdmin } = useAuth();
 
-  if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
+  if (loading) {
+    return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Loading...</div>;
+  }
   if (!user) return <Navigate to="/login" replace />;
-  if (requireAdmin && !isAdmin) return <Navigate to="/" replace />; // Lock out employees from admin pages
+  if (requireAdmin && !isAdmin) return <Navigate to="/" replace />;
 
   return children;
 };
@@ -36,49 +38,38 @@ function App() {
   return (
     <HashRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public Route */}
-          <Route path="/login" element={<Login />} />
+        <SellingSyncProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<ProtectedRoute><ModeSelection /></ProtectedRoute>} />
 
-          {/* Mode Selection */}
-          <Route path="/" element={<ProtectedRoute><ModeSelection /></ProtectedRoute>} />
+            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/stock" element={<StockManagement />} />
+              <Route path="/melting" element={<MeltingProcess />} />
+              <Route path="/production" element={<ProductionJobs />} />
+              <Route path="/finished" element={<FinishedGoods />} />
+              <Route path="/job-history/:jobNumber" element={<JobHistory />} />
+              <Route path="/employees" element={<ProtectedRoute requireAdmin={true}><EmployeeManagement /></ProtectedRoute>} />
+            </Route>
 
-          {/* Protected Routes inside MainLayout (Production Mode) */}
-          <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+            <Route path="/selling" element={<ProtectedRoute><SellingLayout /></ProtectedRoute>}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<SellingDashboard />} />
+              <Route path="stocks" element={<SellingCounter />} />
+              <Route path="svg" element={<SvgCounter />} />
+              <Route path="customers" element={<Customers />} />
+              <Route path="ledger" element={<SellingLedger />} />
+              <Route path="estimate" element={<OrderBills />} />
+              <Route path="order-bills" element={<Navigate to="/selling/estimate" replace />} />
+              <Route path="billing" element={<Navigate to="/selling/estimate" replace />} />
+              <Route path="roj-med" element={<RojMed />} />
+              <Route path="admin" element={<ProtectedRoute requireAdmin={true}><SellingAdmin /></ProtectedRoute>} />
+            </Route>
 
-            {/* Standard Employee/Admin Routes */}
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/stock" element={<StockManagement />} />
-            <Route path="/melting" element={<MeltingProcess />} />
-            <Route path="/production" element={<ProductionJobs />} />
-            <Route path="/finished" element={<FinishedGoods />} />
-            <Route path="/job-history/:jobNumber" element={<JobHistory />} />
-
-            {/* Admin-Only Routes */}
-            <Route path="/employees" element={<ProtectedRoute requireAdmin={true}><EmployeeManagement /></ProtectedRoute>} />
-          </Route>
-
-          {/* Protected Routes inside SellingLayout (Selling Mode) */}
-          <Route path="/selling" element={<ProtectedRoute><SellingLayout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<SellingDashboard />} />
-            <Route path="stocks" element={<SellingCounter />} />
-            <Route path="svg" element={<SvgCounter />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="ledger" element={<SellingLedger />} />
-            {/* Estimate - unified billing module (formerly Order Bills / Selling Counter Billing). */}
-            <Route path="estimate" element={<OrderBills />} />
-            {/* Back-compat: old /selling/order-bills and /selling/billing URLs redirect to /selling/estimate. */}
-            <Route path="order-bills" element={<Navigate to="/selling/estimate" replace />} />
-            <Route path="billing" element={<Navigate to="/selling/estimate" replace />} />
-            {/* Roj Med — Daily Accounting */}
-            <Route path="roj-med" element={<RojMed />} />
-            <Route path="admin" element={<ProtectedRoute requireAdmin={true}><SellingAdmin /></ProtectedRoute>} />
-          </Route>
-
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </SellingSyncProvider>
       </AuthProvider>
     </HashRouter>
   );
