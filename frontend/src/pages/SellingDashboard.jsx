@@ -176,14 +176,11 @@ export default function SellingDashboard() {
 
   const recentBills = data?.recent_bills || [];
 
-  // Roj Med live balances (from getTodaySummary)
+  // Roj Med live balances (from getTodaySummary — today only)
   const rmExists        = rojMed?.exists ?? false;
   const rmStatus        = rojMed?.status ?? "NOT_STARTED";
   const rmCash          = rojMed?.cash_balance        ?? 0;
   const rmBank          = rojMed?.bank_balance         ?? 0;
-  const rmGold24k       = rojMed?.metal_bal_gold24k   ?? 0;
-  const rmGold22k       = rojMed?.metal_bal_gold22k   ?? 0;
-  const rmSilver        = rojMed?.metal_bal_silver     ?? 0;
   const rmCashIn        = rojMed?.total_cash_in        ?? 0;
   const rmCashOut       = rojMed?.total_cash_out       ?? 0;
   const rmBankIn        = rojMed?.total_bank_in        ?? 0;
@@ -198,7 +195,13 @@ export default function SellingDashboard() {
 
   const hasBankActivity = rmBankIn + rmBankOut > 0;
 
-  // Estimate-based totals (from getSellingDashboard)
+  // All-time stock from stock_master — same source as Production Dashboard
+  const stock     = data?.stock    || {};
+  const g24k      = stock.gold24k  || {};
+  const g22k      = stock.gold22k  || {};
+  const silv      = stock.silver   || {};
+
+  // All-time estimate totals (from getSellingDashboard)
   const billCount       = data?.bill_count      ?? 0;
   const billedTotal     = data?.billed_total    ?? 0;
   const receivableTotal = data?.receivable_total ?? 0;
@@ -233,24 +236,56 @@ export default function SellingDashboard() {
         </button>
       </div>
 
-      {/* ── Counter Position — live balances from Roj Med ── */}
+      {/* ── Metal Stock — from stock_master (same as Production Dashboard) ── */}
       <section>
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">
-            Counter Position — Today
+            Metal Stock
           </h2>
-          {rmExists && (
+          <span className="text-[10px] font-semibold text-slate-400">
+            Live · synced with Production
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { key: "gold24k", label: "Gold 24K", row: g24k, bg: "bg-amber-50",  border: "border-amber-200",  val: "text-amber-700",  sub: "text-amber-500",  icon: <Scale size={15}/> },
+            { key: "gold22k", label: "Gold 22K", row: g22k, bg: "bg-orange-50", border: "border-orange-200", val: "text-orange-700", sub: "text-orange-500", icon: <Scale size={15}/> },
+            { key: "silver",  label: "Silver",   row: silv, bg: "bg-slate-50",  border: "border-slate-200",  val: "text-slate-700",  sub: "text-slate-400",  icon: <Coins size={15}/> },
+          ].map(({ key, label, row, bg, border, val, sub, icon }) => (
+            <div key={key} className={`${bg} border ${border} rounded-2xl p-4`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <div className={`${val} opacity-70`}>{icon}</div>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${sub}`}>{label}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className={`text-lg font-black ${val} leading-none`}>{fmtWeight(row.opening_stock, 3)}</p>
+                  <p className={`text-[10px] font-semibold ${sub} mt-0.5`}>Free Stock</p>
+                </div>
+                <div>
+                  <p className="text-lg font-black text-indigo-600 leading-none">{fmtWeight(row.inprocess_weight, 3)}</p>
+                  <p className="text-[10px] font-semibold text-indigo-400 mt-0.5">In Production</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Cash / Bank Position — Today (from Roj Med) ── */}
+      {rmExists && (
+        <section>
+          <div className="flex items-center justify-between mb-2.5">
+            <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+              Cash Position — Today
+            </h2>
             <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
               isClosed ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
             }`}>
               {isClosed ? "Day Closed" : "Live"}
             </span>
-          )}
-        </div>
-
-        {rmExists ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {/* Cash in Counter */}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <BalanceCard
               icon={<Wallet size={16} />}
               label="Cash in Counter"
@@ -262,8 +297,6 @@ export default function SellingDashboard() {
               colorSub="text-emerald-500"
               pulse={isOpen}
             />
-
-            {/* Bank / UPI Balance */}
             <BalanceCard
               icon={<Building2 size={16} />}
               label="Bank / UPI"
@@ -275,95 +308,22 @@ export default function SellingDashboard() {
               colorSub={hasBankActivity ? "text-blue-500" : "text-slate-400"}
               pulse={isOpen && hasBankActivity}
             />
-
-            {/* Gold 24K */}
-            <BalanceCard
-              icon={<Scale size={16} />}
-              label="Gold 24K"
-              value={fmtWeight(rmGold24k, 3)}
-              sub="Available weight"
-              colorBg="bg-amber-50"
-              colorBorder="border-amber-200"
-              colorVal="text-amber-700"
-              colorSub="text-amber-500"
+            <FlowTile
+              icon={<ArrowDownCircle size={14} />}
+              label="Cash In Today"
+              value={fmtINR(rmCashIn)}
+              colorBg="bg-emerald-50" colorBorder="border-emerald-200"
+              colorIcon="text-emerald-500" colorVal="text-emerald-700"
             />
-
-            {/* Gold 22K */}
-            <BalanceCard
-              icon={<Scale size={16} />}
-              label="Gold 22K"
-              value={fmtWeight(rmGold22k, 3)}
-              sub="Available weight"
-              colorBg="bg-orange-50"
-              colorBorder="border-orange-200"
-              colorVal="text-orange-700"
-              colorSub="text-orange-500"
-            />
-
-            {/* Silver */}
-            <BalanceCard
-              icon={<Coins size={16} />}
-              label="Silver"
-              value={fmtWeight(rmSilver, 3)}
-              sub="Available weight"
-              colorBg="bg-slate-50"
-              colorBorder="border-slate-200"
-              colorVal="text-slate-700"
-              colorSub="text-slate-400"
+            <FlowTile
+              icon={<ArrowUpCircle size={14} />}
+              label="Cash Out Today"
+              value={fmtINR(rmCashOut)}
+              colorBg="bg-red-50" colorBorder="border-red-200"
+              colorIcon="text-red-500" colorVal="text-red-600"
             />
           </div>
-        ) : (
-          /* Roj Med not started yet — prompt */
-          <Link to="/selling/roj-med" className="block">
-            <div className="border border-dashed border-indigo-300 rounded-2xl p-6 text-center bg-indigo-50/40 hover:bg-indigo-50 transition-colors">
-              <NotebookPen size={24} className="text-indigo-400 mx-auto mb-2" />
-              <p className="text-sm font-black text-indigo-600">Roj Med not started for today</p>
-              <p className="text-xs text-slate-400 mt-1">Open Roj Med to see live counter balances here</p>
-            </div>
-          </Link>
-        )}
-      </section>
-
-      {/* ── Today's Flow bar — cash/bank in & out ── */}
-      {rmExists && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <FlowTile
-            icon={<ArrowDownCircle size={14} />}
-            label="Cash In"
-            value={fmtINR(rmCashIn)}
-            colorBg="bg-emerald-50"
-            colorBorder="border-emerald-200"
-            colorIcon="text-emerald-500"
-            colorVal="text-emerald-700"
-          />
-          <FlowTile
-            icon={<ArrowUpCircle size={14} />}
-            label="Cash Out"
-            value={fmtINR(rmCashOut)}
-            colorBg="bg-red-50"
-            colorBorder="border-red-200"
-            colorIcon="text-red-500"
-            colorVal="text-red-600"
-          />
-          <FlowTile
-            icon={<ArrowDownCircle size={14} />}
-            label="Bank / UPI In"
-            value={fmtINR(rmBankIn)}
-            colorBg="bg-blue-50"
-            colorBorder="border-blue-200"
-            colorIcon="text-blue-500"
-            colorVal="text-blue-700"
-          />
-          <FlowTile
-            icon={<ArrowUpCircle size={14} />}
-            label="Bank / UPI Out"
-            value={fmtINR(rmBankOut)}
-            colorBg="bg-orange-50"
-            colorBorder="border-orange-200"
-            colorIcon="text-orange-500"
-            colorVal="text-orange-600"
-          />
-        </div>
+        </section>
       )}
 
       {/* ── Roj Med status strip (compact clickable link) ── */}
@@ -425,7 +385,7 @@ export default function SellingDashboard() {
               <Receipt size={18} className="text-indigo-500" />
               <h2 className="font-black text-slate-800">Recent Estimates</h2>
               {billCount > 0 && (
-                <span className="ml-auto text-xs text-slate-500 font-semibold">{billCount} today</span>
+                <span className="ml-auto text-xs text-slate-500 font-semibold">{billCount} total</span>
               )}
             </div>
 
@@ -650,7 +610,7 @@ export default function SellingDashboard() {
             <div className="flex items-center gap-2 mb-1">
               <ShoppingBag size={16} className="text-indigo-500" />
               <h2 className="font-black text-slate-800 text-sm">Counter Summary</h2>
-              <span className="text-[10px] text-slate-400 font-semibold ml-auto">Today</span>
+              <span className="text-[10px] text-slate-400 font-semibold ml-auto">All-time · Today</span>
             </div>
 
             {/* Estimate totals */}
@@ -693,15 +653,6 @@ export default function SellingDashboard() {
                     blue={rmBank >= 0}
                     red={rmBank < 0}
                   />
-                )}
-                {rmGold24k > 0 && (
-                  <Row label="Gold 24K" value={fmtWeight(rmGold24k, 3)} amber />
-                )}
-                {rmGold22k > 0 && (
-                  <Row label="Gold 22K" value={fmtWeight(rmGold22k, 3)} amber />
-                )}
-                {rmSilver > 0 && (
-                  <Row label="Silver" value={fmtWeight(rmSilver, 3)} />
                 )}
               </div>
             )}

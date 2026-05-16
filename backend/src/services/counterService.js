@@ -5,6 +5,19 @@ const { createAppError } = require('../utils/common');
 
 const ESTIMATE_STOCK_REFERENCE = 'ORDER_BILL_STOCK';
 
+// Canonical size-label key: strips spaces, parses the numeric part (removes trailing
+// zeros), then appends "gm".  Ensures "0.05 gm", "0.05gm", "0.050gm", "0.050 gm"
+// all map to the same key "0.05gm", and "0.100gm" / "0.1gm" both map to "0.1gm".
+const _normSizeKey = (label = '') => {
+  const s = String(label).trim().replace(/\s+/g, '').toLowerCase();
+  const m = s.match(/^(\d+(?:\.\d+)?)(gm|g)?$/);
+  if (!m) return s; // non-numeric label – return as-is
+  const num = parseFloat(m[1]);
+  if (!isFinite(num)) return s;
+  // Use JS float string which already drops trailing zeros, e.g. parseFloat("0.100") → 0.1 → "0.1"
+  return String(num) + 'gm';
+};
+
 const normalizeInventoryRow = (row) => ({
   ...row,
   category:      row.category     || row.target_product || '',
@@ -87,8 +100,9 @@ const _buildAvailabilityMap = (rows = []) => {
 
   rows.forEach((row) => {
     const n = normalizeInventoryRow(row);
-    const exactKey    = `${n.metal_type}::${n.category}::${n.size_label}`;
-    const sizeKey     = `${n.metal_type}::${n.size_label}`;
+    const normSize    = _normSizeKey(n.size_label);
+    const exactKey    = `${n.metal_type}::${n.category}::${normSize}`;
+    const sizeKey     = `${n.metal_type}::${normSize}`;
     const categoryKey = `${n.metal_type}::${n.category}`;
 
     exact.set(exactKey,          (exact.get(exactKey)          || 0) + n.total_pieces);
@@ -148,8 +162,9 @@ const getStockValidation = async (items = [], options = {}) => {
 
     reservedRows.forEach((row) => {
       const n           = normalizeInventoryRow(row);
-      const exactKey    = `${n.metal_type}::${n.category}::${n.size_label}`;
-      const sizeKey     = `${n.metal_type}::${n.size_label}`;
+      const normSize    = _normSizeKey(n.size_label);
+      const exactKey    = `${n.metal_type}::${n.category}::${normSize}`;
+      const sizeKey     = `${n.metal_type}::${normSize}`;
       const categoryKey = `${n.metal_type}::${n.category}`;
       availability.exact.set(exactKey,              (availability.exact.get(exactKey)              || 0) + n.total_pieces);
       availability.legacySize.set(sizeKey,          (availability.legacySize.get(sizeKey)          || 0) + n.total_pieces);
@@ -158,8 +173,9 @@ const getStockValidation = async (items = [], options = {}) => {
   }
 
   const results = normalizedItems.map((item) => {
-    const exactKey    = `${item.metal_type}::${item.category}::${item.size_label}`;
-    const sizeKey     = `${item.metal_type}::${item.size_label}`;
+    const normSize    = _normSizeKey(item.size_label);
+    const exactKey    = `${item.metal_type}::${item.category}::${normSize}`;
+    const sizeKey     = `${item.metal_type}::${normSize}`;
     const categoryKey = `${item.metal_type}::${item.category}`;
     const available_pieces =
       availability.exact.get(exactKey) ??

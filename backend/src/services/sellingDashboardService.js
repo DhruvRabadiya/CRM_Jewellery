@@ -1,67 +1,106 @@
 'use strict';
 
 const db = require('../../config/dbConfig');
+const {
+  recalculateOpeningStock,
+  recalculateInprocessWeight,
+  recalculateTotalLoss,
+} = require('./stockService');
+
+const METAL_TYPES = ['Gold 24K', 'Gold 22K', 'Silver'];
 
 /**
- * Dashboard summary for the Selling area.
- * Sources:
- *   customer_ledger_entries  — metal payments received (PAYMENT_METAL entries)
- *   counter_cash_ledger      — cash / online totals  (mode column: 'Cash' | 'Bank / UPI')
- *   customers                — outstanding receivables (outstanding_balance column)
- *   order_bills              — bill count and total billed
+ * Dashboard summary for the Selling Counter area.
+ *
+ * Metal stock — live opening_stock + inprocess_weight from stock_master,
+ * recalculated from production source tables on every call (same logic as
+ * the Production Dashboard).  Changes in production immediately appear here.
+ *
+ * Bills — all-time totals + the 15 most recent estimates.
+ *
+ * Roj Med daily cash/bank/metal balances are fetched separately by the
+ * frontend via GET /api/roj-med/today-summary so this endpoint stays
+ * independent of whether today's Roj Med has been started.
  */
 const getDashboard = async () => {
-  // Metal received as payment — weight_delta is negative (metal flowing IN)
-  const metalReceivedRows = await db.pAll(
+  // ── 1. Recalculate stock_master from production source tables ──────────────
+  // Identical to what the Production Dashboard (stockController.getStock) does,
+  // so both dashboards always show the same numbers.
+  await Promise.all(
+    METAL_TYPES.flatMap((m) => [
+      recalculateOpeningStock(m),
+      recalculateInprocessWeight(m),
+      recalculateTotalLoss(m),
+    ])
+  );
+
+  const stockRows = await db.pAll(
+    `SELECT metal_type, opening_stock, inprocess_weight, total_loss
+       FROM stock_master
+      WHERE metal_type IN ('Gold 24K', 'Gold 22K', 'Silver')`
+  );
+
+  const defaultStock = (mt) => ({
+    metal_type: mt,
+    opening_stock: 0,
+    inprocess_weight: 0,
+    total_loss: 0,
+  });
+  const byMetal = Object.fromEntries((stockRows || []).map((r) => [r.metal_type, r]));
+  const stock = {
+    gold24k: byMetal['Gold 24K'] || defaultStock('Gold 24K'),
+    gold22k: byMetal['Gold 22K'] || defaultStock('Gold 22K'),
+    silver:  byMetal['Silver']   || defaultStock('Silver'),
+  };
+
+  // ── 2. All-time bill stats ─────────────────────────────────────────────────
+  const statsRow = await db.pGet(
     `SELECT
-       metal_type,
-       ROUND(ABS(SUM(weight_delta)), 4) AS total_weight,
-       ROUND(SUM(
-         CASE WHEN reference_rate > 0
-              THEN ABS(weight_delta) * reference_rate / 10.0
-              ELSE 0 END
-       ), 2) AS estimated_value
-     FROM customer_ledger_entries
-     WHERE line_type = 'PAYMENT_METAL' AND weight_delta < 0
-     GROUP BY metal_type`
+       COUNT(*)                                                     AS bill_count,
+       ROUND(COALESCE(SUM(total_amount), 0), 2)                    AS billed_total,
+       ROUND(COALESCE(SUM(CASE WHEN amt_baki > 0 THEN amt_baki ELSE 0 END), 0), 2)
+                                                                   AS receivable_total
+     FROM order_bills`
   );
 
-  // Cash and bank totals from the counter cash ledger.
-  // Column name: `mode`  Values: 'Cash' | 'Bank / UPI'
-  const cashRow = await db.pGet(
+  // ── 3. Recent 15 bills — all-time, newest first ───────────────────────────
+  // payment_mode is derived from the stored legacy columns (cash_amount,
+  // online_amount, fine_jama / jama_gold_22k / jama_silver) to avoid parsing
+  // payment_entries JSON in SQL.
+  const recentBills = await db.pAll(
     `SELECT
-       ROUND(SUM(CASE WHEN mode = 'Cash'      THEN amount ELSE 0 END), 2) AS total_cash,
-       ROUND(SUM(CASE WHEN mode = 'Bank / UPI' THEN amount ELSE 0 END), 2) AS total_online,
-       ROUND(SUM(CASE WHEN amount > 0         THEN amount ELSE 0 END), 2) AS total_received
-     FROM counter_cash_ledger`
-  );
-
-  // Outstanding receivables from customers.
-  // Column name: `outstanding_balance` (not balance_cash)
-  const outstandingRow = await db.pGet(
-    `SELECT ROUND(SUM(outstanding_balance), 2) AS total_outstanding
-       FROM customers
-      WHERE outstanding_balance > 0`
-  );
-
-  const billRow = await db.pGet(
-    `SELECT COUNT(*)                       AS total_bills,
-            ROUND(SUM(total_amount), 2)    AS total_billed
-       FROM order_bills`
+       b.id,
+       b.ob_no                                     AS bill_no,
+       b.date,
+       b.customer_name,
+       b.customer_type,
+       b.total_amount,
+       b.amt_jama                                  AS amount_paid,
+       b.amt_baki                                  AS outstanding_amount,
+       b.refund_due,
+       b.fine_jama                                 AS metal_gold24k,
+       b.jama_gold_22k                             AS metal_gold22k,
+       b.jama_silver                               AS metal_silver,
+       CASE
+         WHEN (b.fine_jama > 0 OR b.jama_gold_22k > 0 OR b.jama_silver > 0)
+              AND (b.cash_amount > 0 OR b.online_amount > 0) THEN 'Mixed'
+         WHEN (b.fine_jama > 0 OR b.jama_gold_22k > 0 OR b.jama_silver > 0) THEN 'Metal'
+         WHEN b.cash_amount  > 0 AND b.online_amount > 0                     THEN 'Mixed'
+         WHEN b.online_amount > 0                                             THEN 'Bank / UPI'
+         WHEN b.cash_amount  > 0                                              THEN 'Cash'
+         ELSE NULL
+       END AS payment_mode
+     FROM order_bills b
+     ORDER BY b.id DESC
+     LIMIT 15`
   );
 
   return {
-    metalReceived: metalReceivedRows,
-    cash: {
-      total_cash:     (cashRow && cashRow.total_cash)     || 0,
-      total_online:   (cashRow && cashRow.total_online)   || 0,
-      total_received: (cashRow && cashRow.total_received) || 0,
-    },
-    outstanding: (outstandingRow && outstandingRow.total_outstanding) || 0,
-    bills: {
-      total_bills:  (billRow && billRow.total_bills)  || 0,
-      total_billed: (billRow && billRow.total_billed) || 0,
-    },
+    stock,
+    bill_count:       (statsRow && statsRow.bill_count)       || 0,
+    billed_total:     (statsRow && statsRow.billed_total)     || 0,
+    receivable_total: (statsRow && statsRow.receivable_total) || 0,
+    recent_bills:     recentBills || [],
   };
 };
 

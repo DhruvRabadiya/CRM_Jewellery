@@ -5,13 +5,13 @@ import {
   Trash2, Edit2, X, CheckCircle2, AlertTriangle, Coins,
   Wallet, TrendingUp, TrendingDown, ShoppingBag, Wrench,
   RefreshCw, Calendar, User, ArrowDownCircle, ArrowUpCircle,
-  Receipt, ExternalLink, ChevronDown, ChevronUp,
+  Receipt, ExternalLink, ChevronDown, ChevronUp, UserPlus, Search,
 } from "lucide-react";
 import {
   getDay, addEntry, editEntry, deleteEntry,
-  closeDay, reopenDay, listDays,
+  closeDay, reopenDay,
 } from "../api/rojMedService";
-import { getCustomers } from "../api/customerService";
+import { getCustomers, createCustomer } from "../api/customerService";
 import { useAuth } from "../context/AuthContext";
 import { useSellingSync } from "../context/SellingSyncContext";
 import Toast from "../components/Toast";
@@ -71,13 +71,273 @@ const blankForm = () => ({
   entry_time: "",
 });
 
+// ─── PartyCombo — search existing customers or quick-add a new one ────────────
+
+function PartyCombo({ selectedParty, onSelect, customers, onCustomerCreated }) {
+  const [query,    setQuery]    = useState("");
+  const [open,     setOpen]     = useState(false);
+  const [addMode,  setAddMode]  = useState(false);
+  const [newName,  setNewName]  = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [addError, setAddError] = useState("");
+  const [adding,   setAdding]   = useState(false);
+  const containerRef            = useRef(null);
+
+  // Sync display text when selected party changes externally (reset / edit open)
+  useEffect(() => {
+    setQuery(selectedParty?.party_name || "");
+    setAddMode(false);
+    setAddError("");
+  }, [selectedParty]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const h = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setAddMode(false);
+      }
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const q        = query.trim().toLowerCase();
+  const filtered = q
+    ? customers.filter(c =>
+        c.party_name.toLowerCase().includes(q) ||
+        (c.firm_name || "").toLowerCase().includes(q) ||
+        (c.phone_no  || "").includes(q)
+      )
+    : customers.slice(0, 10);
+  const exactMatch = customers.some(c => c.party_name.toLowerCase() === q);
+  const canAddNew  = q.length > 0 && !exactMatch;
+
+  const handleSelect = (c) => {
+    onSelect(c);
+    setQuery(c.party_name);
+    setOpen(false);
+    setAddMode(false);
+  };
+
+  const handleUnlink = () => {
+    onSelect(null);
+    setQuery("");
+    setAddMode(false);
+    setOpen(false);
+  };
+
+  const handleOpenAdd = () => {
+    setNewName(query.trim());
+    setNewPhone("");
+    setAddError("");
+    setAddMode(true);
+  };
+
+  const handleCreate = async () => {
+    if (!newName.trim()) { setAddError("Name is required"); return; }
+    if (newPhone.trim() && !/^\d{10,15}$/.test(newPhone.trim())) {
+      setAddError("Phone must be 10–15 digits (numbers only)");
+      return;
+    }
+    setAdding(true);
+    setAddError("");
+    try {
+      const result = await createCustomer({
+        party_name:    newName.trim(),
+        firm_name:     newName.trim(),   // default same as party name
+        address:       "-",
+        city:          "-",
+        phone_no:      newPhone.trim(),
+        customer_type: "Retail",
+      });
+      const created = result?.data || result?.customer || result;
+      onCustomerCreated(created);
+      onSelect(created);
+      setQuery(created.party_name || newName.trim());
+      setOpen(false);
+      setAddMode(false);
+    } catch (err) {
+      setAddError(err?.message || "Failed to create customer — check details and retry");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Search input */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (selectedParty) onSelect(null);
+            setOpen(true);
+            setAddMode(false);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search or add new party / customer…"
+          className={`w-full pl-9 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white transition-colors ${
+            selectedParty ? "border-indigo-300 pr-24" : "border-slate-200 pr-4"
+          }`}
+        />
+        {selectedParty && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5 leading-tight">
+              linked
+            </span>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleUnlink}
+              className="text-slate-300 hover:text-rose-500 transition-colors p-0.5"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-40 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+
+          {/* Existing customers list */}
+          {!addMode && (
+            <div className="max-h-48 overflow-y-auto">
+              {filtered.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleSelect(c)}
+                  className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 border-b border-slate-50 last:border-b-0 transition-colors"
+                >
+                  <p className="text-sm font-bold text-slate-800">{c.party_name}</p>
+                  {(c.phone_no || c.customer_type) && (
+                    <p className="text-xs text-slate-400">
+                      {c.phone_no || ""}
+                      {c.phone_no && c.customer_type ? " · " : ""}
+                      {c.customer_type || ""}
+                    </p>
+                  )}
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <p className="px-4 py-3 text-xs text-slate-400">No customers found</p>
+              )}
+            </div>
+          )}
+
+          {/* "+ Add new" trigger row */}
+          {!addMode && canAddNew && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleOpenAdd}
+              className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 text-emerald-700 font-bold text-sm flex items-center gap-2 border-t border-slate-100 transition-colors"
+            >
+              <UserPlus size={14} />
+              Add &quot;{query.trim()}&quot; as new customer
+            </button>
+          )}
+
+          {/* Quick-add mini form */}
+          {addMode && (
+            <div className="p-4 space-y-3 bg-emerald-50/40">
+              <p className="text-xs font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+                <UserPlus size={12} /> New Customer
+              </p>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Party / customer name"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                  Phone <span className="text-slate-400 font-semibold normal-case tracking-normal">(optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, ""))}
+                  placeholder="10–15 digit mobile number"
+                  maxLength={15}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 bg-white"
+                />
+              </div>
+
+              {addError && (
+                <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
+                  <AlertTriangle size={11} /> {addError}
+                </p>
+              )}
+
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { setAddMode(false); setAddError(""); }}
+                  className="flex-1 py-1.5 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleCreate}
+                  disabled={adding}
+                  className="flex-1 py-1.5 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <UserPlus size={12} />
+                  {adding ? "Adding…" : "Create & Link"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── AddEditEntry modal ───────────────────────────────────────────────────────
 
-function EntryModal({ open, onClose, onSave, initialData, customers, saving }) {
-  const [form, setForm] = useState(blankForm());
+function EntryModal({ open, onClose, onSave, initialData, customers, saving, onCustomerCreated }) {
+  const [form,          setForm]          = useState(blankForm());
+  const [selectedParty, setSelectedParty] = useState(null);
 
   useEffect(() => {
-    if (open) setForm(initialData ? { ...blankForm(), ...initialData } : blankForm());
+    if (open) {
+      const f = initialData ? { ...blankForm(), ...initialData } : blankForm();
+      setForm(f);
+      // Restore linked customer when editing
+      if (f.party_id) {
+        const found = customers.find(c => c.id === Number(f.party_id));
+        setSelectedParty(
+          found ||
+          (initialData?.party_name
+            ? { id: Number(f.party_id), party_name: initialData.party_name }
+            : null)
+        );
+      } else {
+        setSelectedParty(null);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialData]);
 
   if (!open) return null;
@@ -104,7 +364,7 @@ function EntryModal({ open, onClose, onSave, initialData, customers, saving }) {
     payload.amount       = parseFloat(payload.amount)       || 0;
     payload.metal_weight = parseFloat(payload.metal_weight) || 0;
     payload.metal_rate   = parseFloat(payload.metal_rate)   || 0;
-    payload.party_id     = payload.party_id ? parseInt(payload.party_id, 10) : null;
+    payload.party_id     = selectedParty?.id ? parseInt(selectedParty.id, 10) : null;
     onSave(payload);
   };
 
@@ -146,16 +406,17 @@ function EntryModal({ open, onClose, onSave, initialData, customers, saving }) {
           {/* Party */}
           <div>
             <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Party / Customer</label>
-            <select
-              value={form.party_id}
-              onChange={e => set("party_id", e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 bg-white"
-            >
-              <option value="">— No party / General —</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>{c.party_name}{c.firm_name ? ` (${c.firm_name})` : ""}</option>
-              ))}
-            </select>
+            <PartyCombo
+              selectedParty={selectedParty}
+              onSelect={(c) => setSelectedParty(c)}
+              customers={customers}
+              onCustomerCreated={onCustomerCreated}
+            />
+            {!selectedParty && (
+              <p className="text-[10px] text-slate-400 mt-1 ml-0.5">
+                Leave blank for a general / walk-in entry
+              </p>
+            )}
           </div>
 
           {/* Cash / Amount row */}
@@ -652,7 +913,8 @@ export default function RojMed() {
 
   const isClosed        = dayData?.status === "CLOSED";
   const t               = dayData?.live_totals || {};
-  const mt              = dayData?.manual_totals || {};
+  // manual_totals available but not displayed in current UI
+  void dayData?.manual_totals;
   const et              = dayData?.estimate_totals || {};
   const entries         = dayData?.entries || [];
   const estimateEntries = dayData?.estimate_entries || [];
@@ -780,7 +1042,6 @@ export default function RojMed() {
               value={fmtINR(t.cash_balance)}
               sub={`Open: ${fmtINR(dayData?.opening_cash)} · In: ${fmtINR(t.total_cash_in)} · Out: ${fmtINR(t.total_cash_out)}`}
               accent="indigo"
-              positive={t.cash_balance >= 0}
             />
 
             {/* Bank Balance */}
@@ -790,7 +1051,6 @@ export default function RojMed() {
               value={fmtINR(t.bank_balance)}
               sub={`Open: ${fmtINR(dayData?.opening_bank || 0)} · In: ${fmtINR(t.total_bank_in)} · Out: ${fmtINR(t.total_bank_out)}`}
               accent={hasBankActivity ? "blue" : "slate"}
-              positive={t.bank_balance >= 0}
             />
 
             {/* Counter Sales (combined) */}
@@ -800,7 +1060,6 @@ export default function RojMed() {
               value={fmtINR(t.total_counter_sales)}
               sub={`${et.bill_count || 0} bill${et.bill_count !== 1 ? "s" : ""} · Outst: ${fmtINR(et.est_outstanding)}`}
               accent="emerald"
-              positive
             />
           </div>
 
@@ -851,7 +1110,7 @@ export default function RojMed() {
           <MetalPurchasesSection entries={entries} />
 
           {/* ── Today's Estimates (auto-synced from Estimate page) ── */}
-          <EstimatesSection estimateEntries={estimateEntries} et={et} selectedDate={selectedDate} />
+          <EstimatesSection estimateEntries={estimateEntries} et={et} />
 
           {/* ── Entries Table ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1049,6 +1308,7 @@ export default function RojMed() {
         initialData={entryModal.editing}
         customers={customers}
         saving={saving}
+        onCustomerCreated={(newCust) => setCustomers(prev => [...prev, newCust])}
       />
 
       <CloseDayModal
@@ -1187,7 +1447,7 @@ function MetalPurchasesSection({ entries }) {
 
 // ─── Estimates Section (auto-synced from Estimate page) ──────────────────────
 
-function EstimatesSection({ estimateEntries, et, selectedDate }) {
+function EstimatesSection({ estimateEntries, et }) {
   const [expanded, setExpanded] = useState(true);
   const [expandedBill, setExpandedBill] = useState(null);
 
@@ -1414,7 +1674,7 @@ function EstimatesSection({ estimateEntries, et, selectedDate }) {
 
 // ─── Summary Card ─────────────────────────────────────────────────────────────
 
-function SummaryCard({ icon, label, value, sub, accent, positive }) {
+function SummaryCard({ icon, label, value, sub, accent }) {
   const colors = {
     indigo:  { bg: "bg-indigo-50",  border: "border-indigo-200",  icon: "bg-indigo-500",  val: "text-indigo-700" },
     emerald: { bg: "bg-emerald-50", border: "border-emerald-200", icon: "bg-emerald-500", val: "text-emerald-700" },
@@ -1442,7 +1702,6 @@ function SummaryCard({ icon, label, value, sub, accent, positive }) {
 function MetalCard({ metal, bal, inW, outW, opening }) {
   const isGold24 = metal === "Gold 24K";
   const isGold22 = metal === "Gold 22K";
-  const isSilver = metal === "Silver";
   const color = isGold24 ? "amber" : isGold22 ? "orange" : "slate";
   const colorMap = {
     amber:  { bg: "bg-amber-50",  border: "border-amber-200",  val: "text-amber-700",  sub: "text-amber-500"  },

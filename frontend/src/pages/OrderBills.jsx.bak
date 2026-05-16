@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -43,6 +43,7 @@ import { BILL_STATUS_LIST, BILL_STATUS_CONFIG, getStatusConfig, isStockActive } 
 // --- Constants ---
 const METAL_TYPES    = METAL_PAYMENT_TYPES;
 const CUSTOMER_TYPES = ["Retail", "Showroom", "Wholesale"];
+const BILLS_PER_PAGE = 20;
 
 // --- Formatting helpers ---
 const fmt = (value, digits = 3) => Number(value || 0).toFixed(digits);
@@ -111,7 +112,7 @@ const buildItemsFromCharges = (groupedCharges, selectedMetals, customerType, exi
       item,
     ])
   );
-  // Fallback key: metal_type::normalized_size_label - needed because saved items store
+  // Fallback key: metal_type::normalized_size_label — needed because saved items store
   // normalizeEstimateSizeLabel(metal_type, size_label) for both category AND size_label,
   // so the exact key never matches groupedCharges keys on edit.
   const existingByNorm = new Map(
@@ -149,39 +150,6 @@ const buildItemsFromCharges = (groupedCharges, selectedMetals, customerType, exi
     });
   });
   return rows;
-};
-
-// Purity string for a given metal type
-const metalPurityFor = (metalType) =>
-  metalType === "Gold 22K" ? "91.67" : metalType === "Silver" ? "99.90" : "99.99";
-
-// Normalise any legacy payment_entries into three fixed slots used by the form:
-//   [0] Metal  (weight + reference_rate)
-//   [1] Cash   (amount)
-//   [2] Bank / UPI (amount)
-// settlementRate: the saved rate/10g for this metal (used as fallback when payment entries
-// have no reference_rate).
-const toFixedPayments = (entries = [], metalType = "Gold 24K", settlementRate = 0) => {
-  const metal    = entries.find((e) => e.payment_type === "Metal") || {};
-  const cashSum  = entries
-    .filter((e) => e.payment_type === "Cash")
-    .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-  const bankSum  = entries
-    .filter((e) => e.payment_type === "Bank / UPI" || e.payment_type === "Bank")
-    .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-  const refRate  = metal.reference_rate || (settlementRate > 0 ? String(settlementRate) : "");
-  return [
-    {
-      payment_type:   "Metal",
-      amount:         "",
-      metal_type:     metal.metal_type || metalType,
-      weight:         metal.weight     || "",
-      purity:         metal.purity     || metalPurityFor(metalType),
-      reference_rate: refRate,
-    },
-    { payment_type: "Cash",       amount: cashSum > 0 ? String(cashSum) : "", metal_type: "Gold 24K", weight: "", purity: "", reference_rate: "" },
-    { payment_type: "Bank / UPI", amount: bankSum > 0 ? String(bankSum) : "", metal_type: "Gold 24K", weight: "", purity: "", reference_rate: "" },
-  ];
 };
 
 // --- Toast ---
@@ -227,7 +195,7 @@ const CustomerNameCombo = ({ value, onChange, onSelect, onUnlink, linkedCustomer
   const handleChange = (e) => {
     const v = e.target.value;
     onChange(v);
-    // Typing after a linked customer - unlink (keep name, don't wipe phone/address)
+    // Typing after a linked customer → unlink (keep name, don't wipe phone/address)
     if (linkedCustomer) onUnlink();
     clearTimeout(debounceRef.current);
     if (!v.trim()) { setResults([]); setOpen(false); return; }
@@ -257,7 +225,7 @@ const CustomerNameCombo = ({ value, onChange, onSelect, onUnlink, linkedCustomer
           value={value}
           onChange={handleChange}
           onFocus={() => { if (results.length > 0) setOpen(true); }}
-          placeholder="Type to search existing customers or enter a new name..."
+          placeholder="Type to search existing customers or enter a new name…"
           className={`w-full pl-9 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 transition-colors ${
             linkedCustomer
               ? "border-indigo-300 pr-24"
@@ -297,7 +265,7 @@ const CustomerNameCombo = ({ value, onChange, onSelect, onUnlink, linkedCustomer
               <p className="text-sm font-bold text-slate-800">{c.party_name}</p>
               <p className="text-xs text-slate-500">
                 {c.phone_no || "No phone"}
-                {c.city ? ` | ${c.city}` : ""}
+                {c.city ? `  ·  ${c.city}` : ""}
                 {"  "}
                 <span className="text-indigo-400 font-semibold">{c.customer_type}</span>
               </p>
@@ -324,7 +292,7 @@ const Pagination = ({ page, totalPages, onChange, label }) => {
     <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
       {label && <span className="text-xs text-slate-400 font-semibold hidden sm:block">{label}</span>}
       <div className="flex items-center gap-1 mx-auto sm:mx-0">
-        <button onClick={() => onChange(1)} disabled={page <= 1} className="px-1.5 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-30">|&lt;</button>
+        <button onClick={() => onChange(1)} disabled={page <= 1} className="px-1.5 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-30">«</button>
         <button onClick={() => onChange(page - 1)} disabled={page <= 1} className="p-1 text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-30"><ChevronLeft size={15} /></button>
         {buildPages().map((p) => (
           <button key={p} onClick={() => onChange(p)}
@@ -332,7 +300,7 @@ const Pagination = ({ page, totalPages, onChange, label }) => {
           >{p}</button>
         ))}
         <button onClick={() => onChange(page + 1)} disabled={page >= totalPages} className="p-1 text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-30"><ChevronRight size={15} /></button>
-        <button onClick={() => onChange(totalPages)} disabled={page >= totalPages} className="px-1.5 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-30">>></button>
+        <button onClick={() => onChange(totalPages)} disabled={page >= totalPages} className="px-1.5 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-30">»</button>
       </div>
     </div>
   );
@@ -387,8 +355,8 @@ const PrintView = ({ bill, onClose }) => {
   };
 
   const handlePrint = async () => {
-    // Electron: send structured data via IPC - main creates hidden 80mm window
-    // - webContents.print({ silent: true, deviceName }) - direct to thermal printer.
+    // Electron: send structured data via IPC → main creates hidden 80mm window
+    // → webContents.print({ silent: true, deviceName }) → direct to thermal printer.
     // Browser/dev: fall back to window.print().
     const isElectron = typeof window !== "undefined" && typeof window.electronAPI !== "undefined";
     if (!isElectron) {
@@ -401,7 +369,7 @@ const PrintView = ({ bill, onClose }) => {
     }
     setPrinting(true);
     try {
-      // Build the data payload - use pre-computed values from summary; no recalculation here.
+      // Build the data payload — use pre-computed values from summary; no recalculation here.
       const estimateData = {
         billNo:        bill.ob_no,
         date:          bill.date,
@@ -461,7 +429,7 @@ const PrintView = ({ bill, onClose }) => {
     // Inline z-index 9999 + fixed inset-0 guarantees we sit above SellingLayout's
     // stacking contexts (overflow-hidden root, overflow-auto main, z-20 header).
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#e2e8f0", overflowY: "auto" }}>
-      {/* Print CSS - only #estimate-print-area is visible when printing */}
+      {/* Print CSS — only #estimate-print-area is visible when printing */}
       <style>{`
         @media print {
           @page { size: A4 portrait; margin: 12mm 15mm 15mm 15mm; }
@@ -472,12 +440,12 @@ const PrintView = ({ bill, onClose }) => {
         }
       `}</style>
 
-      {/* == Toolbar (hidden when printing) == */}
+      {/* ── Toolbar (hidden when printing) ── */}
       <div
         className="print:hidden"
         style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
       >
-        {/* Row 1 - back / title / print */}
+        {/* Row 1 — back / title / print */}
         <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <button
             onClick={onClose}
@@ -487,7 +455,7 @@ const PrintView = ({ bill, onClose }) => {
           </button>
 
           <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>
-            Print Preview - Estimate #{bill.ob_no}
+            Print Preview — Estimate #{bill.ob_no}
           </span>
 
           <button
@@ -495,16 +463,16 @@ const PrintView = ({ bill, onClose }) => {
             disabled={printing}
             style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#fff", cursor: printing ? "not-allowed" : "pointer", background: printing ? "#6366f1" : "#4f46e5", border: "none", borderRadius: 8, padding: "7px 14px", opacity: printing ? 0.7 : 1, whiteSpace: "nowrap" }}
           >
-            <Printer size={15} /> {printing ? "Printing..." : "Print"}
+            <Printer size={15} /> {printing ? "Printing…" : "Print"}
           </button>
         </div>
 
-        {/* Row 2 - printer selector */}
+        {/* Row 2 — printer selector */}
         <div style={{ padding: "0 16px 10px", display: "flex", alignItems: "center", gap: 10 }}>
           <Printer size={14} style={{ color: "#64748b", flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>Printer:</span>
           {printersLoading ? (
-            <span style={{ fontSize: 12, color: "#94a3b8" }}>Loading printers...</span>
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>Loading printers…</span>
           ) : printers.length === 0 ? (
             <span style={{ fontSize: 12, color: "#b45309", display: "flex", alignItems: "center", gap: 8 }}>
               No printers detected automatically
@@ -522,18 +490,18 @@ const PrintView = ({ bill, onClose }) => {
             >
               {[...printers].sort((a, b) => isPdfPrinter(a.name) - isPdfPrinter(b.name)).map((p) => (
                 <option key={p.name} value={p.name}>
-                  {p.name}{p.isDefault ? "  Default" : ""}{isPdfPrinter(p.name) ? "  (PDF)" : ""}
+                  {p.name}{p.isDefault ? "  ★ default" : ""}{isPdfPrinter(p.name) ? "  (PDF)" : ""}
                 </option>
               ))}
             </select>
           )}
           {selectedPrinter && !printersLoading && (
-            <span style={{ fontSize: 11, color: "#16a34a", whiteSpace: "nowrap" }}>Saved</span>
+            <span style={{ fontSize: 11, color: "#16a34a", whiteSpace: "nowrap" }}>✓ saved</span>
           )}
         </div>
       </div>
 
-      {/* == Paper preview == */}
+      {/* ── Paper preview ── */}
       <div style={{ display: "flex", justifyContent: "center", padding: "32px 16px 48px" }}>
         <div
           id="estimate-print-area"
@@ -564,7 +532,7 @@ const PrintView = ({ bill, onClose }) => {
             </div>
           </div>
 
-          {/* Items per metal - one flat table per metal type, no category sub-grouping */}
+          {/* Items per metal — one flat table per metal type, no category sub-grouping */}
           {products.map((metalType) => {
             const metalItems = items.filter((item) => (item.metal_type || "Gold 24K") === metalType);
             if (!metalItems.length) return null;
@@ -926,23 +894,21 @@ export default function OrderBills() {
   const [stockValidation, setStockValidation] = useState({ valid: true, items: [] });
   const [validatingStock, setValidatingStock] = useState(false);
   const [showCustomerDetails, setShowCustomerDetails] = useState(false);
-  // Global unified picker for the flat items table
-  const [globalPicker, setGlobalPicker] = useState({ show: false, category: "", size_label: "" });
+  // Per-metal "add size" picker: { [metalType]: { show, category, size_label } }
+  const [addPicker, setAddPicker] = useState({});
   // Tracks which item keys have been explicitly added via the picker.
-  // A row stays visible as long as its key is here - even when pcs is cleared.
+  // A row stays visible as long as its key is here — even when pcs is cleared.
   const [addedKeys, setAddedKeys] = useState(() => new Set());
 
   // Unified workflow status: "Pending" (production order) | "Ready" (estimate) | "Delivered"
   // This is the single field that drives stock behaviour, UI colours, and list filtering.
   const [billStatus, setBillStatus]       = useState("Ready");
-  const [billType, setBillType]           = useState("estimate"); // "estimate" | "order"
-  // Delivery date - relevant for Pending (production) orders
+  // Delivery date — relevant for Pending (production) orders
   const [deliveryDate, setDeliveryDate]   = useState("");
   // List-view status filter: "all" | "Pending" | "Ready" | "Delivered"
   const [statusFilter, setStatusFilter]   = useState("all");
   // Keyboard-nav refs for PCS inputs
-  const pcsInputRefs   = useRef({});
-  const firstPaymentRef = useRef(null);
+  const pcsInputRefs = useRef({});
 
 // --- State ---
   const showToast = useCallback((message, type = "success") => {
@@ -953,7 +919,7 @@ export default function OrderBills() {
     const requestId = latestBillsRequestRef.current + 1;
     latestBillsRequestRef.current = requestId;
     setListLoading(true);
-    // Do NOT clear bills here - keep existing rows visible while the new date loads.
+    // Do NOT clear bills here — keep existing rows visible while the new date loads.
     // This prevents the table flash and makes date navigation feel instant.
 
     try {
@@ -986,16 +952,16 @@ export default function OrderBills() {
     setCustomerPhone("");
     setCustomerAddress("");
     setCustomerType("Retail");
-    setPaymentEntries(toFixedPayments([], "Gold 24K"));
+    setPaymentEntries([createEmptyPaymentEntry()]);
     setSettlementRates(normalizeSettlementRates());
     setDiscount("");
     setItems(buildItemsFromCharges(charges, ["Gold 24K"], "Retail"));
     setRoundOff("");
     setRoundOffSign("+");
     setBillStatus("Ready");
-    setBillType("estimate");
     setDeliveryDate("");
     setAddedKeys(new Set());
+    setAddPicker({});
   }, []);
 
 // --- State ---
@@ -1040,7 +1006,7 @@ export default function OrderBills() {
   }, [stockValidation.items]);
 
 // --- Helper ---
-  // Pure local-date arithmetic - never touches UTC so timezone can't corrupt the result.
+  // Pure local-date arithmetic — never touches UTC so timezone can't corrupt the result.
   const shiftDate = useCallback((dateStr, delta) => {
     const [y, m, d] = dateStr.split("-").map(Number);
     const date = new Date(y, m - 1, d); // constructed in local time, no UTC conversion
@@ -1078,6 +1044,12 @@ export default function OrderBills() {
     });
     return result;
   }, [bills, statusFilter, listSearch, listSort]);
+
+  const totalBillPages = Math.ceil(filteredBills.length / BILLS_PER_PAGE);
+  const pagedBills = useMemo(() => {
+    const start = (listPage - 1) * BILLS_PER_PAGE;
+    return filteredBills.slice(start, start + BILLS_PER_PAGE);
+  }, [filteredBills, listPage]);
 
   // Reset to page 1 whenever the active filter set changes
   useEffect(() => { setListPage(1); }, [listSearch, listSort, selectedDate, statusFilter]);
@@ -1124,21 +1096,22 @@ export default function OrderBills() {
   }, [editBill?.id, items, view]);
 
 // --- State ---
-  // Single-select: clicking a metal makes it the only selected metal.
-  // Clears items/addedKeys from the previous metal and syncs the Metal payment slot.
-  const handleProductSelect = useCallback((metalType) => {
+  const handleProductToggle = useCallback((metalType) => {
     setSelectedProducts((cur) => {
-      if (cur.length === 1 && cur[0] === metalType) return cur; // no-op
-      setItems((prev) => buildItemsFromCharges(groupedCharges, [metalType], customerType, prev));
-      setAddedKeys(new Set()); // clear rows - new metal, fresh start
-      return [metalType];
-    });
-    // Sync the Metal payment entry to the new metal type
-    setPaymentEntries((cur) => {
-      if (!Array.isArray(cur) || cur.length < 1) return cur;
-      return cur.map((e, i) =>
-        i === 0 ? { ...e, metal_type: metalType, purity: metalPurityFor(metalType) } : e
-      );
+      const removing = cur.includes(metalType) && cur.length > 1;
+      const next = cur.includes(metalType)
+        ? cur.length === 1 ? cur : cur.filter((v) => v !== metalType)
+        : [...cur, metalType];
+      setItems((prev) => buildItemsFromCharges(groupedCharges, next, customerType, prev));
+      if (removing) {
+        // Remove all addedKeys for this metal type so rows don't reappear if re-added
+        setAddedKeys((prev) => {
+          const next2 = new Set(prev);
+          [...next2].forEach((k) => { if (k.startsWith(`${metalType}::`)) next2.delete(k); });
+          return next2;
+        });
+      }
+      return next;
     });
   }, [customerType, groupedCharges]);
 
@@ -1215,25 +1188,6 @@ export default function OrderBills() {
     }
   }, []);
 
-  // Add a row via the unified global picker (metal always = selectedProducts[0])
-  // overrideSize lets callers pass the size directly (avoids stale-closure issues on Enter key)
-  const confirmGlobalAdd = useCallback((overrideSize) => {
-    const metalType = selectedProducts[0] || "Gold 24K";
-    const { category, size_label: pickerSize } = globalPicker;
-    const size_label = overrideSize || pickerSize;
-    if (!size_label) return;
-    const key = itemKey(metalType, category, size_label);
-    setAddedKeys((prev) => new Set([...prev, key]));
-    setItems((prev) => prev.map((item) => {
-      if (item.metal_type === metalType && item.category === category && item.size_label === size_label && (parseInt(item.pcs, 10) || 0) === 0) {
-        return { ...item, pcs: "" };
-      }
-      return item;
-    }));
-    setGlobalPicker((p) => ({ ...p, show: false, size_label: "" }));
-    setTimeout(() => { if (pcsInputRefs.current[key]) pcsInputRefs.current[key].focus(); }, 60);
-  }, [globalPicker, selectedProducts]);
-
   const openNew = useCallback(async () => {
     const charges = Object.keys(groupedCharges).length ? groupedCharges : await loadCharges();
     await resetForm(charges, selectedDate);
@@ -1245,14 +1199,12 @@ export default function OrderBills() {
     try {
       const charges  = Object.keys(groupedCharges).length ? groupedCharges : await loadCharges();
       const full     = await getOrderBill(bill.id);
-      // Always use a single metal - take the first from the saved list
-      const products    = parseProducts(full.products);
-      const singleMetal = products[0] || "Gold 24K";
+      const products = parseProducts(full.products);
       setEditBill(full);
       setObNo(String(full.ob_no || ""));
       setFormDate(full.date || new Date().toISOString().split("T")[0]);
       setProduct(full.product || "");
-      setSelectedProducts([singleMetal]);
+      setSelectedProducts(products);
       setSelectedCustomer(
         full.customer_id
           ? { id: full.customer_id, party_name: full.customer_name, phone_no: full.customer_phone, address: full.customer_address, customer_type: full.customer_type }
@@ -1264,26 +1216,22 @@ export default function OrderBills() {
       setCustomerType(full.customer_type || "Retail");
       // Expand customer details if any extra info is present
       setShowCustomerDetails(!!(full.customer_phone || full.customer_address));
-      const savedRates = extractSettlementRates(full);
-      setSettlementRates(savedRates);
-      setPaymentEntries(toFixedPayments(
-        normalizePaymentEntries(full.payment_entries || [], full),
-        singleMetal,
-        savedRates[singleMetal] || 0,
-      ));
+      setPaymentEntries(normalizePaymentEntries(full.payment_entries || [], full));
+      setSettlementRates(extractSettlementRates(full));
       setDiscount(full.discount != null && parseFloat(full.discount) > 0 ? String(full.discount) : "");
       const savedRoundOff = parseFloat(full.round_off) || 0;
       setRoundOff(savedRoundOff !== 0 ? String(Math.abs(savedRoundOff)) : "");
       setRoundOffSign(savedRoundOff < 0 ? "-" : "+");
       setBillStatus(BILL_STATUS_LIST.includes(full.order_status) ? full.order_status : "Ready");
       setDeliveryDate(full.delivery_date || "");
-      const builtItems = buildItemsFromCharges(charges, [singleMetal], full.customer_type || "Retail", full.items || []);
+      const builtItems = buildItemsFromCharges(charges, products, full.customer_type || "Retail", full.items || []);
       setItems(builtItems);
       setAddedKeys(new Set(
         builtItems
           .filter((i) => (parseInt(i.pcs, 10) || 0) > 0)
           .map((i) => itemKey(i.metal_type, i.category, i.size_label))
       ));
+      setAddPicker({});
       setView("form");
     } catch (error) {
       showToast(error?.message || "Failed to load estimate", "error");
@@ -1362,7 +1310,7 @@ export default function OrderBills() {
       summary.amountDue > 0 ||
       METAL_PAYMENT_TYPES.some((mt) => (summary.metalDueUnsettled?.[mt] || 0) > 0);
     if (isBalanceDue && !selectedCustomer && !customerName.trim()) {
-      showToast("Please add the customer's name - there's a balance due and it needs to be tracked in the ledger.", "error");
+      showToast("Please add the customer's name — there's a balance due and it needs to be tracked in the ledger.", "error");
       return;
     }
 
@@ -1541,7 +1489,7 @@ export default function OrderBills() {
             <div>
               <h1 className="text-xl font-black text-slate-800 tracking-tight">Estimates</h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                {bills.length} estimate{bills.length !== 1 ? "s" : ""}  |  customer order tracking
+                {bills.length} estimate{bills.length !== 1 ? "s" : ""}  ·  customer order tracking
               </p>
             </div>
           </div>
@@ -1572,7 +1520,7 @@ export default function OrderBills() {
         {/* Date + Search + Sort */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-3">
           <div className="flex flex-col lg:flex-row lg:items-center gap-2.5">
-            {/* Date navigator - single source of truth: selectedDate */}
+            {/* Date navigator — single source of truth: selectedDate */}
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-1">
               {/* Prev arrow */}
               <button
@@ -1584,7 +1532,7 @@ export default function OrderBills() {
                 <ChevronLeft size={18} />
               </button>
 
-              {/* Date input - directly bound to selectedDate, no intermediate state */}
+              {/* Date input — directly bound to selectedDate, no intermediate state */}
               <input
                 type="date"
                 value={selectedDate}
@@ -1682,13 +1630,13 @@ export default function OrderBills() {
           </div>
         </div>
 
-        {/* Table - always rendered; date changes show inline spinner, no full-page flash */}
+        {/* Table — always rendered; date changes show inline spinner, no full-page flash */}
         <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-opacity duration-150 ${listLoading && bills.length > 0 ? "opacity-60 pointer-events-none" : ""}`}>
           {listLoading && bills.length === 0 ? (
             // First-time load: compact spinner
             <div className="flex items-center justify-center gap-3 py-14">
               <div className="w-5 h-5 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-              <p className="text-sm font-semibold text-slate-400">Loading...</p>
+              <p className="text-sm font-semibold text-slate-400">Loading…</p>
             </div>
           ) : (
             <>
@@ -1821,7 +1769,7 @@ export default function OrderBills() {
                               )}
                             </td>
 
-                            {/* Paid - cash amount + metal received badges */}
+                            {/* Paid — cash amount + metal received badges */}
                             <td className="px-4 py-3 text-right">
                               <span className="font-semibold text-emerald-700 text-sm">{fmtMoney(bill.amt_jama)}</span>
                               {metalReceivedBadges.length > 0 && (
@@ -1835,7 +1783,7 @@ export default function OrderBills() {
                               )}
                             </td>
 
-                            {/* Remaining - cash balance + unsettled metal due */}
+                            {/* Remaining — cash balance + unsettled metal due */}
                             <td className="px-4 py-3 text-right">
                               {hasRefund ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700">
@@ -1905,7 +1853,7 @@ export default function OrderBills() {
                     {filteredBills.length} estimate{filteredBills.length !== 1 ? "s" : ""}
                     {listSearch ? ` matching "${listSearch}"` : ` on ${fmtDate(selectedDate)}`}
                   </p>
-                  <p className="text-[11px] text-slate-300 font-medium">Scroll to browse -</p>
+                  <p className="text-[11px] text-slate-300 font-medium">Scroll to browse ↕</p>
                 </div>
               )}
             </>
@@ -1940,475 +1888,615 @@ export default function OrderBills() {
   // FORM VIEW
 // --- State ---
 
-  // Keyboard-nav key list - all explicitly-added rows are rendered and reachable.
-  const allActiveItems = items
-    .filter((item) => addedKeys.has(itemKey(item.metal_type, item.category, item.size_label)));
-  const allPcsKeys = allActiveItems
+  // Keyboard-nav key list — all explicitly-added rows are rendered and reachable.
+  const allPcsKeys = items
+    .filter((item) => addedKeys.has(itemKey(item.metal_type, item.category, item.size_label)))
     .map((item) => itemKey(item.metal_type, item.category, item.size_label));
 
   return (
     <div className="space-y-5">
       <Toast toast={toast} onClose={() => setToast((c) => ({ ...c, show: false }))} />
 
-      {/* == HEADER BAR == */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-
-        {/* Row 1: Back . Ref# . Date . Status . Save buttons */}
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex-wrap rounded-t-2xl">
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg hover:border-indigo-300 transition-colors flex-shrink-0"
-          >
-            <ArrowLeft size={13} /> Estimates
-          </button>
-
-          <div className="flex items-center gap-1 border border-slate-200 rounded-lg bg-white px-2.5 py-1.5 flex-shrink-0">
-            <span className="text-[10px] font-black text-slate-400">#</span>
-            <input
-              type="number" min="1" value={obNo} onChange={(e) => setObNo(e.target.value)}
-              className="w-12 text-xs font-bold text-slate-600 focus:outline-none bg-transparent"
-            />
+      {/* Form header */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setView("list")}
+          className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 px-3 py-2 rounded-xl hover:border-indigo-200 transition-colors"
+        >
+          <ArrowLeft size={15} /> Estimates
+        </button>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
+            <FileText size={15} className="text-white" />
           </div>
-
-          <input
-            type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)}
-            className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-300 bg-white font-semibold text-slate-700 flex-shrink-0"
-            style={{ colorScheme: "light" }}
-          />
-
-          <div className="flex gap-1 flex-shrink-0">
-            {BILL_STATUS_LIST.map((status) => {
-              const cfg = BILL_STATUS_CONFIG[status];
-              const isActive = billStatus === status;
-              return (
-                <button
-                  key={status} type="button" onClick={() => setBillStatus(status)}
-                  className={"px-3 py-1.5 rounded-lg border text-xs font-black transition-all " + (
-                    isActive
-                      ? cfg.bgClass + " " + cfg.borderClass + " " + cfg.textClass
-                      : "bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
-                  )}
-                >
-                  {cfg.label}
-                </button>
-              );
-            })}
+          <div>
+            <h1 className="text-lg font-black text-slate-800 leading-tight">
+              {editBill
+              ? `Edit ${billStatus === "Pending" ? "Order" : "Estimate"} #${obNo}`
+              : billStatus === "Pending" ? "New Order" : "New Estimate"}
+            </h1>
+            <p className="text-xs text-slate-400">Labour charges auto-filled from Admin settings</p>
           </div>
-
-          {billStatus === "Pending" && (
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-[10px] font-bold text-amber-600 whitespace-nowrap">Deliver by:</span>
-              <input
-                type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
-                className="px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-300 bg-amber-50/50 font-semibold"
-                style={{ colorScheme: "light" }}
-              />
-            </div>
-          )}
-
-          <div className="flex-1 min-w-[8px]" />
-
-          <button
-            type="button" onClick={() => handleSave(false)}
-            disabled={saving || validatingStock || (isStockActive(billStatus) && !stockValidation.valid)}
-            className={"flex items-center gap-1.5 px-4 py-1.5 text-xs font-black rounded-lg text-white transition-colors flex-shrink-0 disabled:opacity-50 " + getStatusConfig(billStatus).buttonClass}
-          >
-            <Save size={13} /> {saving ? "Saving..." : editBill ? "Update" : "Save"}
-          </button>
-          <button
-            type="button" onClick={() => handleSave(true)}
-            disabled={saving || validatingStock || (isStockActive(billStatus) && !stockValidation.valid)}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-black rounded-lg text-white bg-slate-700 hover:bg-slate-800 disabled:opacity-50 transition-colors flex-shrink-0"
-          >
-            <Printer size={13} /> Save & Print
-          </button>
         </div>
+      </div>
 
-        {/* Row 2: Metal types . Customer . Type . Phone/Addr toggle */}
-        <div className="flex items-center gap-2 px-4 py-2.5 flex-wrap">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex-shrink-0">Metal:</span>
-          <div className="flex gap-1 flex-shrink-0">
-            {METAL_TYPES.map((mt) => {
-              const selected = selectedProducts[0] === mt;
-              return (
-                <button
-                  key={mt} type="button" onClick={() => handleProductSelect(mt)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black border transition-all ${
-                    selected
-                      ? "bg-amber-50 border-amber-400 text-amber-800 shadow-sm"
-                      : "bg-white border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-700"
-                  }`}
-                >
-                  {mt}
-                </button>
-              );
-            })}
-          </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5">
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Left column Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        <div className="space-y-4">
 
-          <span className="w-px h-5 bg-slate-200 mx-0.5 flex-shrink-0" />
+          {/* ── Unified form card: Status · Details · Customer · Metal types ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
 
-          <div className="flex-1 min-w-[200px] max-w-sm">
-            <CustomerNameCombo
-              value={customerName} linkedCustomer={selectedCustomer}
-              onChange={(name) => setCustomerName(name)}
-              onSelect={(c) => {
-                setSelectedCustomer(c); setCustomerName(c.party_name || "");
-                setCustomerPhone(c.phone_no || ""); setCustomerAddress(c.address || "");
-                setCustomerType(c.customer_type || "Retail");
-                setShowCustomerDetails(!!(c.phone_no || c.address));
-              }}
-              onUnlink={() => setSelectedCustomer(null)}
-            />
-          </div>
-
-          <div className="flex gap-1 flex-shrink-0">
-            {CUSTOMER_TYPES.map((type) => (
-              <button
-                key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-black border transition-all ${
-                  customerType === type
-                    ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                    : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
-                }`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-
-          {!showCustomerDetails ? (
-            <button type="button" onClick={() => setShowCustomerDetails(true)}
-              className="text-[10px] font-bold text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 flex-shrink-0">
-              <Plus size={10} /> Phone/Addr
-            </button>
-          ) : (
-            <button type="button"
-              onClick={() => { setShowCustomerDetails(false); setCustomerPhone(""); setCustomerAddress(""); }}
-              className="text-[10px] font-bold text-rose-400 hover:text-rose-600 flex items-center gap-0.5 flex-shrink-0">
-              <X size={10} /> Remove
-            </button>
-          )}
-        </div>
-
-        {/* Expandable phone + address */}
-        {showCustomerDetails && (
-          <div className="flex gap-3 px-4 pb-3 pt-2.5 flex-wrap border-t border-slate-100">
-            <div className="flex-1 min-w-[140px]">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Phone</label>
-              <input type="text" value={customerPhone}
-                onChange={(e) => { setSelectedCustomer(null); setCustomerPhone(e.target.value); }}
-                placeholder="Phone number"
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-300 bg-slate-50" />
-            </div>
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Address</label>
-              <input type="text" value={customerAddress}
-                onChange={(e) => { setSelectedCustomer(null); setCustomerAddress(e.target.value); }}
-                placeholder="Customer address"
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-300 bg-slate-50" />
-            </div>
-          </div>
-        )}
-
-        {/* Balance-due warning */}
-        {summary.totalPcs > 0 && (() => {
-          const hasDue =
-            summary.amountDue > 0 ||
-            METAL_PAYMENT_TYPES.some((mt) => (summary.metalDueUnsettled?.[mt] || 0) > 0);
-          if (!hasDue || selectedCustomer || customerName.trim()) return null;
-          return (
-            <div className="mx-4 mb-3 flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
-              <AlertCircle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-700 font-semibold">
-                Balance is due - add the customer's name above so it can be tracked in their ledger.
+            {/* Status */}
+            <div className="px-5 py-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2.5">Status</p>
+              <div className="flex gap-2">
+                {BILL_STATUS_LIST.map((status) => {
+                  const cfg = BILL_STATUS_CONFIG[status];
+                  const isActive = billStatus === status;
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setBillStatus(status)}
+                      className={"flex-1 py-2.5 px-4 rounded-xl border-2 font-black text-sm transition-all " + (
+                        isActive
+                          ? cfg.bgClass + " " + cfg.borderClass + " " + cfg.textClass
+                          : "bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                      )}
+                    >
+                      {cfg.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className={"text-[10px] font-semibold mt-2 pl-0.5 " + BILL_STATUS_CONFIG[billStatus].textClass}>
+                {BILL_STATUS_CONFIG[billStatus].description}
               </p>
             </div>
-          );
-        })()}
 
-      </div>{/* end header bar */}
-
-      {/* == ITEMS TABLE == */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
-                <th className="px-3 py-2.5 text-center font-black w-8">#</th>
-                <th className="px-3 py-2.5 text-left font-black">Metal</th>
-                <th className="px-3 py-2.5 text-left font-black">Category</th>
-                <th className="px-3 py-2.5 text-left font-black">Size</th>
-                <th className="px-3 py-2.5 text-right font-black">Wt/pc (g)</th>
-                <th className="px-3 py-2.5 text-right font-black">LC/pc (Rs.)</th>
-                <th className="px-3 py-2.5 text-center font-black">QTY</th>
-                <th className="px-3 py-2.5 text-right font-black">Tot. Wt</th>
-                <th className="px-3 py-2.5 text-right font-black">Labour</th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {allActiveItems.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center">
-                    <p className="text-sm font-semibold text-slate-400">No items added yet</p>
-                    <p className="text-xs text-slate-300 mt-1">Use <span className="font-bold text-indigo-400">+ Add Row</span> below</p>
-                  </td>
-                </tr>
-              ) : (
-                allActiveItems.map((item, index) => {
-                  const key     = itemKey(item.metal_type, item.category, item.size_label);
-                  const pcs     = parseInt(item.pcs, 10) || 0;
-                  const sizeVal = parseFloat(item.size_value) || 0;
-                  const weight  = parseFloat((sizeVal * pcs).toFixed(4));
-                  const labour  = parseFloat(((parseFloat(item.lc_pp) || 0) * pcs).toFixed(2));
-                  const normSL  = normalizeEstimateSizeLabel(item.metal_type, item.size_label);
-                  const validation = stockValidationMap.get(`${item.metal_type}::${normSL}`);
-                  const gi      = index;
-                  const metalAbbr = item.metal_type === "Gold 24K" ? "G24K" : item.metal_type === "Gold 22K" ? "G22K" : "Ag";
-
-                  return (
-                    <tr key={key}
-                      className={`border-b border-slate-100 last:border-b-0 transition-colors ${
-                        pcs > 0 ? "bg-indigo-50/25" : "hover:bg-slate-50/40"
-                      }`}
-                    >
-                      <td className="px-3 py-2 text-center text-[11px] text-slate-400 font-semibold">{index + 1}</td>
-                      <td className="px-3 py-2">
-                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{metalAbbr}</span>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-500 font-semibold">{item.category}</td>
-                      <td className="px-3 py-2">
-                        <p className="text-sm font-bold text-indigo-700">{item.size_label}</p>
-                        {validation && (
-                          <p className={`text-[9px] font-bold leading-tight ${
-                            !validation.valid ? "text-rose-600" :
-                            (validation.available_pieces || 0) === 0 ? "text-slate-400" :
-                            "text-emerald-600"
-                          }`}>
-                            {!validation.valid
-                              ? `Only ${validation.available_pieces} avail.`
-                              : (validation.available_pieces || 0) === 0
-                                ? "Not in stock"
-                                : `${validation.available_pieces} in stock`}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs font-mono text-slate-500">{fmt(item.size_value, 4)}</td>
-                      <td className="px-3 py-2 text-right text-xs font-mono text-slate-500">{fmt(item.lc_pp, 0)}</td>
-                      <td className="px-3 py-2 text-center">
-                        <input
-                          ref={(el) => { if (el) pcsInputRefs.current[key] = el; }}
-                          type="number" min="0" step="1"
-                          value={item.pcs || ""}
-                          onChange={(e) => updatePieces(key, e.target.value)}
-                          onKeyDown={(e) => handlePcsKeyDown(e, allPcsKeys, gi)}
-                          className={`w-16 text-center text-sm border rounded-lg px-1.5 py-1.5 focus:outline-none focus:ring-2 transition-colors font-bold ${
-                            validation && !validation.valid
-                              ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
-                              : "border-indigo-200 bg-white text-indigo-700 focus:ring-indigo-300"
+            {/* Date · Metal Type · Bill No */}
+            <div className="px-5 py-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2.5">Details</p>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex-shrink-0">
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Date</label>
+                  <input
+                    type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)}
+                    className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 font-semibold text-slate-700"
+                  />
+                </div>
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">Metal Type</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {METAL_TYPES.map((metalType) => {
+                      const selected = selectedProducts.includes(metalType);
+                      return (
+                        <button
+                          key={metalType} type="button" onClick={() => handleProductToggle(metalType)}
+                          className={`px-3 py-2 rounded-xl text-xs font-black border-2 transition-all ${
+                            selected
+                              ? "bg-amber-50 border-amber-400 text-amber-800 shadow-sm"
+                              : "bg-white border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-700"
                           }`}
-                          placeholder="0"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs font-mono text-slate-700">{pcs > 0 ? fmt(weight, 4) : "-"}</td>
-                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">{pcs > 0 ? fmt(labour, 0) : "-"}</td>
-                      <td className="px-3 py-2 text-center">
-                        <button type="button"
-                          onClick={() => {
-                            setAddedKeys((prev) => { const s = new Set(prev); s.delete(key); return s; });
-                            updatePieces(key, "");
-                          }}
-                          className="text-slate-300 hover:text-rose-500 transition-colors p-0.5 rounded"
-                          title="Remove row"
                         >
-                          <X size={13} />
+                          {metalType}
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Totals row */}
-        {allActiveItems.length > 0 && (
-          <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center gap-5 text-xs font-bold text-slate-600">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Totals</span>
-            <span className="text-indigo-700">{summary.totalPcs} pcs</span>
-            <span>{fmt(summary.totalWeight, 4)} g</span>
-            {summary.labourTotal > 0 && (
-              <span className="ml-auto text-slate-800">{fmtMoney(summary.labourTotal)}</span>
-            )}
-          </div>
-        )}
-
-        {/* == Add Row picker == */}
-        {(() => {
-          const activeMetal = selectedProducts[0] || "Gold 24K";
-          const metalCats   = groupedCharges?.[activeMetal] || {};
-          return (
-            <div className="px-4 py-3 border-t border-dashed border-slate-200">
-              {globalPicker.show ? (
-                <div className="flex items-end gap-2 flex-wrap">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Category</label>
-                    <select
-                      value={globalPicker.category}
-                      onChange={(e) => setGlobalPicker((p) => ({ ...p, category: e.target.value, size_label: "" }))}
-                      className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    >
-                      {Object.keys(metalCats).map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Size</label>
-                    <select
-                      value={globalPicker.size_label}
-                      onChange={(e) => setGlobalPicker((p) => ({ ...p, size_label: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") { const v = e.target.value; if (v) { e.preventDefault(); confirmGlobalAdd(v); } } }}
-                      className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    >
-                      <option value="">- pick a size -</option>
-                      {(metalCats[globalPicker.category] || [])
-                        .filter((row) => !addedKeys.has(itemKey(activeMetal, globalPicker.category, row.size_label)))
-                        .map((row) => {
-                          const normSL    = normalizeEstimateSizeLabel(activeMetal, row.size_label);
-                          const stockInfo = stockValidationMap.get(`${activeMetal}::${normSL}`);
-                          const avail     = stockInfo?.available_pieces ?? null;
-                          const suffix    = avail === null ? "" : avail === 0 ? "  - not in stock" : `  - ${avail} in stock`;
-                          return <option key={row.size_label} value={row.size_label}>{row.size_label}{suffix}</option>;
-                        })}
-                    </select>
-                  </div>
-                  <div className="flex gap-2 pb-0.5">
-                    <button type="button" disabled={!globalPicker.size_label} onClick={confirmGlobalAdd}
-                      className="px-4 py-1.5 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                      Add
-                    </button>
-                    <button type="button"
-                      onClick={() => setGlobalPicker((p) => ({ ...p, show: false, size_label: "" }))}
-                      className="px-3 py-1.5 text-sm font-semibold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">
-                      Cancel
-                    </button>
+                      );
+                    })}
                   </div>
                 </div>
-              ) : Object.keys(metalCats).length > 0 ? (
-                <button type="button"
-                  onClick={() => {
-                    const firstCat = Object.keys(metalCats)[0] || "";
-                    setGlobalPicker({ show: true, category: firstCat, size_label: "" });
-                  }}
-                  className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-dashed border-indigo-200 rounded-xl px-4 py-2 transition-all"
+                {billStatus === "Pending" && (
+                  <div className="flex-shrink-0">
+                    <label className="block text-xs font-bold text-amber-600 mb-1.5">Expected By</label>
+                    <input
+                      type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
+                      className="px-3 py-2.5 text-sm border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/50 font-semibold text-slate-700"
+                    />
+                  </div>
+                )}
+                <div className="flex-shrink-0">
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Bill No.</label>
+                  <input
+                    type="number" min="1" value={obNo} onChange={(e) => setObNo(e.target.value)}
+                    className="w-20 px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 text-slate-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Customer */}
+            <div className="px-5 py-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2.5">Customer</p>
+              <CustomerNameCombo
+                value={customerName}
+                linkedCustomer={selectedCustomer}
+                onChange={(name) => setCustomerName(name)}
+                onSelect={(c) => {
+                  setSelectedCustomer(c);
+                  setCustomerName(c.party_name || "");
+                  setCustomerPhone(c.phone_no || "");
+                  setCustomerAddress(c.address || "");
+                  setCustomerType(c.customer_type || "Retail");
+                  setShowCustomerDetails(!!(c.phone_no || c.address));
+                }}
+                onUnlink={() => setSelectedCustomer(null)}
+              />
+              <div className="flex items-center gap-1.5 mt-3">
+                <span className="text-xs font-bold text-slate-500 mr-1">Type:</span>
+                {CUSTOMER_TYPES.map((type) => (
+                  <button
+                    key={type} type="button" onClick={() => handleCustomerTypeChange(type)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all ${
+                      customerType === type
+                        ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                        : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+                    }`}
+                  >{type}</button>
+                ))}
+              </div>
+              {summary.totalPcs > 0 && (() => {
+                const hasDue =
+                  summary.amountDue > 0 ||
+                  METAL_PAYMENT_TYPES.some((mt) => (summary.metalDueUnsettled?.[mt] || 0) > 0);
+                if (!hasDue || selectedCustomer || customerName.trim()) return null;
+                return (
+                  <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                    <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700 font-semibold leading-snug">
+                      Balance is due — add the customer's name above so this can be tracked in their ledger.
+                    </p>
+                  </div>
+                );
+              })()}
+              {!showCustomerDetails ? (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerDetails(true)}
+                  className="mt-2 text-xs text-indigo-500 font-bold hover:text-indigo-700 flex items-center gap-1 transition-colors"
                 >
-                  <Plus size={14} /> Add Row
+                  <Plus size={11} /> Add phone / address
                 </button>
               ) : (
-                <p className="text-xs text-slate-400">No sizes configured. Add them in Admin - Labour Charges.</p>
-              )}
-            </div>
-          );
-        })()}
-      </div>{/* end items table */}
-
-      {/* == FOOTER: Payment | Summary == */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        {/* == Payment Received == fixed 4 rows == */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-white">
-            <h2 className="font-black text-slate-700 text-sm">Payment Received</h2>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-              {selectedProducts[0] || "Gold 24K"} | purity {paymentEntries[0]?.purity || metalPurityFor(selectedProducts[0] || "Gold 24K")}
-            </p>
-          </div>
-          <div className="px-4 py-4 space-y-3">
-
-            {/* Row 1 - Metal Weight */}
-            <div>
-              <label className="block text-[10px] font-black text-amber-700 uppercase tracking-wider mb-1.5">
-                Metal Weight (g)
-              </label>
-              <input
-                ref={firstPaymentRef}
-                type="number" min="0" step="0.001"
-                value={paymentEntries[0]?.weight || ""}
-                onChange={(e) => updatePaymentEntry(0, "weight", e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/40 font-semibold placeholder:text-amber-300"
-                placeholder="0.000"
-              />
-            </div>
-
-            {/* Row 2 - Rate per 10g */}
-            <div>
-              <label className="block text-[10px] font-black text-amber-700 uppercase tracking-wider mb-1.5">
-                Rate / 10g (Rs.)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400 pointer-events-none">Rs.</span>
-                <input
-                  type="number" min="0" step="1"
-                  value={paymentEntries[0]?.reference_rate || ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    updatePaymentEntry(0, "reference_rate", v);
-                    updateSettlementRate(selectedProducts[0] || "Gold 24K", v);
-                  }}
-                  className="w-full pl-7 pr-3 py-2 text-sm border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-amber-50/40 font-semibold placeholder:text-amber-300"
-                  placeholder="0"
-                />
-              </div>
-              {(parseFloat(paymentEntries[0]?.weight) > 0 && parseFloat(paymentEntries[0]?.reference_rate) > 0) && (
-                <p className="text-[10px] text-amber-600 font-semibold mt-1 text-right">
-                  Metal value - {fmtMoney(roundMoney((parseFloat(paymentEntries[0].weight) * parseFloat(paymentEntries[0].reference_rate)) / 10))}
-                </p>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Phone</label>
+                    <input
+                      type="text" value={customerPhone}
+                      onChange={(e) => { setSelectedCustomer(null); setCustomerPhone(e.target.value); }}
+                      placeholder="Phone number"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Address</label>
+                    <textarea
+                      value={customerAddress}
+                      onChange={(e) => { setSelectedCustomer(null); setCustomerAddress(e.target.value); }}
+                      rows={2} placeholder="Customer address"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50 resize-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCustomerDetails(false); setCustomerPhone(""); setCustomerAddress(""); }}
+                    className="text-xs text-slate-400 font-semibold hover:text-rose-500 transition-colors"
+                  >
+                    Remove phone / address
+                  </button>
+                </div>
               )}
             </div>
 
-            {/* Divider */}
-            <div className="border-t border-slate-100" />
-
-            {/* Row 3 - Cash */}
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                Cash (Rs.)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rs.</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={paymentEntries[1]?.amount || ""}
-                  onChange={(e) => updatePaymentEntry(1, "amount", e.target.value)}
-                  className="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white font-semibold"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            {/* Row 4 - Bank / UPI */}
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                Bank / UPI (Rs.)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Rs.</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={paymentEntries[2]?.amount || ""}
-                  onChange={(e) => updatePaymentEntry(2, "amount", e.target.value)}
-                  className="w-full pl-7 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white font-semibold"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
           </div>
+
+          {/* Section 4: Items per metal — add only what's needed */}
+          {selectedProducts.map((metalType) => {
+            const categories  = groupedCharges?.[metalType] || {};
+            const catKeys     = Object.keys(categories);
+            const activeItems = items.filter(
+              (i) => i.metal_type === metalType &&
+                     addedKeys.has(itemKey(i.metal_type, i.category, i.size_label))
+            );
+            const picker      = addPicker[metalType] || { show: false, category: catKeys[0] || "", size_label: "" };
+
+            // Sizes available in the picker's current category, excluding already-added ones
+            const pickerSizes = (categories[picker.category] || []).filter(
+              (row) => !addedKeys.has(itemKey(metalType, picker.category, row.size_label))
+            );
+
+            const totalPcs    = activeItems.reduce((s, i) => s + (parseInt(i.pcs, 10) || 0), 0);
+            const totalWeight = activeItems.reduce((s, i) => s + (parseFloat(i.size_value) || 0) * (parseInt(i.pcs, 10) || 0), 0);
+            const totalLabour = activeItems.reduce((s, i) => s + (parseFloat(i.lc_pp) || 0) * (parseInt(i.pcs, 10) || 0), 0);
+
+            const openPicker  = () =>
+              setAddPicker((p) => ({
+                ...p,
+                [metalType]: { show: true, category: catKeys[0] || "", size_label: "" },
+              }));
+
+            const closePicker = () =>
+              setAddPicker((p) => ({
+                ...p,
+                [metalType]: { show: false, category: catKeys[0] || "", size_label: "" },
+              }));
+
+            const confirmAdd = () => {
+              const { category, size_label } = picker;
+              if (!size_label) return;
+              const key = itemKey(metalType, category, size_label);
+              // Register the row — it stays visible even if pcs is cleared later
+              setAddedKeys((prev) => new Set([...prev, key]));
+              // Default pcs to 1 so the field isn't blank on first add
+              const existing = items.find(
+                (i) => i.metal_type === metalType && i.category === category && i.size_label === size_label
+              );
+              if (existing && (parseInt(existing.pcs, 10) || 0) === 0) {
+                updatePieces(key, "1");
+              }
+              closePicker();
+              setTimeout(() => { if (pcsInputRefs.current[key]) pcsInputRefs.current[key].focus(); }, 60);
+            };
+
+            return (
+              <div key={metalType} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+                {/* Card header */}
+                <div className="px-5 py-3.5 bg-gradient-to-r from-amber-50 to-white border-b border-amber-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0" />
+                    <h3 className="font-black text-slate-800">{metalType}</h3>
+                  </div>
+                  {totalPcs > 0 && (
+                    <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
+                      <span className="text-indigo-600 font-black">{totalPcs} pcs</span>
+                      <span>{fmt(totalWeight, 3)}g</span>
+                      {totalLabour > 0 && <span>{fmtMoney(totalLabour)}</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 space-y-3">
+
+                  {/* Active rows table */}
+                  {activeItems.length > 0 && (
+                    <table className="w-full text-sm table-fixed">
+                      <colgroup>
+                        <col style={{ width: "22%" }} />
+                        <col style={{ width: "22%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "20%" }} />
+                        <col style={{ width: "8%"  }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                          <th className="text-left   px-2 py-2 font-black text-[10px]">Category</th>
+                          <th className="text-left   px-2 py-2 font-black text-[10px]">Size</th>
+                          <th className="text-center px-2 py-2 font-black text-[10px]">Qty</th>
+                          <th className="text-right  px-2 py-2 font-black text-[10px]">Wt (g)</th>
+                          <th className="text-right  px-2 py-2 font-black text-[10px]">Labour</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeItems.map((item) => {
+                          const key        = itemKey(item.metal_type, item.category, item.size_label);
+                          const pcs        = parseInt(item.pcs, 10) || 0;
+                          const sizeVal    = parseFloat(item.size_value) || 0;
+                          const weight     = parseFloat((sizeVal * pcs).toFixed(4));
+                          const labour     = parseFloat(((parseFloat(item.lc_pp) || 0) * pcs).toFixed(2));
+                          const normSL     = normalizeEstimateSizeLabel(item.metal_type, item.size_label);
+                          const validation = stockValidationMap.get(`${metalType}::${normSL}`);
+                          const gi         = allPcsKeys.indexOf(key);
+
+                          return (
+                            <tr key={key} className="border-b border-slate-100 last:border-b-0 bg-indigo-50/40">
+                              {/* Category */}
+                              <td className="px-2 py-2 text-xs text-slate-500 font-semibold">{item.category}</td>
+
+                              {/* Size + stock hint */}
+                              <td className="px-2 py-2">
+                                <p className="font-semibold text-sm text-indigo-700">{item.size_label}</p>
+                                {validation !== undefined && (
+                                  <p className={`text-[10px] font-bold leading-tight ${
+                                    !validation.valid
+                                      ? "text-rose-600"
+                                      : (validation.available_pieces || 0) === 0
+                                        ? "text-slate-400"
+                                        : "text-emerald-600"
+                                  }`}>
+                                    {!validation.valid
+                                      ? `Only ${validation.available_pieces} avail.`
+                                      : (validation.available_pieces || 0) === 0
+                                        ? "Not in stock"
+                                        : `${validation.available_pieces} in stock`}
+                                  </p>
+                                )}
+                              </td>
+
+                              {/* Qty input */}
+                              <td className="px-2 py-2 text-center">
+                                <input
+                                  ref={(el) => { if (el) pcsInputRefs.current[key] = el; }}
+                                  type="number" min="0" step="1"
+                                  value={item.pcs || ""}
+                                  onChange={(e) => updatePieces(key, e.target.value)}
+                                  onKeyDown={(e) => handlePcsKeyDown(e, allPcsKeys, gi)}
+                                  className={`w-14 text-center text-sm border rounded-lg px-1.5 py-1.5 focus:outline-none focus:ring-2 transition-colors font-bold ${
+                                    validation && !validation.valid
+                                      ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
+                                      : "border-indigo-300 bg-white text-indigo-700 focus:ring-indigo-300"
+                                  }`}
+                                  placeholder="0"
+                                />
+                              </td>
+
+                              {/* Weight */}
+                              <td className="px-2 py-2 text-right font-mono text-xs text-slate-700">
+                                {fmt(weight, 4)}
+                              </td>
+
+                              {/* Labour */}
+                              <td className="px-2 py-2 text-right font-mono text-xs font-bold text-slate-800">
+                                {fmt(labour, 0)}
+                              </td>
+
+                              {/* Remove */}
+                              <td className="px-1 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddedKeys((prev) => { const s = new Set(prev); s.delete(key); return s; });
+                                    updatePieces(key, "");
+                                  }}
+                                  className="text-slate-300 hover:text-rose-500 transition-colors rounded p-0.5"
+                                  title="Remove row"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {/* Empty state */}
+                  {activeItems.length === 0 && !picker.show && catKeys.length > 0 && (
+                    <p className="text-center text-sm text-slate-400 py-3">
+                      No items added — click <span className="font-bold text-indigo-500">+ Add Size</span> below.
+                    </p>
+                  )}
+
+                  {/* No categories configured */}
+                  {catKeys.length === 0 && (
+                    <p className="text-center text-sm text-slate-400 py-4">
+                      No categories configured for {metalType}. Add them in Admin → Labour Charges.
+                    </p>
+                  )}
+
+                  {/* Inline add-size picker */}
+                  {picker.show && catKeys.length > 0 && (
+                    <div className="flex items-end gap-2 p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex-wrap">
+                      {/* Category */}
+                      <div className="flex flex-col gap-1 flex-1 min-w-[110px]">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Category</label>
+                        <select
+                          value={picker.category}
+                          onChange={(e) =>
+                            setAddPicker((p) => ({
+                              ...p,
+                              [metalType]: { ...p[metalType], category: e.target.value, size_label: "" },
+                            }))
+                          }
+                          className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        >
+                          {catKeys.map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Size */}
+                      <div className="flex flex-col gap-1 flex-1 min-w-[130px]">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Size</label>
+                        <select
+                          value={picker.size_label}
+                          onChange={(e) =>
+                            setAddPicker((p) => ({
+                              ...p,
+                              [metalType]: { ...p[metalType], size_label: e.target.value },
+                            }))
+                          }
+                          className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        >
+                          <option value="">— pick a size —</option>
+                          {pickerSizes.map((row) => {
+                            const normSL   = normalizeEstimateSizeLabel(metalType, row.size_label);
+                            const stockInfo = stockValidationMap.get(`${metalType}::${normSL}`);
+                            const avail    = stockInfo?.available_pieces ?? null;
+                            const suffix   = avail === null
+                              ? ""
+                              : avail === 0
+                                ? "  —  not in stock"
+                                : `  —  ${avail} in stock`;
+                            return (
+                              <option key={row.size_label} value={row.size_label}>
+                                {row.size_label}{suffix}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={!picker.size_label}
+                          onClick={confirmAdd}
+                          className="px-4 py-1.5 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={closePicker}
+                          className="px-3 py-1.5 text-sm font-semibold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* + Add Size button */}
+                  {!picker.show && catKeys.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={openPicker}
+                      className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 rounded-xl px-4 py-2.5 transition-all w-full justify-center"
+                    >
+                      <Plus size={15} /> Add Size
+                    </button>
+                  )}
+
+                </div>
+              </div>
+            );
+          })}
+
+
         </div>
 
+
+        {/* ── Right column: Payment + Summary ── */}
+        <div className="xl:sticky xl:top-4 space-y-4 h-fit">
+
+          {/* Payment Received */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-sm leading-none">💰</span>
+              </div>
+              <div>
+                <h2 className="font-black text-slate-700 text-sm leading-tight">Payment Received</h2>
+                <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Cash, bank transfer, or metal</p>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 space-y-2">
+
+              {/* Payment rows — compact */}
+              <div className="space-y-1.5">
+                {paymentEntries.map((entry, index) => {
+                  const isMetal = entry.payment_type === "Metal";
+                  return (
+                    <div key={`payment-entry-${index}`}
+                      className={`rounded-xl border ${isMetal ? "border-amber-200 bg-amber-50/30" : "border-slate-100 bg-slate-50/60"}`}
+                    >
+                      {/* Main row: segmented type control + value + remove */}
+                      <div className="flex items-center gap-2 p-2.5">
+                        {/* Segmented control */}
+                        <div className="flex rounded-lg border border-slate-200 overflow-hidden shrink-0">
+                          {[["Cash", "Cash"], ["Bank / UPI", "Bank"], ["Metal", "Metal"]].map(([realType, label]) => {
+                            const isActive = entry.payment_type === realType;
+                            return (
+                              <button
+                                key={realType} type="button"
+                                onClick={() => updatePaymentEntry(index, "payment_type", realType)}
+                                className={`px-2 py-1.5 text-[10px] font-black border-r border-slate-200 last:border-r-0 transition-colors ${
+                                  isActive
+                                    ? realType === "Metal"
+                                      ? "bg-amber-500 text-white border-amber-500"
+                                      : "bg-indigo-600 text-white border-indigo-600"
+                                    : "bg-white text-slate-400 hover:text-slate-600"
+                                }`}
+                              >{label}</button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Amount or metal type selector */}
+                        {!isMetal ? (
+                          <div className="relative flex-1">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={entry.amount || ""}
+                              onChange={(e) => updatePaymentEntry(index, "amount", e.target.value)}
+                              className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white font-semibold"
+                              placeholder="0.00"
+                              autoComplete="off"
+                            />
+                          </div>
+                        ) : (
+                          <select
+                            value={entry.metal_type}
+                            onChange={(e) => updatePaymentEntry(index, "metal_type", e.target.value)}
+                            className="flex-1 px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold text-amber-800"
+                          >
+                            {METAL_TYPES.map((mt) => <option key={mt} value={mt}>{mt}</option>)}
+                          </select>
+                        )}
+
+                        {/* Remove */}
+                        <button
+                          type="button"
+                          onClick={() => removePaymentEntry(index)}
+                          disabled={paymentEntries.length <= 1}
+                          className="p-1 text-slate-300 hover:text-rose-500 rounded transition-colors disabled:opacity-20 shrink-0"
+                        ><X size={12} /></button>
+                      </div>
+
+                      {/* Metal detail fields — weight / purity / rate */}
+                      {isMetal && (
+                        <div className="grid grid-cols-3 gap-1.5 px-2.5 pb-2.5">
+                          <div>
+                            <p className="text-[9px] font-black text-amber-600 mb-0.5">Weight (g)</p>
+                            <input type="number" min="0" step="0.001"
+                              value={entry.weight || ""}
+                              onChange={(e) => updatePaymentEntry(index, "weight", e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white font-semibold"
+                              placeholder="0.000"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-amber-600 mb-0.5">Purity</p>
+                            <input type="text"
+                              value={entry.purity || ""}
+                              onChange={(e) => updatePaymentEntry(index, "purity", e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                              placeholder="99.9"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-amber-600 mb-0.5">Rate/10g</p>
+                            <input type="number" min="0" step="1"
+                              value={entry.reference_rate || ""}
+                              onChange={(e) => updatePaymentEntry(index, "reference_rate", e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                              placeholder="opt."
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={addPaymentEntry}
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-500 hover:text-indigo-700 py-1 px-0.5 transition-colors"
+                >
+                  <Plus size={11} /> Add another
+                </button>
+              </div>
+            </div>
+          </div>
 
           {/* Summary */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -2421,13 +2509,13 @@ export default function OrderBills() {
                 )}
               </div>
               {summary.totalPcs > 0 && (
-                <p className={"text-xs font-semibold mt-0.5 " + getStatusConfig(billStatus).textClass}>{summary.totalPcs} pcs  .  {fmt(summary.totalWeight, 4)}g</p>
+                <p className={"text-xs font-semibold mt-0.5 " + getStatusConfig(billStatus).textClass}>{summary.totalPcs} pcs  ·  {fmt(summary.totalWeight, 4)}g</p>
               )}
             </div>
 
             <div className="px-5 py-4 space-y-2.5">
 
-              {/* == Payment Status Badge (checkout-style) == */}
+              {/* ── Payment Status Badge (checkout-style) ── */}
               {summary.totalPcs > 0 && (() => {
                 const isFullyPaid = summary.amountDue === 0 && summary.amountGiven === 0 && summary.refundDue === 0 &&
                   !Object.values(summary.metalDueUnsettled || {}).some((v) => v > 0);
@@ -2435,12 +2523,12 @@ export default function OrderBills() {
                 const isPartial   = !isFullyPaid && !hasRefund && summary.moneyPaid > 0;
 
                 const cfg = isFullyPaid
-                  ? { bg: "bg-emerald-50", border: "border-emerald-200", label: "Paid",   labelCls: "text-emerald-700",  sub: "All settled" }
+                  ? { bg: "bg-emerald-50", border: "border-emerald-200", label: "✓ Fully Paid",   labelCls: "text-emerald-700",  sub: "All settled" }
                   : hasRefund
-                  ? { bg: "bg-amber-50",   border: "border-amber-200",   label: "Return to Customer", labelCls: "text-amber-700",    sub: `Give back ${fmtMoney(summary.amountGiven || summary.refundDue)}` }
+                  ? { bg: "bg-amber-50",   border: "border-amber-200",   label: "↩ Return to Customer", labelCls: "text-amber-700",    sub: `Give back ${fmtMoney(summary.amountGiven || summary.refundDue)}` }
                   : isPartial
-                  ? { bg: "bg-blue-50",    border: "border-blue-200",    label: "~ Partial",       labelCls: "text-blue-700",     sub: `${fmtMoney(summary.moneyPaid)} paid` }
-                  : { bg: "bg-rose-50",    border: "border-rose-200",    label: "! Payment Due",   labelCls: "text-rose-700",     sub: "Nothing received yet" };
+                  ? { bg: "bg-blue-50",    border: "border-blue-200",    label: "⏳ Partial",       labelCls: "text-blue-700",     sub: `${fmtMoney(summary.moneyPaid)} paid` }
+                  : { bg: "bg-rose-50",    border: "border-rose-200",    label: "⬤ Payment Due",   labelCls: "text-rose-700",     sub: "Nothing received yet" };
 
                 return (
                   <div className={`rounded-xl border ${cfg.bg} ${cfg.border} px-4 py-3`}>
@@ -2494,24 +2582,61 @@ export default function OrderBills() {
                 </div>
               ) : stockValidation.items.length > 0 ? (
                 <div className="rounded-xl px-3 py-2.5 border bg-emerald-50 border-emerald-200 text-xs font-bold text-emerald-700">
-                  All sizes available in stock
+                  ✓ All sizes available in stock
                 </div>
               ) : null}
 
-              {/* Rate-not-set warning - shown when items have weight but no rate is entered yet */}
-              {summary.totalWeight > 0 && !(parseFloat(settlementRates?.[selectedProducts[0]]) > 0) && (
-                <div className="rounded-xl px-3 py-2 border bg-amber-50 border-amber-200 text-xs text-amber-700 font-semibold">
-                  ! Enter Rate / 10g in Payment Received - metal value not included yet
+              {/* ── Metal Rate inputs — always shown when items have qty ── */}
+              {Object.entries(summary.requiredMetal || {}).some(([, w]) => (w || 0) > 0) && (
+                <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 space-y-2">
+                  <p className="text-[10px] font-black text-amber-800 uppercase tracking-wider">
+                    Metal Rate <span className="font-normal normal-case text-amber-600">— rate customer pays per 10g</span>
+                  </p>
+                  {Object.entries(summary.requiredMetal).map(([mt, w]) => {
+                    if ((w || 0) === 0) return null;
+                    const rate       = parseFloat(settlementRates?.[mt]) || 0;
+                    const metalValue = rate > 0 ? roundMoney((w * rate) / 10) : 0;
+                    return (
+                      <div key={mt} className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-semibold text-amber-700 mb-0.5">{mt} · {fmt(w, 4)}g</p>
+                          <input
+                            type="number" min="0" step="1"
+                            value={settlementRates?.[mt] || ""}
+                            onChange={(e) => updateSettlementRate(mt, e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-semibold placeholder:text-amber-300"
+                            placeholder="Enter rate / 10g"
+                          />
+                        </div>
+                        <div className="text-right shrink-0 min-w-[64px]">
+                          {metalValue > 0 ? (
+                            <>
+                              <p className="text-[9px] text-amber-500 font-semibold">Metal value</p>
+                              <p className="text-sm font-black text-amber-900">{fmtMoney(metalValue)}</p>
+                            </>
+                          ) : (
+                            <p className="text-[9px] text-amber-400 font-semibold leading-snug">rate not<br/>set yet</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Object.entries(summary.requiredMetal).some(([, w]) => (w || 0) > 0) &&
+                   Object.entries(summary.requiredMetal).every(([mt, w]) => (w || 0) === 0 || !(parseFloat(settlementRates?.[mt]) > 0)) && (
+                    <p className="text-[10px] text-amber-600 font-semibold pt-0.5">
+                      ⚠ Enter rate above — metal cost is not included in the total yet
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* == 1. Labour Charges == */}
+              {/* ── 1. Labour Charges ── */}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500">Labour Charges</span>
                 <span className="font-bold text-slate-800">{fmtMoney(summary.labourTotal)}</span>
               </div>
 
-              {/* == 2. Per-metal payment breakdown (only when metal received or still owed) == */}
+              {/* ── 2. Per-metal payment breakdown (only when metal received or still owed) ── */}
               {Object.entries(summary.requiredMetal || {}).some(([mt]) =>
                 (summary.metalReceived?.[mt] || 0) > 0 ||
                 (summary.metalDueUnsettled?.[mt] || 0) > 0 ||
@@ -2543,7 +2668,7 @@ export default function OrderBills() {
                         )}
                         {metalSettled > 0 && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-amber-600 italic">~ Converted to cash</span>
+                            <span className="text-amber-600 italic">↳ Converted to cash</span>
                             <span className="font-bold text-amber-600">{fmt(metalSettled, 4)}g</span>
                           </div>
                         )}
@@ -2580,7 +2705,7 @@ export default function OrderBills() {
               )}
 
 
-              {/* == 4. Calculation: Subtotal - Discount - Final Payable == */}
+              {/* ── 4. Calculation: Subtotal → Discount → Final Payable ── */}
               <div className="border-t border-slate-100 pt-2 space-y-2">
 
                 {/* Subtotal */}
@@ -2589,7 +2714,7 @@ export default function OrderBills() {
                   <span className="font-bold text-slate-800">{fmtMoney(summary.subtotal)}</span>
                 </div>
 
-                {/* Discount + Round Off - side by side */}
+                {/* Discount + Round Off — side by side */}
                 <div className="grid grid-cols-2 gap-2 min-w-0">
                   {/* Discount */}
                   <div>
@@ -2605,7 +2730,7 @@ export default function OrderBills() {
                     </div>
                     {summary.discount > 0 && (
                       <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 text-right">
-                        - {fmtMoney(summary.discount)}
+                        − {fmtMoney(summary.discount)}
                       </p>
                     )}
                   </div>
@@ -2636,7 +2761,7 @@ export default function OrderBills() {
                     </div>
                     {(parseFloat(roundOff) || 0) > 0 && (
                       <p className={`text-[10px] font-semibold mt-0.5 text-right ${roundOffSign === "+" ? "text-rose-500" : "text-emerald-600"}`}>
-                        {roundOffSign === "+" ? "+ " : "- "}{fmtMoney(parseFloat(roundOff))}
+                        {roundOffSign === "+" ? "+ " : "− "}{fmtMoney(parseFloat(roundOff))}
                       </p>
                     )}
                   </div>
@@ -2649,7 +2774,7 @@ export default function OrderBills() {
                 </div>
               </div>
 
-              {/* == 5. Settlement: Total Paid + Amount Due/Return == */}
+              {/* ── 5. Settlement: Total Paid + Amount Due/Return ── */}
               <div className="space-y-2">
 
                 {/* Total paid */}
@@ -2658,7 +2783,7 @@ export default function OrderBills() {
                   <span className="text-sm font-black text-slate-800">{fmtMoney(summary.moneyPaid)}</span>
                 </div>
 
-                {/* Outcome - mutually exclusive */}
+                {/* Outcome — mutually exclusive */}
                 {summary.amountGiven > 0 ? (
                   <div className="rounded-xl px-3 py-2.5 border bg-amber-50 border-amber-200 flex justify-between items-center">
                     <span className="text-sm font-bold text-amber-700">Amount Given to Customer</span>
@@ -2725,7 +2850,18 @@ export default function OrderBills() {
             </div>
           </div>
 
-      </div>{/* end footer grid */}
+          {/* Quick hint */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2">Quick Tips</p>
+            <ul className="space-y-1.5 text-[11px] text-slate-500">
+              <li>Press Enter after typing a number to jump to the next size</li>
+              <li>Rows with a quantity entered will turn blue</li>
+              <li>Stock is checked automatically as you type (Estimates only)</li>
+              <li>Payment status updates live in the summary below</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

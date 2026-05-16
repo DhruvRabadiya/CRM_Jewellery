@@ -124,20 +124,92 @@ function startBackend() {
 
 // ─── Printer list IPC ─────────────────────────────────────────────────────────
 // Returns all printers installed on the system so the UI can show a picker.
+//
+// Electron 30+ changed how getPrintersAsync() works on Windows — it now relies
+// on Chromium's internal printing service which often fails to initialise in
+// production (file:// URL) builds, returning an empty list even when a printer
+// is physically connected.  We therefore try three sources in order:
+//   1. Chromium getPrintersAsync()   — fastest, works when the service is up
+//   2. PowerShell Get-Printer        — queries Windows spooler directly (Win32)
+//   3. wmic printer list             — older fallback for PowerShell failures
+// The first source that returns ≥1 printer wins.
 ipcMain.handle("get-printers", async () => {
+  const { execSync } = require("child_process");
+
+  // ── Source 1: Chromium ──────────────────────────────────────────────────
   try {
     const list = await mainWindow.webContents.getPrintersAsync();
-    // Return only what the UI needs (name, isDefault, description).
-    return list.map((p) => ({
-      name:        p.name,
-      description: p.description || p.name,
-      isDefault:   p.isDefault,
-      status:      p.status,
-    }));
+    if (list && list.length > 0) {
+      return list.map((p) => ({
+        name:        p.name,
+        description: p.description || p.name,
+        isDefault:   p.isDefault,
+        status:      p.status,
+      }));
+    }
   } catch (err) {
-    console.error("get-printers failed:", err);
-    return [];
+    console.error("get-printers (Chromium) failed:", err.message);
   }
+
+  // ── Source 2: PowerShell Get-Printer (Windows only) ─────────────────────
+  if (process.platform === "win32") {
+    try {
+      const raw = execSync(
+        'powershell -NoProfile -NonInteractive -Command ' +
+        '"Get-Printer | Select-Object Name,Default | ConvertTo-Json -Compress"',
+        { timeout: 6000, windowsHide: true }
+      ).toString().trim();
+
+      if (raw) {
+        // PowerShell returns a single object (not array) when only one printer.
+        let parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) parsed = [parsed];
+
+        if (parsed.length > 0) {
+          return parsed.map((p) => ({
+            name:        p.Name        || "",
+            description: p.Name        || "",
+            isDefault:   p.Default === true,
+            status:      0,
+          })).filter((p) => p.name);
+        }
+      }
+    } catch (err) {
+      console.error("get-printers (PowerShell) failed:", err.message);
+    }
+
+    // ── Source 3: wmic fallback ───────────────────────────────────────────
+    try {
+      const raw = execSync(
+        'wmic printer get Name,Default /format:csv',
+        { timeout: 6000, windowsHide: true }
+      ).toString();
+
+      const lines = raw.split(/\r?\n/).filter(Boolean);
+      // First non-empty line is "Node,Default,Name"
+      const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const nameIdx    = header.indexOf("name");
+      const defaultIdx = header.indexOf("default");
+
+      if (nameIdx >= 0) {
+        const printers = lines.slice(1).map((line) => {
+          const cols = line.split(",");
+          return {
+            name:        (cols[nameIdx]    || "").trim(),
+            description: (cols[nameIdx]    || "").trim(),
+            isDefault:   (cols[defaultIdx] || "").trim().toLowerCase() === "true",
+            status:      0,
+          };
+        }).filter((p) => p.name && p.name !== "Name");
+
+        if (printers.length > 0) return printers;
+      }
+    } catch (err) {
+      console.error("get-printers (wmic) failed:", err.message);
+    }
+  }
+
+  return [];
 });
 
 // ─── Printer preference IPC ───────────────────────────────────────────────────
@@ -151,12 +223,33 @@ ipcMain.handle("save-printer-pref", (event, pref) => {
 // ─── Thermal print IPC handler ────────────────────────────────────────────────
 // estimateData contains printerName (saved pref) so the job goes to the correct
 // thermal printer silently — no dialog, no PDF.
+const isPdfPrinter = (name = "") => /pdf|xps|onenote|fax|document writer|virtual/i.test(name);
+
 ipcMain.handle("print-estimate", async (event, estimateData) => {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     const isDev = process.env.NODE_ENV === "development";
 
     // Extract printer name before passing payload to template.
-    const { printerName, ...templateData } = estimateData;
+    let { printerName, ...templateData } = estimateData;
+
+    // Safety net: if the saved printer is a virtual PDF writer, auto-switch to
+    // the first real physical printer so the job never becomes a file download.
+    if (!printerName || isPdfPrinter(printerName)) {
+      try {
+        const list = await mainWindow.webContents.getPrintersAsync();
+        const real = list.find((p) => !isPdfPrinter(p.name));
+        if (real) {
+          printerName = real.name;
+          console.log("print-estimate: switched from PDF writer to real printer:", printerName);
+        } else {
+          resolve({ ok: false, error: "No physical printer found. Connect your TSC printer and try again." });
+          return;
+        }
+      } catch (_) {
+        resolve({ ok: false, error: "Could not enumerate printers." });
+        return;
+      }
+    }
 
     // Hidden window sized for 80 mm thermal paper.
     const printWin = new BrowserWindow({
@@ -192,8 +285,8 @@ ipcMain.handle("print-estimate", async (event, estimateData) => {
               {
                 silent:          true,
                 printBackground: false,
-                // Route to the chosen thermal printer; empty → OS default.
-                deviceName:      printerName || "",
+                // Route to the chosen thermal printer.
+                deviceName:      printerName,
                 // 80 mm wide; height 297 mm max (thermal cuts to content).
                 pageSize:        { width: 80000, height: 297000 },
                 margins:         { marginType: "none" },

@@ -113,11 +113,9 @@ const create = async (req, res) => {
     if (!city || !city.trim()) {
       return formatResponse(res, 400, false, "City is required");
     }
-    // Phone is required for CRM customers — ensures every permanent record is reachable.
-    if (!phone_no || !phone_no.toString().trim()) {
-      return formatResponse(res, 400, false, "Phone number is required");
-    }
-    if (!isValidPhone(phone_no)) {
+    // Phone is optional — validate format only when provided
+    const phoneStr = phone_no ? phone_no.toString().trim() : "";
+    if (phoneStr && !isValidPhone(phoneStr)) {
       return formatResponse(res, 400, false, "Phone number must be 10-15 digits");
     }
     if (telephone_no && telephone_no.toString().trim() && !isValidPhone(telephone_no)) {
@@ -130,7 +128,7 @@ const create = async (req, res) => {
       firm_name.trim(),
       address.trim(),
       city.trim(),
-      phone_no.toString().trim(),
+      phoneStr,
       telephone_no ? telephone_no.toString().trim() : "",
       resolvedType
     );
