@@ -18,6 +18,7 @@ module.exports = {
     JOB_ISSUE: "JOB_ISSUE",
     JOB_RETURN: "JOB_RETURN",
     SCRAP_RETURN: "SCRAP_RETURN",
+    ADJUSTMENT: "ADJUSTMENT",
   },
   MESSAGES: {
     INSUFFICIENT_STOCK: "Insufficient Opening Stock available.",

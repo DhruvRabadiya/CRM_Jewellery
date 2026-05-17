@@ -266,7 +266,7 @@ const recalculateOpeningStock = async (metalType) => {
     `SELECT
        (SELECT COALESCE(SUM(weight), 0) FROM stock_transactions
           WHERE metal_type = $metal
-            AND transaction_type IN ('PURCHASE', 'DHAL_ADDITION', 'ESTIMATE_METAL_RECEIPT'))
+            AND transaction_type IN ('PURCHASE', 'DHAL_ADDITION', 'ESTIMATE_METAL_RECEIPT', 'ADJUSTMENT'))
 
        - (SELECT COALESCE(SUM(w), 0) FROM (
               SELECT COALESCE(issue_size, issue_weight, 0) AS w

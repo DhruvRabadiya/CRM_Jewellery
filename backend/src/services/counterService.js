@@ -110,13 +110,22 @@ const _buildAvailabilityMap = (rows = []) => {
     legacyCategory.set(categoryKey, (legacyCategory.get(categoryKey) || 0) + n.total_pieces);
 
     // For Silver items with suffixes ("10g -C|B") also create a base-size key so
-    // that labour-charge lookups using only the base size ("10g") still match.
+    // that labour-charge lookups using only the base size ("10g" / "10gm") still match.
+    // Normalise the base-size through _normSizeKey so the key format is consistent
+    // with how the estimate sends lookup keys (e.g. "10g" → "10gm").
     if (n.metal_type === 'Silver') {
-      const baseSize = n.size_label.split(/\s+/)[0];
-      if (baseSize !== n.size_label) {
-        const baseSizeKey = `${n.metal_type}::${baseSize}`;
+      const rawBase = n.size_label.split(/\s+/)[0];
+      if (rawBase !== n.size_label) {
+        const normBase    = _normSizeKey(rawBase);
+        const baseSizeKey = `${n.metal_type}::${normBase}`;
         legacySize.set(baseSizeKey,     (legacySize.get(baseSizeKey)     || 0) + n.total_pieces);
         legacyCategory.set(baseSizeKey, (legacyCategory.get(baseSizeKey) || 0) + n.total_pieces);
+        // Also store with raw base (un-normalised) as a belt-and-suspenders fallback
+        if (normBase !== rawBase) {
+          const rawBaseSizeKey = `${n.metal_type}::${rawBase}`;
+          legacySize.set(rawBaseSizeKey,     (legacySize.get(rawBaseSizeKey)     || 0) + n.total_pieces);
+          legacyCategory.set(rawBaseSizeKey, (legacyCategory.get(rawBaseSizeKey) || 0) + n.total_pieces);
+        }
       }
     }
   });

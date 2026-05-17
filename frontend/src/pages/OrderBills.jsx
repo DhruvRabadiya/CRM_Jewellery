@@ -1133,6 +1133,10 @@ export default function OrderBills() {
       setAddedKeys(new Set()); // clear rows - new metal, fresh start
       return [metalType];
     });
+    // Reset the picker whenever metal changes — the previous metal's category may not
+    // exist in the new metal's groupedCharges, which would leave globalPicker.category
+    // pointing to a non-existent key and cause the size dropdown to render empty.
+    setGlobalPicker({ show: false, category: "", size_label: "" });
     // Sync the Metal payment entry to the new metal type
     setPaymentEntries((cur) => {
       if (!Array.isArray(cur) || cur.length < 1) return cur;
@@ -1216,12 +1220,13 @@ export default function OrderBills() {
   }, []);
 
   // Add a row via the unified global picker (metal always = selectedProducts[0])
-  // overrideSize lets callers pass the size directly (avoids stale-closure issues on Enter key)
-  const confirmGlobalAdd = useCallback((overrideSize) => {
+  // overrideSize / overrideCategory let callers pass values directly to avoid stale-closure issues.
+  const confirmGlobalAdd = useCallback((overrideSize, overrideCategory) => {
     const metalType = selectedProducts[0] || "Gold 24K";
-    const { category, size_label: pickerSize } = globalPicker;
-    const size_label = overrideSize || pickerSize;
-    if (!size_label) return;
+    const { category: pickerCategory, size_label: pickerSize } = globalPicker;
+    const category   = overrideCategory || pickerCategory;
+    const size_label = overrideSize     || pickerSize;
+    if (!size_label || !category) return;
     const key = itemKey(metalType, category, size_label);
     setAddedKeys((prev) => new Set([...prev, key]));
     setItems((prev) => prev.map((item) => {
@@ -2249,6 +2254,14 @@ export default function OrderBills() {
         {(() => {
           const activeMetal = selectedProducts[0] || "Gold 24K";
           const metalCats   = groupedCharges?.[activeMetal] || {};
+          const catKeys     = Object.keys(metalCats);
+          // Guard: if the stored category no longer belongs to the active metal's
+          // groupedCharges (e.g. user switched metals while picker was open), snap
+          // it to the first valid category so the size list is never empty due to a
+          // stale/missing key.
+          const effectiveCategory = metalCats[globalPicker.category]
+            ? globalPicker.category
+            : (catKeys[0] || "");
           return (
             <div className="px-4 py-3 border-t border-dashed border-slate-200">
               {globalPicker.show ? (
@@ -2256,11 +2269,11 @@ export default function OrderBills() {
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Category</label>
                     <select
-                      value={globalPicker.category}
+                      value={effectiveCategory}
                       onChange={(e) => setGlobalPicker((p) => ({ ...p, category: e.target.value, size_label: "" }))}
                       className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
                     >
-                      {Object.keys(metalCats).map((cat) => (
+                      {catKeys.map((cat) => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
@@ -2270,12 +2283,12 @@ export default function OrderBills() {
                     <select
                       value={globalPicker.size_label}
                       onChange={(e) => setGlobalPicker((p) => ({ ...p, size_label: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") { const v = e.target.value; if (v) { e.preventDefault(); confirmGlobalAdd(v); } } }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { const v = e.target.value; if (v) { e.preventDefault(); confirmGlobalAdd(v, effectiveCategory); } } }}
                       className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
                     >
                       <option value="">- pick a size -</option>
-                      {(metalCats[globalPicker.category] || [])
-                        .filter((row) => !addedKeys.has(itemKey(activeMetal, globalPicker.category, row.size_label)))
+                      {(metalCats[effectiveCategory] || [])
+                        .filter((row) => !addedKeys.has(itemKey(activeMetal, effectiveCategory, row.size_label)))
                         .map((row) => {
                           const normSL    = normalizeEstimateSizeLabel(activeMetal, row.size_label);
                           const stockInfo = stockValidationMap.get(`${activeMetal}::${normSL}`);
@@ -2286,7 +2299,7 @@ export default function OrderBills() {
                     </select>
                   </div>
                   <div className="flex gap-2 pb-0.5">
-                    <button type="button" disabled={!globalPicker.size_label} onClick={confirmGlobalAdd}
+                    <button type="button" disabled={!globalPicker.size_label} onClick={() => confirmGlobalAdd(undefined, effectiveCategory)}
                       className="px-4 py-1.5 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                       Add
                     </button>

@@ -66,3 +66,12 @@ export const deletePurchase = async (id) => {
     throw error.response?.data || error;
   }
 };
+
+export const setStockWeight = async (metal_type, new_weight, note = "") => {
+  try {
+    const response = await api.post("/stock/set-weight", { metal_type, new_weight: parseFloat(new_weight), note });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};

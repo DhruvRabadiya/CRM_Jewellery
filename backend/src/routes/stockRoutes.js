@@ -8,6 +8,7 @@ router.get("/loss-stats", stockController.getLossStats);
 router.get("/scrap-loss-ledger", stockController.getDetailedScrapAndLoss);
 
 router.post("/add", stockController.addStock);
+router.post("/set-weight", stockController.setStockWeight);
 router.post("/recalculate", stockController.recalculateStock);
 router.put("/purchases/:id", stockController.editStockPurchase);
 router.delete("/purchases/:id", stockController.deleteStockPurchase);

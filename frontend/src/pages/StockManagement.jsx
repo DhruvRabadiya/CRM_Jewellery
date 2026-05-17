@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { PlusCircle, Coins, Edit2, Trash2 } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { PlusCircle, Coins, Edit2, Trash2, Check, X } from "lucide-react";
 import {
   getStockData,
   getPurchases,
   getDetailedScrapAndLoss,
   deletePurchase,
+  setStockWeight,
 } from "../api/stockService";
 import Modal from "../components/Modal";
 import Toast from "../components/Toast";
@@ -24,6 +25,38 @@ const StockManagement = () => {
   
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, onConfirm: null });
+
+  // Inline weight editor state: { metalKey, metalType, currentWeight } or null
+  const [editing, setEditing]     = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const [editNote, setEditNote]   = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const editInputRef = useRef(null);
+
+  const openWeightEdit = (metalKey, metalType, currentWeight) => {
+    setEditing({ metalKey, metalType });
+    setEditValue(String(parseFloat(currentWeight.toFixed(6))));
+    setEditNote("");
+    setTimeout(() => editInputRef.current?.select(), 50);
+  };
+
+  const cancelWeightEdit = () => { setEditing(null); setEditValue(""); setEditNote(""); };
+
+  const saveWeightEdit = async () => {
+    const val = parseFloat(editValue);
+    if (isNaN(val) || val < 0) { showToast("Enter a valid weight (≥ 0)", "error"); return; }
+    setEditSaving(true);
+    try {
+      await setStockWeight(editing.metalType, val, editNote);
+      showToast("Stock weight updated!", "success");
+      cancelWeightEdit();
+      fetchStock();
+    } catch (err) {
+      showToast(err?.message || "Failed to update weight", "error");
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -118,80 +151,99 @@ const StockManagement = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Gold 22K Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 hover:border-amber-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group cursor-default">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-amber-600 font-black text-sm tracking-wide mb-2 uppercase">
-                Gold 22K Inventory
-              </p>
-              <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-amber-600 transition-colors">
-                {parseFloat((stock.gold_22k?.opening_stock || 0).toFixed(10))}{" "}
-                <span className="text-xl font-medium text-gray-400">g</span>
-              </h2>
-            </div>
-            <div className="p-4 bg-amber-50 rounded-2xl text-amber-500 group-hover:bg-amber-100 transition-colors">
-              <Coins size={32} />
-            </div>
-          </div>
-          <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
-            <span className="text-gray-500 font-bold">In Process</span>
-            <span className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
-              {parseFloat((stock.gold_22k?.inprocess_weight || 0).toFixed(10))} g
-            </span>
-          </div>
-        </div>
+        {[
+          { key: "gold_22k", metalType: "Gold 22K", label: "Gold 22K Inventory", accent: "amber" },
+          { key: "gold_24k", metalType: "Gold 24K", label: "Gold 24K Inventory", accent: "yellow" },
+          { key: "silver",   metalType: "Silver",   label: "Silver Inventory",   accent: "blue"   },
+        ].map(({ key, metalType, label, accent }) => {
+          const currentWeight = parseFloat((stock[key]?.opening_stock || 0).toFixed(6));
+          const inProcess     = parseFloat((stock[key]?.inprocess_weight || 0).toFixed(6));
+          const isEditingThis = editing?.metalKey === key;
 
-        {/* Gold 24K Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 hover:border-yellow-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group cursor-default">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-yellow-600 font-black text-sm tracking-wide mb-2 uppercase">
-                Gold 24K Inventory
-              </p>
-              <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-yellow-600 transition-colors">
-                {parseFloat((stock.gold_24k?.opening_stock || 0).toFixed(10))}{" "}
-                <span className="text-xl font-medium text-gray-400">g</span>
-              </h2>
-            </div>
-            <div className="p-4 bg-yellow-50 rounded-2xl text-yellow-500 group-hover:bg-yellow-100 transition-colors">
-              <Coins size={32} />
-            </div>
-          </div>
-          <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
-            <span className="text-gray-500 font-bold">In Process</span>
-            <span className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
-              {parseFloat((stock.gold_24k?.inprocess_weight || 0).toFixed(10))} g
-            </span>
-          </div>
-        </div>
+          const accentMap = {
+            amber:  { text: "text-amber-600", border: "hover:border-amber-400", icon: "text-amber-500 bg-amber-50 group-hover:bg-amber-100", weightText: "group-hover:text-amber-600" },
+            yellow: { text: "text-yellow-600", border: "hover:border-yellow-400", icon: "text-yellow-500 bg-yellow-50 group-hover:bg-yellow-100", weightText: "group-hover:text-yellow-600" },
+            blue:   { text: "text-gray-500",   border: "hover:border-blue-400",   icon: "text-gray-400 bg-gray-50 group-hover:bg-blue-50 group-hover:text-blue-500", weightText: "group-hover:text-blue-600" },
+          };
+          const a = accentMap[accent];
 
-        {/* Silver Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 hover:border-blue-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group cursor-default">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 font-black text-sm tracking-wide mb-2 uppercase">
-                Silver Inventory
-              </p>
-              <h2 className="text-5xl font-extrabold text-gray-900 group-hover:text-blue-600 transition-colors">
-                {parseFloat(
-                  (stock.silver?.opening_stock || 0).toFixed(10),
-                )}{" "}
-                <span className="text-xl font-medium text-gray-400">g</span>
-              </h2>
+          return (
+            <div key={key} className={`bg-white p-6 rounded-2xl shadow-sm border-2 border-gray-100 ${a.border} hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group`}>
+              <div className="flex justify-between items-start">
+                <div className="flex-1 min-w-0">
+                  <p className={`${a.text} font-black text-sm tracking-wide mb-2 uppercase`}>{label}</p>
+
+                  {isEditingThis ? (
+                    <div className="space-y-2 mt-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={editInputRef}
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveWeightEdit(); if (e.key === "Escape") cancelWeightEdit(); }}
+                          className="w-36 text-2xl font-extrabold border-2 border-blue-400 rounded-xl px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300 text-gray-900"
+                        />
+                        <span className="text-lg font-medium text-gray-400">g</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={editNote}
+                        onChange={(e) => setEditNote(e.target.value)}
+                        placeholder="Note (optional)"
+                        className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-300 text-gray-600"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={saveWeightEdit}
+                          disabled={editSaving}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-colors"
+                        >
+                          <Check size={13} /> {editSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          onClick={cancelWeightEdit}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-lg transition-colors"
+                        >
+                          <X size={13} /> Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-end gap-2">
+                      <h2 className={`text-5xl font-extrabold text-gray-900 ${a.weightText} transition-colors`}>
+                        {currentWeight}
+                        <span className="text-xl font-medium text-gray-400 ml-1">g</span>
+                      </h2>
+                      <button
+                        title="Edit available weight"
+                        onClick={() => openWeightEdit(key, metalType, currentWeight)}
+                        className="mb-1.5 p-1.5 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!isEditingThis && (
+                  <div className={`p-4 rounded-2xl ${a.icon} transition-colors flex-shrink-0`}>
+                    <Coins size={32} />
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
+                <span className="text-gray-500 font-bold">In Process</span>
+                <span className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
+                  {inProcess} g
+                </span>
+              </div>
             </div>
-            <div className="p-4 bg-gray-50 rounded-2xl text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
-              <Coins size={32} />
-            </div>
-          </div>
-          <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between">
-            <span className="text-gray-500 font-bold">In Process</span>
-            <span className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-full text-sm font-black ring-2 ring-blue-200">
-              {parseFloat((stock.silver?.inprocess_weight || 0).toFixed(10))}{" "}
-              g
-            </span>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       <div className="mt-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">

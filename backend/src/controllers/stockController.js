@@ -153,6 +153,46 @@ const deleteStockPurchase = async (req, res) => {
   }
 };
 
+const setStockWeight = async (req, res) => {
+  try {
+    const { metal_type, new_weight, note } = req.body;
+
+    if (!metal_type || !isValidMetalType(metal_type)) {
+      return formatResponse(res, 400, false, "Invalid metal type.");
+    }
+    const target = parseFloat(new_weight);
+    if (isNaN(target) || target < 0) {
+      return formatResponse(res, 400, false, "new_weight must be a non-negative number.");
+    }
+
+    // Derive the current available stock from source-of-truth
+    const current = await stockService.recalculateOpeningStock(metal_type);
+
+    const diff = parseFloat((target - current).toFixed(6));
+    if (Math.abs(diff) < 0.000001) {
+      // No change needed
+      return formatResponse(res, 200, true, "Stock already at requested weight.", { adjustment: 0 });
+    }
+
+    // Log an ADJUSTMENT transaction (positive = addition, negative = reduction).
+    // The recalculateOpeningStock formula sums all ADJUSTMENT weights, so the
+    // next getStock call will correctly reflect the new available weight.
+    await stockService.logTransaction(
+      metal_type,
+      'ADJUSTMENT',
+      diff,
+      note && note.trim() ? note.trim() : `Direct weight adjustment to ${target} g`,
+    );
+
+    // Apply immediately to stock_master so the response is accurate
+    await stockService.recalculateOpeningStock(metal_type);
+
+    return formatResponse(res, 200, true, "Stock weight updated successfully.", { adjustment: diff });
+  } catch (error) {
+    return formatResponse(res, 500, false, error.message);
+  }
+};
+
 const recalculateStock = async (req, res) => {
   try {
     const metalTypes = ["Gold 22K", "Gold 24K", "Silver"];
@@ -189,4 +229,5 @@ module.exports = {
   editStockPurchase,
   deleteStockPurchase,
   recalculateStock,
+  setStockWeight,
 };
