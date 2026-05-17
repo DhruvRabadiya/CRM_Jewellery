@@ -14,6 +14,9 @@ import {
   Eye,
   Trash2,
   Edit,
+  CheckSquare,
+  Square,
+  X as XIcon,
 } from "lucide-react";
 import {
   getCombinedProcesses,
@@ -113,7 +116,12 @@ const ProductionJobs = () => {
   });
   const navigate = useNavigate();
 
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, hasPermission } = useAuth();
+  // Convenience permission flags — ADMIN always returns true from hasPermission()
+  const canCreate = hasPermission('create_jobs');
+  const canEdit   = hasPermission('edit_jobs');
+  const canDelete = hasPermission('delete_jobs');
+  const canRevert = hasPermission('revert_jobs');
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -164,6 +172,38 @@ const ProductionJobs = () => {
     scrap_weight: "",
   });
 
+  // ── Multi-select delete ────────────────────────────────────────────────────
+  const [selectMode, setSelectMode]   = useState(false);
+  const [selectedJobs, setSelectedJobs] = useState(new Set()); // Set of job_numbers
+
+  const toggleSelectMode = () => {
+    setSelectMode((m) => !m);
+    setSelectedJobs(new Set());
+  };
+
+  const toggleJobSelection = (e, jobNumber) => {
+    e.stopPropagation();
+    setSelectedJobs((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobNumber)) next.delete(jobNumber);
+      else next.add(jobNumber);
+      return next;
+    });
+  };
+
+  // Select / deselect all jobs visible on the current page
+  const toggleSelectAll = (e) => {
+    e.stopPropagation();
+    const pageJobNumbers = pagedProcesses.map((p) => p.job_number);
+    const allSelected = pageJobNumbers.every((jn) => selectedJobs.has(jn));
+    setSelectedJobs((prev) => {
+      const next = new Set(prev);
+      if (allSelected) pageJobNumbers.forEach((jn) => next.delete(jn));
+      else             pageJobNumbers.forEach((jn) => next.add(jn));
+      return next;
+    });
+  };
+
   const showToast = (message, type) => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -193,7 +233,9 @@ const ProductionJobs = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const { data } = await api.get("/auth/users");
+        // Use /auth/employees (not /auth/users) — accessible to all authenticated
+        // users, not just admins, so employee-role accounts don't get a 403 here.
+        const { data } = await api.get("/auth/employees");
         if (data.success && Array.isArray(data.data)) setUsers(data.data);
       } catch (err) {
         console.error("Failed to fetch users", err.message);
@@ -464,6 +506,43 @@ const ProductionJobs = () => {
     });
   };
 
+  // Bulk delete: deletes every selected job_number (all stages, reverse order)
+  const handleBulkDelete = () => {
+    const jobNumbers = [...selectedJobs];
+    if (!jobNumbers.length) return;
+    const stagePriority = { Melting: 0, Rolling: 1, Press: 2, TPP: 3, Packing: 4 };
+
+    setConfirmModal({
+      isOpen: true,
+      title: `Delete ${jobNumbers.length} Job${jobNumbers.length > 1 ? "s" : ""}`,
+      message: `Permanently delete ALL stage records for the ${jobNumbers.length} selected job${jobNumbers.length > 1 ? "s" : ""}?\n\nJobs: ${jobNumbers.join(", ")}\n\nAll stock changes will be fully reversed in reverse stage order.`,
+      isDestructive: true,
+      confirmText: `Yes, Delete ${jobNumbers.length} Job${jobNumbers.length > 1 ? "s" : ""}`,
+      onConfirm: async () => {
+        try {
+          for (const jobNumber of jobNumbers) {
+            const jobProcesses = processes
+              .filter((p) => p.job_number === jobNumber)
+              .sort((a, b) => stagePriority[b.stage] - stagePriority[a.stage]);
+            for (const proc of jobProcesses) {
+              await deleteProcess(proc.stage, proc.id);
+            }
+          }
+          showToast(
+            `${jobNumbers.length} job${jobNumbers.length > 1 ? "s" : ""} deleted successfully!`,
+            "success"
+          );
+          setSelectedJobs(new Set());
+          setSelectMode(false);
+          fetchProcesses();
+        } catch (error) {
+          showToast(error.message || "Failed to delete selected jobs", "error");
+          fetchProcesses();
+        }
+      },
+    });
+  };
+
   const handleRevertProcess = async (process) => {
     setConfirmModal({
       isOpen: true,
@@ -711,13 +790,28 @@ const ProductionJobs = () => {
               Job {sortConfig.direction.toUpperCase()}
             </button>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all"
-          >
-            <PlusCircle size={20} />{" "}
-            <span className="font-semibold">Create Process Job</span>
-          </button>
+          {canDelete && (
+            <button
+              onClick={toggleSelectMode}
+              className={`flex items-center gap-2 px-4 py-3 rounded-xl border font-semibold text-sm active:scale-95 transition-all ${
+                selectMode
+                  ? "bg-red-50 border-red-300 text-red-600 hover:bg-red-100"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {selectMode ? <XIcon size={16} /> : <CheckSquare size={16} />}
+              {selectMode ? "Cancel" : "Select"}
+            </button>
+          )}
+          {canCreate && (
+            <button
+              onClick={openCreateModal}
+              className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-all"
+            >
+              <PlusCircle size={20} />{" "}
+              <span className="font-semibold">Create Process Job</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -748,10 +842,40 @@ const ProductionJobs = () => {
           </div>
         </div>
 
+        {/* ── Selection action bar ── */}
+        {selectMode && (
+          <div className={`flex items-center justify-between px-4 py-2.5 border-b border-red-100 transition-all ${
+            selectedJobs.size > 0 ? "bg-red-50" : "bg-slate-50"
+          }`}>
+            <span className="text-sm font-bold text-slate-600">
+              {selectedJobs.size > 0
+                ? `${selectedJobs.size} job${selectedJobs.size > 1 ? "s" : ""} selected`
+                : "Click rows to select jobs"}
+            </span>
+            {selectedJobs.size > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedJobs(new Set())}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg hover:bg-white transition-all"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-black rounded-lg active:scale-95 transition-all"
+                >
+                  <Trash2 size={13} />
+                  Delete {selectedJobs.size} Job{selectedJobs.size > 1 ? "s" : ""}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex border-b border-gray-100">
           <button
-            onClick={() => { setActiveTab("incomplete"); setCurrentPage(1); }}
+            onClick={() => { setActiveTab("incomplete"); setCurrentPage(1); setSelectedJobs(new Set()); }}
             className={`flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all border-b-2 ${
               activeTab === "incomplete"
                 ? "border-orange-500 text-orange-600 bg-orange-50/50"
@@ -766,7 +890,7 @@ const ProductionJobs = () => {
             </span>
           </button>
           <button
-            onClick={() => { setActiveTab("completed"); setCurrentPage(1); }}
+            onClick={() => { setActiveTab("completed"); setCurrentPage(1); setSelectedJobs(new Set()); }}
             className={`flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all border-b-2 ${
               activeTab === "completed"
                 ? "border-green-500 text-green-600 bg-green-50/50"
@@ -786,6 +910,19 @@ const ProductionJobs = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 text-gray-500 text-sm uppercase tracking-wider">
+                {selectMode && (
+                  <th className="p-2 px-3 font-bold border-b border-gray-100 w-10">
+                    <button
+                      onClick={toggleSelectAll}
+                      className="flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                      title="Select / deselect all on this page"
+                    >
+                      {pagedProcesses.length > 0 && pagedProcesses.every((p) => selectedJobs.has(p.job_number))
+                        ? <CheckSquare size={16} className="text-red-500" />
+                        : <Square size={16} />}
+                    </button>
+                  </th>
+                )}
                 <th className="p-2 px-3 font-bold border-b border-gray-100">
                   Job No
                 </th>
@@ -807,12 +944,25 @@ const ProductionJobs = () => {
               </tr>
             </thead>
             <tbody>
-              {pagedProcesses.map((p) => (
+              {pagedProcesses.map((p) => {
+                const isSelected = selectedJobs.has(p.job_number);
+                return (
                 <tr
                   key={`${p.stage}-${p.id}`}
-                  onClick={() => openViewModal(p.job_number)}
-                  className="hover:bg-blue-50/80 transition-all cursor-pointer group/row border-b border-gray-100"
+                  onClick={() => selectMode ? toggleJobSelection({ stopPropagation: () => {} }, p.job_number) : openViewModal(p.job_number)}
+                  className={`transition-all cursor-pointer group/row border-b border-gray-100 ${
+                    selectMode && isSelected
+                      ? "bg-red-50 hover:bg-red-100"
+                      : "hover:bg-blue-50/80"
+                  }`}
                 >
+                  {selectMode && (
+                    <td className="py-2 px-3 w-10" onClick={(e) => toggleJobSelection(e, p.job_number)}>
+                      {isSelected
+                        ? <CheckSquare size={16} className="text-red-500" />
+                        : <Square size={16} className="text-gray-300 group-hover/row:text-gray-400" />}
+                    </td>
+                  )}
                   <td className="py-2 px-3">
                     <div className="font-bold text-gray-800 text-sm">
                       {p.job_number}
@@ -896,7 +1046,7 @@ const ProductionJobs = () => {
                       >
                         <Eye size={12} /> View
                       </button>
-                      {isAdmin && (
+                      {canEdit && (
                         <button
                           onClick={(e) => { e.stopPropagation(); openEditModal(p); }}
                           className="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1 rounded-lg text-xs font-bold hover:bg-gray-200 active:scale-95 flex items-center gap-1 whitespace-nowrap"
@@ -904,7 +1054,7 @@ const ProductionJobs = () => {
                           <Edit size={12} /> Edit
                         </button>
                       )}
-                      {isAdmin && (
+                      {canDelete && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteProcess(p); }}
                           className="bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded-lg text-xs font-bold hover:bg-red-100 active:scale-95 flex items-center gap-1 whitespace-nowrap"
@@ -912,7 +1062,7 @@ const ProductionJobs = () => {
                           <Trash2 size={12} /> Delete
                         </button>
                       )}
-                      {isAdmin && (
+                      {canRevert && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleRevertProcess(p); }}
                           className="bg-purple-50 text-purple-600 border border-purple-200 px-2 py-1 rounded-lg text-xs font-bold hover:bg-purple-100 active:scale-95 flex items-center gap-1 whitespace-nowrap"
@@ -924,7 +1074,8 @@ const ProductionJobs = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           {pagedProcesses.length === 0 && (

@@ -108,7 +108,7 @@ const MeltingProcess = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const { data } = await api.get("/auth/users");
+        const { data } = await api.get("/auth/employees");
         if (data.success && Array.isArray(data.data)) setUsers(data.data);
       } catch (err) {
         console.error("Failed to fetch users", err.message);

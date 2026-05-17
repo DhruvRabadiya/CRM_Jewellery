@@ -81,11 +81,11 @@ function createRateLimiter({
 
 /**
  * Strict limiter for authentication endpoints.
- * 20 attempts per 15 minutes per IP — blocks brute-force login attacks.
+ * 15 attempts per 15 minutes per IP (testing value — reduce for production).
  */
 const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max:      20,
+  max:      15, // TODO: tighten to 5 before production
   message:  'Too many login attempts. Please wait 15 minutes before trying again.',
 });
 

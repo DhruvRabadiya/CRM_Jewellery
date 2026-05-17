@@ -13,25 +13,23 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { PERMISSIONS } from "../utils/permissions";
 
 const MainLayout = () => {
   const location = useLocation();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, hasPermission, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
 
-  // Menu Items Configuration (Conditionally rendered)
+  // Menu items are shown only when the user holds the matching permission.
+  // ADMIN always passes hasPermission() so their menu is never restricted.
   const menuItems = [
-    { path: "/", label: "Home", icon: <Home size={20} /> },
-    { path: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
-    ...(isAdmin ? [{ path: "/stock", label: "Stock Management", icon: <Coins size={20} /> }] : []),
-    {
-      path: "/production",
-      label: "Production Jobs",
-      icon: <Hammer size={20} />,
-    },
-    { path: "/finished", label: "Finished Goods", icon: <Package size={20} /> },
-    ...(isAdmin ? [{ path: "/employees", label: "Employee Management", icon: <Users size={20} /> }] : []),
-  ];
+    { path: "/",           label: "Home",               icon: <Home size={20} />,         show: true },
+    { path: "/dashboard",  label: "Dashboard",           icon: <LayoutDashboard size={20} />, show: hasPermission(PERMISSIONS.VIEW_DASHBOARD) },
+    { path: "/stock",      label: "Stock Management",    icon: <Coins size={20} />,        show: hasPermission(PERMISSIONS.VIEW_STOCK) },
+    { path: "/production", label: "Production Jobs",     icon: <Hammer size={20} />,       show: hasPermission(PERMISSIONS.VIEW_PRODUCTION) },
+    { path: "/finished",   label: "Finished Goods",      icon: <Package size={20} />,      show: hasPermission(PERMISSIONS.VIEW_FINISHED_GOODS) },
+    { path: "/employees",  label: "Employee Management", icon: <Users size={20} />,        show: isAdmin },
+  ].filter((item) => item.show);
 
   return (
     <div className="flex h-screen print:h-auto print:block bg-gray-50">

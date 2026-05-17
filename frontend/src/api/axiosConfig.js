@@ -26,17 +26,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (
-      error.response &&
-      (error.response.status === 401 || error.response.status === 403)
-    ) {
-      // Only force logout if it's explicitly a dead token and not just a failed login attempt
-      if (error.config.url !== "/auth/login") {
-        localStorage.removeItem("token");
-        // Use hash navigation — required because the production build runs on
-        // file:// URLs where BrowserRouter-style /login paths don't exist.
-        window.location.hash = "#/login";
-      }
+    const status = error.response?.status;
+    // 401 = Unauthenticated (token missing, expired, or invalid) → force logout.
+    // 403 = Authenticated but Forbidden (valid token, insufficient role/permission)
+    //       → do NOT logout; the user is logged in, they just lack access to that
+    //         specific resource. Let the error bubble up so the component can handle it.
+    if (status === 401 && error.config?.url !== "/auth/login") {
+      localStorage.removeItem("token");
+      // Use hash navigation — required because the production build runs on
+      // file:// URLs where BrowserRouter-style /login paths don't exist.
+      window.location.hash = "#/login";
     }
 
     const serverMessage =

@@ -5,9 +5,10 @@ import {
   FileText, LayoutDashboard, BookOpen, NotebookPen, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { PERMISSIONS } from "../utils/permissions";
 
 const SellingLayout = () => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, hasPermission } = useAuth();
   const location = useLocation();
 
   // Persist sidebar open/closed preference in localStorage
@@ -31,60 +32,75 @@ const SellingLayout = () => {
 
   const allNavItems = [
     {
-      to: "/selling/dashboard",
-      icon: <LayoutDashboard size={20} />,
+      to:    "/selling/dashboard",
+      icon:  <LayoutDashboard size={20} />,
       label: "Dashboard",
       match: (path) => path.includes("/selling/dashboard") || path === "/selling",
+      perm:  PERMISSIONS.SELL_VIEW_DASHBOARD,
     },
     {
-      to: "/selling/stocks",
-      icon: <Store size={20} />,
+      to:    "/selling/stocks",
+      icon:  <Store size={20} />,
       label: "Stocks",
       match: (path) => path.includes("/selling/stocks"),
+      perm:  PERMISSIONS.SELL_VIEW_STOCKS,
     },
     {
-      to: "/selling/svg",
-      icon: <ShieldCheck size={20} />,
+      to:    "/selling/svg",
+      icon:  <ShieldCheck size={20} />,
       label: "SVG Vault",
       match: (path) => path.includes("/selling/svg"),
+      perm:  PERMISSIONS.SELL_VIEW_SVG,
     },
     {
-      to: "/selling/customers",
-      icon: <Users size={20} />,
+      to:    "/selling/customers",
+      icon:  <Users size={20} />,
       label: "Customers",
       match: (path) => path.includes("/selling/customers"),
+      perm:  PERMISSIONS.SELL_VIEW_CUSTOMERS,
     },
     {
-      to: "/selling/ledger",
-      icon: <BookOpen size={20} />,
+      to:    "/selling/ledger",
+      icon:  <BookOpen size={20} />,
       label: "Ledger",
       match: (path) => path.includes("/selling/ledger"),
+      perm:  PERMISSIONS.SELL_VIEW_LEDGER,
     },
     {
-      to: "/selling/roj-med",
-      icon: <NotebookPen size={20} />,
+      to:    "/selling/roj-med",
+      icon:  <NotebookPen size={20} />,
       label: "Roj Med",
       match: (path) => path.includes("/selling/roj-med"),
+      perm:  PERMISSIONS.SELL_VIEW_ROJ_MED,
     },
     {
-      to: "/selling/estimate",
-      icon: <FileText size={20} />,
+      to:    "/selling/estimate",
+      icon:  <FileText size={20} />,
       label: "Estimate",
       match: (path) =>
         path.includes("/selling/estimate") ||
         path.includes("/selling/order-bills") ||
         path.includes("/selling/billing"),
+      perm:  PERMISSIONS.SELL_VIEW_ESTIMATE,
     },
     {
-      to: "/selling/admin",
-      icon: <Settings size={20} />,
-      label: "Admin",
-      match: (path) => path.includes("/selling/admin"),
+      to:        "/selling/admin",
+      icon:      <Settings size={20} />,
+      label:     "Admin",
+      match:     (path) => path.includes("/selling/admin"),
       adminOnly: true,
     },
   ];
 
-  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
+  // Show a nav item when:
+  //   • it's adminOnly and the user is admin, OR
+  //   • it has a perm key and hasPermission() returns true (ADMIN always passes), OR
+  //   • it has neither — always show
+  const navItems = allNavItems.filter((item) => {
+    if (item.adminOnly) return isAdmin;
+    if (item.perm)      return hasPermission(item.perm);
+    return true;
+  });
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">

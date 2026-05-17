@@ -1000,7 +1000,7 @@ export default function RojMed() {
             </button>
           )}
 
-          {!isClosed && entries.length > 0 && (
+          {!isClosed && (
             <button
               onClick={() => setCloseDayOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-black rounded-xl active:scale-95 transition-all"

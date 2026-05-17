@@ -23,6 +23,7 @@ const MIGRATIONS = [
   require('./007_bank_tracking'),
   require('./008_performance_indexes'),
   require('./009_counter_weight_integrity'),
+  require('./010_user_permissions'),
 ];
 
 // CURRENT_VERSION is derived dynamically from the array length — no manual sync needed.
