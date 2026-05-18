@@ -2141,7 +2141,6 @@ export default function OrderBills() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
                 <th className="px-3 py-2.5 text-center font-black w-8">#</th>
-                <th className="px-3 py-2.5 text-left font-black">Metal</th>
                 <th className="px-3 py-2.5 text-left font-black">Category</th>
                 <th className="px-3 py-2.5 text-left font-black">Size</th>
                 <th className="px-3 py-2.5 text-right font-black">Wt/pc (g)</th>
@@ -2155,7 +2154,7 @@ export default function OrderBills() {
             <tbody>
               {allActiveItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center">
+                  <td colSpan={9} className="px-4 py-10 text-center">
                     <p className="text-sm font-semibold text-slate-400">No items added yet</p>
                     <p className="text-xs text-slate-300 mt-1">Use <span className="font-bold text-indigo-400">+ Add Row</span> below</p>
                   </td>
@@ -2170,7 +2169,6 @@ export default function OrderBills() {
                   const normSL  = normalizeEstimateSizeLabel(item.metal_type, item.size_label);
                   const validation = stockValidationMap.get(`${item.metal_type}::${normSL}`);
                   const gi      = index;
-                  const metalAbbr = item.metal_type === "Gold 24K" ? "G24K" : item.metal_type === "Gold 22K" ? "G22K" : "Ag";
 
                   return (
                     <tr key={key}
@@ -2179,9 +2177,6 @@ export default function OrderBills() {
                       }`}
                     >
                       <td className="px-3 py-2 text-center text-[11px] text-slate-400 font-semibold">{index + 1}</td>
-                      <td className="px-3 py-2">
-                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{metalAbbr}</span>
-                      </td>
                       <td className="px-3 py-2 text-xs text-slate-500 font-semibold">{item.category}</td>
                       <td className="px-3 py-2">
                         <p className="text-sm font-bold text-indigo-700">{item.size_label}</p>
@@ -2235,20 +2230,36 @@ export default function OrderBills() {
                 })
               )}
             </tbody>
+            {allActiveItems.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50 text-xs">
+                  {/* # + Category + Size + Wt/pc + LC/pc  → label cell */}
+                  <td colSpan={5} className="px-4 py-2.5">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Totals</span>
+                  </td>
+                  {/* QTY column → total pcs */}
+                  <td className="px-3 py-2.5 text-center">
+                    <span className="text-sm font-black text-indigo-700">{summary.totalPcs}</span>
+                    <p className="text-[9px] font-bold text-slate-400 leading-none mt-0.5">pcs</p>
+                  </td>
+                  {/* Tot. Wt column → total weight */}
+                  <td className="px-3 py-2.5 text-right">
+                    <span className="text-sm font-black text-slate-800">{fmt(summary.totalWeight, 4)}</span>
+                    <p className="text-[9px] font-bold text-slate-400 leading-none mt-0.5">g</p>
+                  </td>
+                  {/* Labour column → total labour */}
+                  <td className="px-3 py-2.5 text-right">
+                    {summary.labourTotal > 0
+                      ? <span className="text-sm font-black text-slate-800">{fmtMoney(summary.labourTotal)}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                  {/* delete-button column → empty */}
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
-
-        {/* Totals row */}
-        {allActiveItems.length > 0 && (
-          <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center gap-5 text-xs font-bold text-slate-600">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Totals</span>
-            <span className="text-indigo-700">{summary.totalPcs} pcs</span>
-            <span>{fmt(summary.totalWeight, 4)} g</span>
-            {summary.labourTotal > 0 && (
-              <span className="ml-auto text-slate-800">{fmtMoney(summary.labourTotal)}</span>
-            )}
-          </div>
-        )}
 
         {/* == Add Row picker == */}
         {(() => {
