@@ -230,7 +230,40 @@ ipcMain.handle("print-estimate", async (event, estimateData) => {
     const isDev = process.env.NODE_ENV === "development";
 
     // Extract printer name before passing payload to template.
-    let { printerName, ...templateData } = estimateData;
+    let { printerName, preview, ...templateData } = estimateData;
+
+    // ── Preview mode: show a visible window instead of sending to printer ────
+    if (preview) {
+      try {
+        const templatePath = isDev
+          ? path.join(__dirname, "frontend", "public", "print-template.html")
+          : path.join(__dirname, "frontend", "dist",   "print-template.html");
+
+        const payload = JSON.stringify({ ...templateData, shopName: SHOP_NAME });
+        let html = fs.readFileSync(templatePath, "utf8");
+        html = html.replace(
+          "</body>",
+          `<script>window.__ESTIMATE_DATA__ = ${payload};</script></body>`
+        );
+
+        const previewWin = new BrowserWindow({
+          width:  420,
+          height: 820,
+          show:   true,
+          title:  "Token Preview — #" + (templateData.billNo || ""),
+          webPreferences: { nodeIntegration: false, contextIsolation: true },
+        });
+        previewWin.setMenuBarVisibility(false);
+        previewWin.loadURL(
+          "data:text/html;base64," + Buffer.from(html, "utf8").toString("base64")
+        );
+        resolve({ ok: true });
+      } catch (err) {
+        console.error("preview-token error:", err);
+        resolve({ ok: false, error: err.message });
+      }
+      return;
+    }
 
     // Safety net: if the saved printer is a virtual PDF writer, auto-switch to
     // the first real physical printer so the job never becomes a file download.
@@ -317,6 +350,7 @@ ipcMain.handle("print-estimate", async (event, estimateData) => {
     }, 20000);
   });
 });
+
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {

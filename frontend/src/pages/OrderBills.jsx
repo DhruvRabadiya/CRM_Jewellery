@@ -386,6 +386,51 @@ const PrintView = ({ bill, onClose }) => {
     }
   };
 
+  // Shared payload builder — used by both handlePrint and handleTokenPreview.
+  const buildTokenPayload = () => ({
+    billNo:        bill.ob_no,
+    date:          bill.date,
+    customerName:  bill.customer_name  || "",
+    customerPhone: bill.customer_phone || "",
+    customerType:  bill.customer_type  || "Retail",
+    isRetail,
+    products,
+    items: items.map((item) => {
+      const pcs    = parseInt(item.pcs, 10)  || 0;
+      const weight = parseFloat(item.weight) || ((parseFloat(item.size_value) || 0) * pcs);
+      const tLc    = parseFloat(item.t_lc)   || ((parseFloat(item.lc_pp)     || 0) * pcs);
+      return {
+        metal_type: item.metal_type || "Gold 24K",
+        category:   item.category   || "Standard",
+        size_label: item.size_label || "",
+        pcs,
+        weight,
+        lc_pp:      parseFloat(item.lc_pp) || 0,
+        t_lc:       tLc,
+      };
+    }),
+    summary: {
+      totalPcs:              summary.totalPcs              || 0,
+      totalWeight:           summary.totalWeight           || 0,
+      labourTotal:           summary.labourTotal           || 0,
+      labourAfterDiscount:   summary.labourAfterDiscount   || 0,
+      discount:              summary.discount              || 0,
+      moneyPaid:             summary.moneyPaid             || 0,
+      totalAmount:           summary.totalAmount           || 0,
+      cashDue:               summary.cashDue               || 0,
+      amountDue:             summary.amountDue             || 0,
+      amountGiven:           summary.amountGiven           || 0,
+      refundDue:             summary.refundDue             || 0,
+      requiredMetal:         summary.requiredMetal         || {},
+      metalReceived:         summary.metalReceived         || {},
+      metalDue:              summary.metalDue              || {},
+      metalDueUnsettled:     summary.metalDueUnsettled     || {},
+      metalShortfallSettled: summary.metalShortfallSettled || {},
+      metalCredit:           summary.metalCredit           || {},
+      settlementRate:        summary.settlementRate        || {},
+    },
+  });
+
   const handlePrint = async () => {
     // Electron: send structured data via IPC - main creates hidden 80mm window
     // - webContents.print({ silent: true, deviceName }) - direct to thermal printer.
@@ -401,52 +446,7 @@ const PrintView = ({ bill, onClose }) => {
     }
     setPrinting(true);
     try {
-      // Build the data payload - use pre-computed values from summary; no recalculation here.
-      const estimateData = {
-        billNo:        bill.ob_no,
-        date:          bill.date,
-        customerName:  bill.customer_name  || "",
-        customerPhone: bill.customer_phone || "",
-        customerType:  bill.customer_type  || "Retail",
-        isRetail,
-        products,
-        items: items.map((item) => {
-          const pcs    = parseInt(item.pcs, 10)    || 0;
-          const weight = parseFloat(item.weight)   || ((parseFloat(item.size_value) || 0) * pcs);
-          const tLc    = parseFloat(item.t_lc)     || ((parseFloat(item.lc_pp)     || 0) * pcs);
-          return {
-            metal_type: item.metal_type  || "Gold 24K",
-            category:   item.category    || "Standard",
-            size_label: item.size_label  || "",
-            pcs,
-            weight,
-            lc_pp:      parseFloat(item.lc_pp) || 0,
-            t_lc:       tLc,
-          };
-        }),
-        summary: {
-          totalPcs:              summary.totalPcs              || 0,
-          totalWeight:           summary.totalWeight           || 0,
-          labourTotal:           summary.labourTotal           || 0,
-          labourAfterDiscount:   summary.labourAfterDiscount   || 0,
-          discount:              summary.discount              || 0,
-          moneyPaid:             summary.moneyPaid             || 0,
-          totalAmount:           summary.totalAmount           || 0,
-          cashDue:               summary.cashDue               || 0,
-          amountDue:             summary.amountDue             || 0,
-          amountGiven:           summary.amountGiven           || 0,
-          refundDue:             summary.refundDue             || 0,
-          requiredMetal:         summary.requiredMetal         || {},
-          metalReceived:         summary.metalReceived         || {},
-          metalDue:              summary.metalDue              || {},
-          metalDueUnsettled:     summary.metalDueUnsettled     || {},
-          metalShortfallSettled: summary.metalShortfallSettled || {},
-          metalCredit:           summary.metalCredit           || {},
-          settlementRate:        summary.settlementRate        || {},
-        },
-      };
-
-      const result = await window.electronAPI.printEstimate({ ...estimateData, printerName: selectedPrinter });
+      const result = await window.electronAPI.printEstimate({ ...buildTokenPayload(), printerName: selectedPrinter });
       if (!result?.ok) {
         alert("Print failed: " + (result?.error || "Unknown error"));
       }
@@ -454,6 +454,37 @@ const PrintView = ({ bill, onClose }) => {
       alert("Print error: " + err.message);
     } finally {
       setPrinting(false);
+    }
+  };
+
+  // Opens a visible token preview window — works with or without a printer.
+  // Dev mode  (protocol = http:): fetch template from Vite's public folder, open new window.
+  // Production (protocol = file:): use printEstimate IPC with preview:true — main.js
+  //   handles the flag and opens a visible BrowserWindow instead of printing.
+  const handleTokenPreview = async () => {
+    try {
+      const payload    = buildTokenPayload();
+      const isFileUrl  = window.location.protocol === "file:";
+
+      if (isFileUrl) {
+        // Production Electron — delegate to main process via existing IPC.
+        const result = await window.electronAPI.printEstimate({ ...payload, preview: true });
+        if (!result?.ok) alert("Preview error: " + (result?.error || "Unknown error"));
+        return;
+      }
+
+      // Dev mode (http://localhost:5173) — fetch template directly from Vite public folder.
+      const html = await fetch("/print-template.html").then((r) => r.text());
+      const injected = html.replace(
+        "</body>",
+        `<script>window.__ESTIMATE_DATA__ = ${JSON.stringify(payload)};<\/script></body>`
+      );
+      const win = window.open("", "_blank", "width=420,height=800,scrollbars=yes");
+      win.document.open();
+      win.document.write(injected);
+      win.document.close();
+    } catch (err) {
+      alert("Preview error: " + err.message);
     }
   };
 
@@ -490,13 +521,21 @@ const PrintView = ({ bill, onClose }) => {
             Print Preview - Estimate #{bill.ob_no}
           </span>
 
-          <button
-            onClick={handlePrint}
-            disabled={printing}
-            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#fff", cursor: printing ? "not-allowed" : "pointer", background: printing ? "#6366f1" : "#4f46e5", border: "none", borderRadius: 8, padding: "7px 14px", opacity: printing ? 0.7 : 1, whiteSpace: "nowrap" }}
-          >
-            <Printer size={15} /> {printing ? "Printing..." : "Print"}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={handleTokenPreview}
+              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#0f172a", cursor: "pointer", background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 8, padding: "7px 14px", whiteSpace: "nowrap" }}
+            >
+              <Eye size={15} /> Token Preview
+            </button>
+            <button
+              onClick={handlePrint}
+              disabled={printing}
+              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#fff", cursor: printing ? "not-allowed" : "pointer", background: printing ? "#6366f1" : "#4f46e5", border: "none", borderRadius: 8, padding: "7px 14px", opacity: printing ? 0.7 : 1, whiteSpace: "nowrap" }}
+            >
+              <Printer size={15} /> {printing ? "Printing..." : "Print"}
+            </button>
+          </div>
         </div>
 
         {/* Row 2 - printer selector */}
@@ -584,12 +623,8 @@ const PrintView = ({ bill, onClose }) => {
                           <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "left",   fontWeight: 800, color: "#334155" }}>Size</th>
                           <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "center", fontWeight: 800, color: "#334155" }}>Pcs</th>
                           <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right",  fontWeight: 800, color: "#334155" }}>Weight (g)</th>
-                          {!isRetail && (
-                            <>
-                              <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>LC/pc</th>
-                              <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>Labour</th>
-                            </>
-                          )}
+                          <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>LC/pc</th>
+                          <th style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontWeight: 800, color: "#334155" }}>Labour</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -602,12 +637,8 @@ const PrintView = ({ bill, onClose }) => {
                               <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", color: "#1e293b" }}>{item.size_label}</td>
                               <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "center", fontWeight: 600, color: "#1e293b" }}>{pcs}</td>
                               <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#1e293b" }}>{fmt(weight, 4)}</td>
-                              {!isRetail && (
-                                <>
-                                  <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#475569" }}>{fmt(item.lc_pp, 0)}</td>
-                                  <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{fmt(lc, 0)}</td>
-                                </>
-                              )}
+                              <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", color: "#475569" }}>{fmt(item.lc_pp, 0)}</td>
+                              <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{fmt(lc, 0)}</td>
                             </tr>
                           );
                         })}
@@ -615,12 +646,8 @@ const PrintView = ({ bill, onClose }) => {
                           <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", fontWeight: 900, fontSize: 10, textTransform: "uppercase", color: "#334155" }}>Total</td>
                           <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "center", fontWeight: 900, color: "#1e293b" }}>{totalPcs}</td>
                           <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 900, color: "#1e293b" }}>{fmt(totalWeight, 4)}</td>
-                          {!isRetail && (
-                            <>
-                              <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px" }}></td>
-                              <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 900, color: "#1e293b" }}>{fmt(totalLabour, 0)}</td>
-                            </>
-                          )}
+                          <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px" }}></td>
+                          <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontWeight: 900, color: "#1e293b" }}>{fmt(totalLabour, 0)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -632,14 +659,12 @@ const PrintView = ({ bill, onClose }) => {
 
           {/* Summary */}
           <div style={{ marginLeft: "auto", width: 260, fontSize: 12, border: "1px solid #cbd5e1", padding: "12px 14px", marginTop: 20 }}>
-            {[
-              ...(!isRetail ? [["Labour Total", fmtMoney(summary.labourTotal)]] : []),
-            ].map(([label, value]) => (
-              <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #f1f5f9" }}>
-                <span style={{ color: "#64748b" }}>{label}</span>
-                <span style={{ fontWeight: 700, color: "#1e293b" }}>{value}</span>
+            {(summary.labourTotal || 0) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #f1f5f9" }}>
+                <span style={{ color: "#64748b" }}>Labour Total</span>
+                <span style={{ fontWeight: 700, color: "#1e293b" }}>{fmtMoney(summary.labourTotal)}</span>
               </div>
-            ))}
+            )}
 
             {Object.entries(summary.requiredMetal || {}).map(([mt, required]) => {
               if ((required || 0) === 0 && (summary.metalReceived?.[mt] || 0) === 0) return null;

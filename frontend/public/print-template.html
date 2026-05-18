@@ -76,8 +76,7 @@
         if (!mi.length) return;
         h += `<div class="b sm" style="margin:2px 0 1px;text-transform:uppercase;letter-spacing:1px;">${metal}</div>`;
         h += `<table><thead><tr>
-          <th>Item</th><th class="c">Pcs</th><th class="r">Wt(g)</th>
-          ${!isRetail ? '<th class="r">LC</th>' : ''}
+          <th>Item</th><th class="c">Pcs</th><th class="r">Wt(g)</th><th class="r">LC</th>
         </tr></thead><tbody>`;
         let tP=0,tW=0,tL=0;
         mi.forEach(item => {
@@ -85,20 +84,35 @@
           const wt=parseFloat(item.weight)||((parseFloat(item.size_value)||0)*pcs);
           const lc=parseFloat(item.t_lc)||((parseFloat(item.lc_pp)||0)*pcs);
           tP+=pcs; tW+=wt; tL+=lc;
-          h += `<tr><td>${item.size_label||item.category||''}</td><td class="c">${pcs}</td><td class="r">${fmt(wt,3)}</td>${!isRetail?`<td class="r">${fmt(lc,0)}</td>`:''}</tr>`;
+          h += `<tr><td>${item.size_label||item.category||''}</td><td class="c">${pcs}</td><td class="r">${fmt(wt,3)}</td><td class="r">${fmt(lc,0)}</td></tr>`;
         });
-        if (mi.length > 1)
-          h += `<tr class="total-row"><td>Total</td><td class="c">${tP}</td><td class="r">${fmt(tW,3)}</td>${!isRetail?`<td class="r">${fmt(tL,0)}</td>`:''}</tr>`;
+        // Show per-metal total row if: multiple items in this metal, OR multiple metals (so each sub-total is readable)
+        if (mi.length > 1 || products.length > 1)
+          h += `<tr class="total-row"><td>Total</td><td class="c">${tP}</td><td class="r">${fmt(tW,3)}</td><td class="r">${fmt(tL,0)}</td></tr>`;
         h += '</tbody></table>';
       });
 
       h += `<div class="d-double"></div>`;
 
-      /* TOTALS */
-      h += `<div class="row"><span>Total Pieces</span><span>${s.totalPcs||0} pcs</span></div>`;
-      h += `<div class="row"><span>Total Weight</span><span>${fmt(s.totalWeight,3)} g</span></div>`;
-      if (!isRetail && (s.labourTotal||0) > 0) {
-        h += `<div class="row"><span>Labour</span><span>${fmtMoney(s.labourTotal)}</span></div>`;
+      /* TOTALS — grand total pcs/weight only shown when multiple metals exist
+         (single-metal estimates already show the total inside the per-metal table above) */
+      if (products.length > 1) {
+        h += `<div class="row b"><span>Grand Total Pcs</span><span>${s.totalPcs||0} pcs</span></div>`;
+        h += `<div class="row b"><span>Grand Total Wt</span><span>${fmt(s.totalWeight,3)} g</span></div>`;
+      }
+
+      /* LABOUR — shown for all customer types when labour exists, with size-wise breakdown */
+      const labourItems = items.filter(it => (parseFloat(it.lc_pp)||0) > 0 && (parseInt(it.pcs,10)||0) > 0);
+      const totalLabourCalc = labourItems.reduce((sum, it) => sum + (parseFloat(it.lc_pp)||0) * (parseInt(it.pcs,10)||0), 0);
+      if (totalLabourCalc > 0) {
+        h += `<div class="d-dash"></div>`;
+        h += `<div class="b sm" style="text-transform:uppercase;letter-spacing:1px;margin:2px 0 1px;">Labour Charges</div>`;
+        labourItems.forEach(item => {
+          const pcs = parseInt(item.pcs,10)||0;
+          const lc  = (parseFloat(item.lc_pp)||0) * pcs;
+          h += `<div class="row xs"><span>${item.size_label||item.category||''} &times;${pcs}pc</span><span>${fmtMoney(lc)}</span></div>`;
+        });
+        h += `<div class="row b" style="border-top:1px solid #000;padding-top:2px;margin-top:1px;"><span>Total Labour</span><span>${fmtMoney(totalLabourCalc)}</span></div>`;
         if ((s.discount||0) > 0)
           h += `<div class="row"><span>Discount</span><span>- ${fmtMoney(s.discount)}</span></div>`;
       }
